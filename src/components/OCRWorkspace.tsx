@@ -1,11 +1,15 @@
 import { useState, useCallback, useEffect } from "react";
-import { ArrowLeft, Copy, Download, Check, Loader2, History } from "lucide-react";
+import { ArrowLeft, Copy, Download, Check, Loader2, History, RefreshCw, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import ImageViewer, { type BoundingBox } from "@/components/ImageViewer";
 import HistorySidebar from "@/components/HistorySidebar";
 import type { Json } from "@/integrations/supabase/types";
+import { isOcrErrorResponse, isOcrSuccessResponse, type OcrApiResponse } from "@/types/ocr";
 
 interface OCRWorkspaceProps {
   imageFile: File;
@@ -14,59 +18,18 @@ interface OCRWorkspaceProps {
 
 const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   const [imageUrl, setImageUrl] = useState("");
-  const [extractedText, setExtractedText] = useState("");
+  const [markdownText, setMarkdownText] = useState("");
+  const [jsonText, setJsonText] = useState("");
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState<string>("");
+  const [loadingProgress, setLoadingProgress] = useState<number>(0);
   const [copied, setCopied] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [activeTab, setActiveTab] = useState<"markdown" | "json">("markdown");
 
-  useEffect(() => {
-    const url = URL.createObjectURL(imageFile);
-    setImageUrl(url);
-    processImage(imageFile);
-    return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
-
-  const processImage = async (file: File) => {
-    setIsProcessing(true);
-    setExtractedText("");
-    setBoundingBoxes([]);
-
-    try {
-      const base64 = await fileToBase64(file);
-
-      const response = await supabase.functions.invoke("ocr-vietnamese", {
-        body: { image: base64, mimeType: file.type },
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message || "OCR failed");
-      }
-
-      const text = response.data?.text || "Không phát hiện văn bản.";
-      const blocks: BoundingBox[] = response.data?.blocks || [];
-
-      setExtractedText(text);
-      setBoundingBoxes(blocks);
-
-      // Save to history
-      await supabase.from("ocr_history").insert({
-        image_name: file.name,
-        extracted_text: text,
-        bounding_boxes: blocks as unknown as Json,
-        image_data: `data:${file.type};base64,${base64}`,
-      });
-      setHistoryRefresh((p) => p + 1);
-    } catch (err: any) {
-      console.error("OCR error:", err);
-      toast.error("Lỗi khi xử lý hình ảnh. Vui lòng thử lại.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => {
+  const fileToBase64 = useCallback((file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
@@ -76,29 +39,140 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-  };
+  }, []);
+
+  const processImage = useCallback(
+    async (file: File) => {
+      setIsProcessing(true);
+      setLoadingLabel("Chuẩn bị ảnh...");
+      setLoadingProgress(10);
+      setMarkdownText("");
+      setJsonText("");
+      setBoundingBoxes([]);
+
+      try {
+        setLoadingLabel("Đang mã hóa ảnh...");
+        setLoadingProgress(25);
+        const base64 = await fileToBase64(file);
+
+        setLoadingLabel("Đang gửi lên OCR...");
+        setLoadingProgress(45);
+        const r = await fetch("/api/ocr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
+        });
+
+        setLoadingLabel("Đang phân tích kết quả...");
+        setLoadingProgress(80);
+        const data: OcrApiResponse | null = await r.json().catch(() => null);
+        if (!r.ok) {
+          const msg = data && isOcrErrorResponse(data) ? data.error : "OCR failed";
+          throw new Error(msg);
+        }
+
+        if (!data || !isOcrSuccessResponse(data)) {
+          throw new Error("OCR API returned unexpected response");
+        }
+
+        const md = data.markdown.length > 0 ? data.markdown : "";
+        const fullText = data.full_text.length > 0 ? data.full_text : "";
+        const blocks: BoundingBox[] = Array.isArray(data.blocks) ? (data.blocks as unknown as BoundingBox[]) : [];
+
+        const mdOut = md.length > 0 ? md : fullText.length > 0 ? fullText : "Không phát hiện văn bản.";
+        setMarkdownText(mdOut);
+        setJsonText(
+          JSON.stringify(
+            {
+              markdown: mdOut,
+              full_text: fullText,
+              blocks,
+              ...(typeof data.warning === "string" ? { warning: data.warning } : null),
+            },
+            null,
+            2,
+          ),
+        );
+
+        setBoundingBoxes(blocks);
+
+        // Save to history
+        setLoadingLabel("Đang lưu lịch sử...");
+        setLoadingProgress(92);
+        await supabase.from("ocr_history").insert({
+          image_name: file.name,
+          extracted_text: mdOut,
+          bounding_boxes: blocks as unknown as Json,
+          image_data: `data:${file.type};base64,${base64}`,
+        });
+        setHistoryRefresh((p) => p + 1);
+        setLoadingProgress(100);
+      } catch (err: unknown) {
+        console.error("OCR error:", err);
+        toast.error("Lỗi khi xử lý hình ảnh. Vui lòng thử lại.");
+      } finally {
+        setIsProcessing(false);
+        setLoadingLabel("");
+        setLoadingProgress(0);
+      }
+    },
+    [fileToBase64],
+  );
+
+  useEffect(() => {
+    const url = URL.createObjectURL(imageFile);
+    setImageUrl(url);
+    processImage(imageFile);
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile, processImage]);
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(extractedText);
+    const toCopy = activeTab === "json" ? jsonText : markdownText;
+    navigator.clipboard.writeText(toCopy);
     setCopied(true);
     toast.success("Đã sao chép văn bản!");
     setTimeout(() => setCopied(false), 2000);
-  }, [extractedText]);
+  }, [activeTab, jsonText, markdownText]);
 
   const handleDownload = useCallback(() => {
-    const blob = new Blob([extractedText], { type: "text/plain;charset=utf-8" });
+    const isJson = activeTab === "json";
+    const content = isJson ? jsonText : markdownText;
+    const mime = isJson ? "application/json;charset=utf-8" : "text/markdown;charset=utf-8";
+    const filename = isJson ? "ocr-result.json" : "ocr-result.md";
+    const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "ocr-result.txt";
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
     toast.success("Đã tải xuống file văn bản!");
-  }, [extractedText]);
+  }, [activeTab, jsonText, markdownText]);
 
-  const handleHistorySelect = (entry: any) => {
-    setExtractedText(entry.extracted_text);
-    setBoundingBoxes(entry.bounding_boxes || []);
+  const handleHistorySelect = (entry: {
+    id: string;
+    image_name: string;
+    extracted_text: string;
+    bounding_boxes: Json | null;
+    image_data: string | null;
+    created_at: string;
+  }) => {
+    const blocks: BoundingBox[] = Array.isArray(entry.bounding_boxes)
+      ? (entry.bounding_boxes as unknown as BoundingBox[])
+      : [];
+    setMarkdownText(entry.extracted_text);
+    setBoundingBoxes(blocks);
+    setJsonText(
+      JSON.stringify(
+        {
+          markdown: entry.extracted_text,
+          full_text: "",
+          blocks,
+        },
+        null,
+        2,
+      ),
+    );
     if (entry.image_data) {
       setImageUrl(entry.image_data);
     }
@@ -120,11 +194,31 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         {isProcessing && (
           <div className="flex items-center gap-1.5 text-primary">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span className="text-xs font-medium">Đang nhận diện...</span>
+            <span className="text-xs font-medium">{loadingLabel || "Đang nhận diện..."}</span>
           </div>
         )}
 
         <div className="ml-auto flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => processImage(imageFile)}
+            disabled={isProcessing}
+            className="gap-1.5"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Nhận diện lại
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onBack}
+            disabled={isProcessing}
+            className="gap-1.5"
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+            Ảnh khác
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -138,7 +232,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
             variant="outline"
             size="sm"
             onClick={handleCopy}
-            disabled={!extractedText || isProcessing}
+            disabled={(!markdownText && !jsonText) || isProcessing}
             className="gap-1.5"
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -147,7 +241,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
           <Button
             size="sm"
             onClick={handleDownload}
-            disabled={!extractedText || isProcessing}
+            disabled={(!markdownText && !jsonText) || isProcessing}
             className="gap-1.5"
           >
             <Download className="h-3.5 w-3.5" />
@@ -155,6 +249,11 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
           </Button>
         </div>
       </div>
+      {isProcessing && (
+        <div className="border-b border-border bg-card px-4 py-2">
+          <Progress value={loadingProgress} className="h-2" />
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex flex-1 overflow-hidden">
@@ -170,22 +269,71 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         {/* Right: Text editor */}
         <div className="flex flex-1 flex-col">
           <div className="border-b border-border px-4 py-2.5 flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Văn bản nhận diện
-            </span>
-            {boundingBoxes.length > 0 && (
-              <span className="text-[10px] text-accent font-medium">
-                {boundingBoxes.length} vùng phát hiện
-              </span>
-            )}
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Kết quả OCR</span>
+            <div className="flex items-center gap-3">
+              {boundingBoxes.length > 0 && (
+                <span className="text-[10px] text-accent font-medium">{boundingBoxes.length} vùng phát hiện</span>
+              )}
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "markdown" | "json")}>
+                <TabsList className="h-8">
+                  <TabsTrigger className="px-2 py-1 text-xs" value="markdown">
+                    Markdown
+                  </TabsTrigger>
+                  <TabsTrigger className="px-2 py-1 text-xs" value="json">
+                    JSON
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </div>
-          <textarea
-            value={extractedText}
-            onChange={(e) => setExtractedText(e.target.value)}
-            placeholder={isProcessing ? "Đang xử lý..." : "Văn bản sẽ xuất hiện ở đây..."}
-            className="flex-1 resize-none bg-card p-4 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground font-body"
-            disabled={isProcessing}
-          />
+
+          <div className="flex-1 overflow-hidden">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "markdown" | "json")} className="h-full">
+              <TabsContent value="markdown" className="m-0 h-full">
+                {isProcessing && !markdownText ? (
+                  <div className="h-full w-full p-4 space-y-3">
+                    <Skeleton className="h-5 w-2/3" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-11/12" />
+                    <Skeleton className="h-4 w-10/12" />
+                    <Skeleton className="h-4 w-9/12" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-5/6" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                ) : (
+                  <textarea
+                    value={markdownText}
+                    onChange={(e) => setMarkdownText(e.target.value)}
+                    placeholder={isProcessing ? "Đang xử lý..." : "Markdown sẽ xuất hiện ở đây..."}
+                    className="h-full w-full resize-none bg-card p-4 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground font-body"
+                    disabled={isProcessing}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="json" className="m-0 h-full">
+                {isProcessing && !jsonText ? (
+                  <div className="h-full w-full p-4 space-y-3">
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-4 w-11/12" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-10/12" />
+                    <Skeleton className="h-4 w-9/12" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-11/12" />
+                  </div>
+                ) : (
+                  <textarea
+                    value={jsonText}
+                    onChange={(e) => setJsonText(e.target.value)}
+                    placeholder={isProcessing ? "Đang xử lý..." : "JSON sẽ xuất hiện ở đây..."}
+                    className="h-full w-full resize-none bg-card p-4 font-mono text-xs leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+                    disabled={isProcessing}
+                  />
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
 
         {/* History sidebar */}
