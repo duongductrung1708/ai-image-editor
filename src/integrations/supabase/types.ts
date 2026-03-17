@@ -14,7 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ocr_history: {
+        Row: {
+          bounding_boxes: Json | null
+          created_at: string
+          extracted_text: string
+          id: string
+          image_data: string | null
+          image_name: string
+        }
+        Insert: {
+          bounding_boxes?: Json | null
+          created_at?: string
+          extracted_text: string
+          id?: string
+          image_data?: string | null
+          image_name: string
+        }
+        Update: {
+          bounding_boxes?: Json | null
+          created_at?: string
+          extracted_text?: string
+          id?: string
+          image_data?: string | null
+          image_name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
