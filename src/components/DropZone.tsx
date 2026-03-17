@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Upload, Image as ImageIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -38,62 +38,68 @@ const DropZone = ({ onImageSelect }: DropZoneProps) => {
     [onImageSelect]
   );
 
+  // Clipboard paste support
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            onImageSelect(file);
+            break;
+          }
+        }
+      }
+    };
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
+  }, [onImageSelect]);
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex min-h-screen items-center justify-center p-6"
-    >
-      <div className="w-full max-w-2xl text-center">
-        <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">
-          OCR Tiếng Việt
-        </h1>
-        <p className="mb-8 text-muted-foreground">
-          Kéo thả hình ảnh để nhận diện và chỉnh sửa văn bản tiếng Việt bằng AI
+    <div className="w-full max-w-2xl text-center">
+      <label
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`group flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-16 transition-all duration-200 ${
+          isDragOver
+            ? "border-primary bg-primary/5 scale-[1.02]"
+            : "border-border bg-card hover:border-primary/50 hover:bg-secondary/50"
+        }`}
+      >
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={isDragOver ? "drop" : "idle"}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="mb-4 rounded-full bg-primary/10 p-4"
+          >
+            {isDragOver ? (
+              <ImageIcon className="h-8 w-8 text-primary" />
+            ) : (
+              <Upload className="h-8 w-8 text-primary" />
+            )}
+          </motion.div>
+        </AnimatePresence>
+
+        <p className="mb-1 text-sm font-medium text-foreground">
+          {isDragOver ? "Thả hình ảnh tại đây" : "Kéo thả hình ảnh hoặc nhấn để chọn"}
         </p>
-
-        <label
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          className={`group flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-16 transition-all duration-200 ${
-            isDragOver
-              ? "border-primary bg-primary/5 scale-[1.02]"
-              : "border-border bg-card hover:border-primary/50 hover:bg-secondary/50"
-          }`}
-        >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={isDragOver ? "drop" : "idle"}
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="mb-4 rounded-full bg-primary/10 p-4"
-            >
-              {isDragOver ? (
-                <ImageIcon className="h-8 w-8 text-primary" />
-              ) : (
-                <Upload className="h-8 w-8 text-primary" />
-              )}
-            </motion.div>
-          </AnimatePresence>
-
-          <p className="mb-1 text-sm font-medium text-foreground">
-            {isDragOver ? "Thả hình ảnh tại đây" : "Kéo thả hình ảnh hoặc nhấn để chọn"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Hỗ trợ PNG, JPG, WEBP
-          </p>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleFileInput}
-            className="hidden"
-          />
-        </label>
-      </div>
-    </motion.div>
+        <p className="text-xs text-muted-foreground">
+          Hỗ trợ PNG, JPG, WEBP · Ctrl+V để dán từ clipboard
+        </p>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleFileInput}
+          className="hidden"
+        />
+      </label>
+    </div>
   );
 };
 

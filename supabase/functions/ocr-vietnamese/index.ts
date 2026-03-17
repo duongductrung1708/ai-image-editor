@@ -24,7 +24,7 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: "Bạn là một công cụ OCR chuyên nghiệp. Nhiệm vụ duy nhất của bạn là trích xuất TOÀN BỘ văn bản từ hình ảnh được cung cấp. Giữ nguyên định dạng, xuống dòng, và thứ tự của văn bản gốc. CHỈ trả về văn bản được trích xuất, không thêm giải thích hay bình luận nào."
+            content: "You are a professional OCR tool. Extract ALL text from the provided image. Return structured data with text blocks and their approximate bounding box positions as percentages of the image dimensions (0-100). Always respond using the extract_text_blocks tool."
           },
           {
             role: "user",
@@ -37,11 +37,47 @@ serve(async (req) => {
               },
               {
                 type: "text",
-                text: "Hãy trích xuất toàn bộ văn bản tiếng Việt (và các ngôn ngữ khác nếu có) từ hình ảnh này. Giữ nguyên định dạng gốc."
+                text: "Extract all Vietnamese text (and other languages if present) from this image. For each text block, provide its content and approximate bounding box position as percentage coordinates relative to the image dimensions."
               },
             ],
           },
         ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "extract_text_blocks",
+              description: "Return extracted text blocks with bounding box positions",
+              parameters: {
+                type: "object",
+                properties: {
+                  full_text: {
+                    type: "string",
+                    description: "The complete extracted text preserving original formatting and line breaks"
+                  },
+                  blocks: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        text: { type: "string", description: "The text content of this block" },
+                        x: { type: "number", description: "Left position as percentage (0-100)" },
+                        y: { type: "number", description: "Top position as percentage (0-100)" },
+                        width: { type: "number", description: "Width as percentage (0-100)" },
+                        height: { type: "number", description: "Height as percentage (0-100)" },
+                      },
+                      required: ["text", "x", "y", "width", "height"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["full_text", "blocks"],
+                additionalProperties: false,
+              },
+            },
+          },
+        ],
+        tool_choice: { type: "function", function: { name: "extract_text_blocks" } },
       }),
     });
 
@@ -62,9 +98,22 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const text = data.choices?.[0]?.message?.content || "";
+    
+    // Parse tool call response
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    if (toolCall?.function?.arguments) {
+      const parsed = JSON.parse(toolCall.function.arguments);
+      return new Response(JSON.stringify({
+        text: parsed.full_text || "",
+        blocks: parsed.blocks || [],
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    return new Response(JSON.stringify({ text }), {
+    // Fallback to regular message content
+    const text = data.choices?.[0]?.message?.content || "";
+    return new Response(JSON.stringify({ text, blocks: [] }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

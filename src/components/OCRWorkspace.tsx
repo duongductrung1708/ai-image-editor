@@ -1,8 +1,11 @@
 import { useState, useCallback, useEffect } from "react";
-import { ArrowLeft, Copy, Download, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, Check, Loader2, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import ImageViewer, { type BoundingBox } from "@/components/ImageViewer";
+import HistorySidebar from "@/components/HistorySidebar";
+import type { Json } from "@/integrations/supabase/types";
 
 interface OCRWorkspaceProps {
   imageFile: File;
@@ -12,8 +15,11 @@ interface OCRWorkspaceProps {
 const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   const [imageUrl, setImageUrl] = useState("");
   const [extractedText, setExtractedText] = useState("");
+  const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
 
   useEffect(() => {
     const url = URL.createObjectURL(imageFile);
@@ -25,6 +31,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   const processImage = async (file: File) => {
     setIsProcessing(true);
     setExtractedText("");
+    setBoundingBoxes([]);
 
     try {
       const base64 = await fileToBase64(file);
@@ -37,11 +44,23 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         throw new Error(response.error.message || "OCR failed");
       }
 
-      setExtractedText(response.data?.text || "Không phát hiện văn bản.");
+      const text = response.data?.text || "Không phát hiện văn bản.";
+      const blocks: BoundingBox[] = response.data?.blocks || [];
+
+      setExtractedText(text);
+      setBoundingBoxes(blocks);
+
+      // Save to history
+      await supabase.from("ocr_history").insert({
+        image_name: file.name,
+        extracted_text: text,
+        bounding_boxes: blocks as unknown as Json,
+        image_data: `data:${file.type};base64,${base64}`,
+      });
+      setHistoryRefresh((p) => p + 1);
     } catch (err: any) {
       console.error("OCR error:", err);
       toast.error("Lỗi khi xử lý hình ảnh. Vui lòng thử lại.");
-      setExtractedText("");
     } finally {
       setIsProcessing(false);
     }
@@ -77,6 +96,14 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     toast.success("Đã tải xuống file văn bản!");
   }, [extractedText]);
 
+  const handleHistorySelect = (entry: any) => {
+    setExtractedText(entry.extracted_text);
+    setBoundingBoxes(entry.bounding_boxes || []);
+    if (entry.image_data) {
+      setImageUrl(entry.image_data);
+    }
+  };
+
   return (
     <div className="flex h-screen flex-col">
       {/* Toolbar */}
@@ -89,7 +116,24 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         <span className="text-sm font-medium text-muted-foreground truncate max-w-[200px]">
           {imageFile.name}
         </span>
+
+        {isProcessing && (
+          <div className="flex items-center gap-1.5 text-primary">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span className="text-xs font-medium">Đang nhận diện...</span>
+          </div>
+        )}
+
         <div className="ml-auto flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowHistory(!showHistory)}
+            className="gap-1.5"
+          >
+            <History className="h-3.5 w-3.5" />
+            Lịch sử
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -112,34 +156,28 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         </div>
       </div>
 
-      {/* Split pane */}
+      {/* Content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Image */}
-        <div className="relative flex w-1/2 items-center justify-center overflow-auto border-r border-border bg-secondary/30 p-4">
-          {imageUrl && (
-            <img
-              src={imageUrl}
-              alt="Uploaded"
-              className="max-h-full max-w-full rounded-md object-contain"
-            />
-          )}
-          {isProcessing && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/40">
-              <div className="absolute inset-x-0 top-0 h-0.5 bg-primary animate-scan" />
-              <div className="rounded-lg bg-card px-4 py-3 shadow-sm border border-border flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <span className="text-sm font-medium text-foreground">Đang nhận diện...</span>
-              </div>
-            </div>
-          )}
+        {/* Left: Image with bounding boxes */}
+        <div className="flex w-1/2 border-r border-border">
+          <ImageViewer
+            imageUrl={imageUrl}
+            boxes={boundingBoxes}
+            isProcessing={isProcessing}
+          />
         </div>
 
         {/* Right: Text editor */}
-        <div className="flex w-1/2 flex-col">
-          <div className="border-b border-border px-4 py-2.5">
+        <div className="flex flex-1 flex-col">
+          <div className="border-b border-border px-4 py-2.5 flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Văn bản nhận diện
             </span>
+            {boundingBoxes.length > 0 && (
+              <span className="text-[10px] text-accent font-medium">
+                {boundingBoxes.length} vùng phát hiện
+              </span>
+            )}
           </div>
           <textarea
             value={extractedText}
@@ -149,6 +187,13 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
             disabled={isProcessing}
           />
         </div>
+
+        {/* History sidebar */}
+        <HistorySidebar
+          isOpen={showHistory}
+          onSelect={handleHistorySelect}
+          refreshKey={historyRefresh}
+        />
       </div>
     </div>
   );
