@@ -1,0 +1,4 @@
+project_id = "rdbzyrzibnvdszsyrwaw"
+
+[functions.ocr-vietnamese]
+verify_jwt = false
