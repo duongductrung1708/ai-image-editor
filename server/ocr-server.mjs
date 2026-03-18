@@ -67,6 +67,25 @@ function safeSnippet(s, max = 2000) {
   return s.length > max ? `${s.slice(0, max)}\n...<truncated ${s.length - max} chars>` : s;
 }
 
+function normalizeImageBase64AndMimeType(imageBase64Input, mimeTypeInput) {
+  let mimeType = typeof mimeTypeInput === "string" && mimeTypeInput ? mimeTypeInput : undefined;
+  let imageBase64 = typeof imageBase64Input === "string" ? imageBase64Input.trim() : "";
+
+  if (!imageBase64) return { imageBase64: "", mimeType: mimeType || "image/png" };
+
+  // Accept either raw base64 or a full data URL: data:<mime>;base64,<data>
+  const dataUrlMatch = /^data:([^;]+);base64,(.*)$/i.exec(imageBase64);
+  if (dataUrlMatch) {
+    if (!mimeType) mimeType = dataUrlMatch[1];
+    imageBase64 = dataUrlMatch[2] || "";
+  }
+
+  // Some sources insert whitespace/newlines into base64.
+  imageBase64 = imageBase64.replace(/\s+/g, "");
+
+  return { imageBase64, mimeType: mimeType || "image/png" };
+}
+
 function getEnv(name, fallback = undefined) {
   const v = process.env[name];
   if (typeof v === "string" && v.length > 0) return v;
@@ -149,6 +168,7 @@ const GEMINI_SYSTEM_PROMPT = getEnv(
 const LMSTUDIO_BASE_URL = normalizeBaseUrl(getEnv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"));
 const LMSTUDIO_MODEL = getEnv("LMSTUDIO_MODEL", "");
 const LMSTUDIO_TIMEOUT_MS = Number(getEnv("LMSTUDIO_TIMEOUT_MS", String(10 * 60 * 1000)));
+const LMSTUDIO_CONTEXT_LENGTH = Number(getEnv("LMSTUDIO_CONTEXT_LENGTH", "8192"));
 
 if (OCR_PROVIDER === "ollama" && !OLLAMA_MODEL) {
   console.error("Missing env OLLAMA_MODEL. Set it in your root .env");
@@ -166,6 +186,16 @@ if (OCR_PROVIDER === "lmstudio" && !LMSTUDIO_MODEL) {
 }
 
 function buildPrompt(mode) {
+  if (OCR_PROVIDER === "lmstudio") {
+    // Keep prompts minimal for LM Studio since some builds account image data towards context.
+    return (
+      "Extract ALL text from this image.\n" +
+      "Do not summarize or paraphrase.\n" +
+      "Preserve line breaks as best as possible.\n" +
+      "Return ONLY the extracted text/Markdown (no extra commentary).\n"
+    );
+  }
+
   const baseRaw =
     "Extract all Vietnamese text (and other languages if present) from this image.\n" +
     "Do not omit any text.\n" +
@@ -316,35 +346,37 @@ async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
 }
 
 async function callLmStudio({ imageBase64, mimeType, prompt }) {
-  const url = `${LMSTUDIO_BASE_URL}/chat/completions`;
+  // Thay vì dùng URL nội bộ dễ lỗi của LM Studio, ta ép nó dùng chuẩn OpenAI
+  const url = `${LMSTUDIO_BASE_URL}/chat/completions`; 
+
   const payload = {
     model: LMSTUDIO_MODEL,
     messages: [
       {
         role: "system",
-        content:
-          "You are an OCR and document-to-Markdown helper. Extract ALL text from the image without summarizing.",
+        content: "You are an expert OCR assistant. Extract text exactly as seen in the image."
       },
       {
         role: "user",
         content: [
-          { type: "text", text: prompt },
+          // Đảo ảnh lên trước, text xuống sau để GLM-OCR dễ "nhìn" hơn
           { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
-        ],
-      },
+          { type: "text", text: prompt }
+        ]
+      }
     ],
     temperature: 0,
-    stream: false,
+    max_tokens: 4096, // Rất quan trọng: Cấp đủ "đất" để AI đọc hết trang A4
+    stream: false
   };
 
   try {
     const r = await httpRequestJson(url, {
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      timeoutMs: LMSTUDIO_TIMEOUT_MS,
+      timeoutMs: LMSTUDIO_TIMEOUT_MS, // Thời gian chờ đủ dài (bạn đã cấu hình 10p)
     });
+    
     const raw = r.text;
     if (!r.ok) {
       console.error("[ocr-server] lmstudio error", r.status, safeSnippet(raw));
@@ -355,13 +387,13 @@ async function callLmStudio({ imageBase64, mimeType, prompt }) {
     try {
       data = JSON.parse(raw);
     } catch {
-      console.error("[ocr-server] invalid JSON envelope from lmstudio", safeSnippet(raw));
       return { ok: false, status: 502, raw: "Invalid JSON from LM Studio" };
     }
 
+    // Lấy nội dung theo đúng cấu trúc chuẩn của OpenAI
     const contentText = data?.choices?.[0]?.message?.content;
+    
     if (typeof contentText !== "string" || contentText.length === 0) {
-      console.error("[ocr-server] empty content from lmstudio", safeSnippet(raw));
       return { ok: false, status: 502, raw: "Empty response from LM Studio" };
     }
 
@@ -378,8 +410,9 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/api/ocr") {
     try {
       const body = await readJson(req);
-      const imageBase64 = body?.imageBase64;
-      const mimeType = typeof body?.mimeType === "string" ? body.mimeType : "image/png";
+      const normalized = normalizeImageBase64AndMimeType(body?.imageBase64, body?.mimeType);
+      const imageBase64 = normalized.imageBase64;
+      const mimeType = normalized.mimeType;
 
       if (!imageBase64 || typeof imageBase64 !== "string") {
         return sendJson(res, 400, { error: "imageBase64 is required" });
@@ -531,6 +564,24 @@ const server = http.createServer(async (req, res) => {
   }
 
   return sendJson(res, 404, { error: "Not found" });
+});
+
+server.on("error", (err) => {
+  if (!err || typeof err !== "object") {
+    console.error("[ocr-server] server error", err);
+    process.exit(1);
+  }
+
+  const code = "code" in err ? err.code : undefined;
+  if (code === "EADDRINUSE") {
+    console.error(`[ocr-server] port ${PORT} is already in use (EADDRINUSE)`);
+    console.error("[ocr-server] tip: stop the process using the port, or set OCR_API_PORT to a free port in .env");
+    console.error('[ocr-server] windows: `netstat -ano | findstr 127.0.0.1:' + PORT + '` then `taskkill /PID <pid> /F`');
+    process.exit(1);
+  }
+
+  console.error("[ocr-server] server error", err);
+  process.exit(1);
 });
 
 async function healthCheck() {
