@@ -1,4 +1,6 @@
 import http from "node:http";
+import https from "node:https";
+import { URL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -75,6 +77,47 @@ function normalizeBaseUrl(baseUrl) {
   return baseUrl.replace(/\/+$/, "");
 }
 
+function httpRequestJson(urlString, { method = "POST", headers = {}, body, timeoutMs }) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const isHttps = url.protocol === "https:";
+    const lib = isHttps ? https : http;
+
+    const req = lib.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port ? Number(url.port) : isHttps ? 443 : 80,
+        path: `${url.pathname}${url.search}`,
+        method,
+        headers,
+      },
+      (res) => {
+        let data = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode || 0,
+            ok: (res.statusCode || 0) >= 200 && (res.statusCode || 0) < 300,
+            text: data,
+          });
+        });
+      },
+    );
+
+    req.on("error", reject);
+    if (timeoutMs) {
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error("Request timeout"));
+      });
+    }
+
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
 const PORT = Number(getEnv("OCR_API_PORT", "8787"));
 const OCR_PROVIDER = getEnv("OCR_PROVIDER", "ollama"); // "ollama" | "gemini"
 const OLLAMA_MODEL = getEnv("OLLAMA_MODEL");
@@ -89,7 +132,19 @@ const OLLAMA_OPENAI_BASE_URL = normalizeBaseUrl(getEnv("OLLAMA_OPENAI_BASE_URL",
 const GEMINI_API_KEY = getEnv("GEMINI_API_KEY");
 const GEMINI_MODEL = getEnv("GEMINI_MODEL", "gemini-2.5-flash");
 const GEMINI_TIMEOUT_MS = Number(getEnv("GEMINI_TIMEOUT_MS", String(60 * 1000)));
-const GEMINI_MAX_OUTPUT_TOKENS = Number(getEnv("GEMINI_MAX_OUTPUT_TOKENS", String(8192)));
+const GEMINI_BBOX_JSON = getEnv("GEMINI_BBOX_JSON", "0") === "1";
+const GEMINI_SYSTEM_PROMPT = getEnv(
+  "GEMINI_SYSTEM_PROMPT",
+  [
+    "Bạn là một chuyên gia chuyển đổi tài liệu sang Markdown (Vision-to-Markdown).",
+    "Hãy trích xuất văn bản từ ảnh này với các quy tắc sau:",
+    "",
+    "Sử dụng định dạng Table cho tất cả các phần có cấu trúc bảng.",
+    "Sử dụng Header (#, ##) cho các tiêu đề lớn như 'THÔNG BÁO', 'TÒA ÁN...'.",
+    "Giữ nguyên các định dạng in đậm, in nghiêng.",
+    "Trả về Markdown nguyên khối, không thêm lời dẫn giải ở đầu hay cuối.",
+  ].join("\n"),
+);
 
 if (OCR_PROVIDER === "ollama" && !OLLAMA_MODEL) {
   console.error("Missing env OLLAMA_MODEL. Set it in your root .env");
@@ -111,7 +166,8 @@ function buildPrompt(mode) {
   const baseClean =
     baseRaw +
     "\n" +
-    "Additionally, try to format as readable Markdown:\n" +
+    "Additionally, try to format as readable Markdown WITHOUT changing the meaning/content:\n" +
+    "- Only transform formatting (headings, emphasis, lists, tables). Do not rewrite sentences.\n" +
     "- Use Markdown headings (#, ##, ###) when you are confident a line is a heading.\n" +
     "- Use bullet/numbered lists when the document clearly uses them.\n" +
     "- Convert bold/italic/underline to Markdown emphasis.\n" +
@@ -169,138 +225,12 @@ function postProcessMarkdown(markdown) {
       return true;
     });
   }
-  const out = [];
-
-  const flushRoleBlock = (role, buf) => {
-    const text = buf.join("\n").trim();
-    if (!text) return;
-    if (role === "GV") {
-      out.push(`- **GV:** ${text.replace(/\n+/g, "\n  ")}`);
-    } else if (role === "HS") {
-      out.push(`  - **HS:** ${text.replace(/\n+/g, "\n    ")}`);
-    } else {
-      out.push(text);
-    }
-  };
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    const next = i + 1 < lines.length ? lines[i + 1] : "";
-
-    const isTableHeader = line.includes("|") && /\|\s*-{2,}/.test(next);
-    if (!isTableHeader) {
-      out.push(line);
-      continue;
-    }
-
-    const headerCells = splitTableRow(line);
-    const isTwoCol = headerCells.length === 2;
-    const looksLikeGvHs =
-      isTwoCol &&
-      /hoạt động.*gv/i.test(headerCells[0]) &&
-      /hoạt động.*hs/i.test(headerCells[1]);
-
-    if (!looksLikeGvHs) {
-      out.push(line);
-      continue;
-    }
-
-    // Consume separator line
-    const tableRows = [];
-    i += 1;
-
-    // Collect table body rows
-    while (i + 1 < lines.length) {
-      const candidate = lines[i + 1];
-      if (!candidate.includes("|")) break;
-      // Stop if it's a new markdown section header.
-      if (/^\s*#{1,6}\s+/.test(candidate)) break;
-      tableRows.push(candidate);
-      i += 1;
-    }
-
-    // Decide conversion based on how empty the HS column is.
-    let emptyHs = 0;
-    const pairs = [];
-    for (const r of tableRows) {
-      const cells = splitTableRow(r);
-      if (cells.length < 2) continue;
-      const gv = cells[0];
-      const hs = cells[1];
-      if (!hs) emptyHs += 1;
-      if (!gv && !hs) continue;
-      pairs.push({ gv, hs });
-    }
-
-    const emptyRatio = pairs.length > 0 ? emptyHs / pairs.length : 1;
-    if (pairs.length === 0 || emptyRatio < 0.4) {
-      // Keep as table if it seems meaningfully paired.
-      out.push(line, next, ...tableRows);
-      continue;
-    }
-
-    // Convert to paired list, much easier to read than a mostly-empty table.
-    out.push(`### ${headerCells[0]} / ${headerCells[1]}`);
-    for (const p of pairs) {
-      if (p.gv) out.push(`- **GV:** ${p.gv}`);
-      if (p.hs) out.push(`  - **HS:** ${p.hs}`);
-    }
-  }
-
-  // Second pass: compact role blocks in already-converted (or model-produced) GV/HS format.
-  // Removes empty HS/GV blocks and merges consecutive blocks of the same role.
-  const compacted = [];
-  let role = null; // "GV" | "HS" | null
-  let buf = [];
-
-  const pushCompactedLine = (l) => compacted.push(l);
-
-  for (const l0 of out.join("\n").split(/\r?\n/)) {
-    const l = l0.trimEnd();
-    const isGvHeader = /^\s*\*\*GV:\*\*\s*$/.test(l);
-    const isHsHeader = /^\s*\*\*HS:\*\*\s*$/.test(l);
-
-    if (isGvHeader || isHsHeader) {
-      flushRoleBlock(role, buf);
-      role = isGvHeader ? "GV" : "HS";
-      buf = [];
-      continue;
-    }
-
-    if (role) {
-      // Stop role capture when hitting a new section header (###, ##, etc.)
-      if (/^\s*#{1,6}\s+/.test(l)) {
-        flushRoleBlock(role, buf);
-        role = null;
-        buf = [];
-        pushCompactedLine(l);
-        continue;
-      }
-
-      // Skip pure empty lines inside empty role blocks.
-      if (!l.trim()) {
-        if (buf.length > 0) buf.push("");
-        continue;
-      }
-
-      // Remove leading list markers, we format later.
-      buf.push(l.replace(/^\s*[-*]\s+/, ""));
-      continue;
-    }
-
-    pushCompactedLine(l);
-  }
-
-  flushRoleBlock(role, buf);
-
+  // No semantic post-processing (e.g., GV/HS conversion). Only light whitespace cleanup.
   // Cleanup: collapse excessive blank lines.
-  return compacted
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-async function callGemini({ imageBase64, mimeType, prompt }) {
+async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
   try {
@@ -308,9 +238,7 @@ async function callGemini({ imageBase64, mimeType, prompt }) {
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}` +
       `:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
 
-    const systemInstruction =
-      "You are a professional OCR tool. Extract ALL text from the provided image. " +
-      "Follow the user instructions precisely.";
+    const systemInstruction = GEMINI_SYSTEM_PROMPT;
 
     const payload = {
       systemInstruction: { parts: [{ text: systemInstruction }] },
@@ -330,8 +258,7 @@ async function callGemini({ imageBase64, mimeType, prompt }) {
       ],
       generationConfig: {
         temperature: 0,
-        responseMimeType: "application/json",
-        maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
+        responseMimeType,
       },
     };
 
@@ -392,87 +319,90 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { error: "imageBase64 is required" });
       }
 
-      const prompt = buildPrompt(OCR_MODE);
+      const prompt = OCR_PROVIDER === "gemini"
+        ? buildPrompt(GEMINI_BBOX_JSON ? "both" : "markdown")
+        : buildPrompt(OCR_MODE);
 
       let content;
       if (OCR_PROVIDER === "gemini") {
-        const out = await callGemini({ imageBase64, mimeType, prompt });
+        const out = await callGemini({
+          imageBase64,
+          mimeType,
+          prompt,
+          responseMimeType: GEMINI_BBOX_JSON ? "application/json" : "text/plain",
+        });
         if (!out.ok) return sendJson(res, out.status, { error: out.raw });
-        content = out.contentText;
+        // If bbox JSON is enabled, Gemini is expected to return JSON with blocks.
+        // Otherwise, wrap plain markdown/text into our JSON shape.
+        content = GEMINI_BBOX_JSON
+          ? out.contentText
+          : JSON.stringify({
+            markdown: out.contentText,
+            full_text: out.contentText,
+            blocks: [],
+          });
       } else {
-        const doFetch = async () => {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
-          try {
-            if (OLLAMA_API === "openai") {
-              const payload = {
-                model: OLLAMA_MODEL,
-                messages: [
-                  {
-                    role: "user",
-                    content: [
-                      { type: "text", text: prompt },
-                      { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
-                    ],
-                  },
-                ],
-                temperature: 0,
-                stream: false,
-              };
-
-              return await fetch(`${OLLAMA_OPENAI_BASE_URL}/chat/completions`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: "Bearer ollama",
-                },
-                body: JSON.stringify(payload),
-                signal: controller.signal,
-              });
-            }
-
-            // Native Ollama API (preferred for vision): images are raw base64 strings.
+        const doOllama = async () => {
+          if (OLLAMA_API === "openai") {
             const payload = {
               model: OLLAMA_MODEL,
               messages: [
                 {
                   role: "user",
-                  content: prompt,
-                  images: [imageBase64],
+                  content: [
+                    { type: "text", text: prompt },
+                    { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+                  ],
                 },
               ],
+              temperature: 0,
               stream: false,
-              options: {
-                temperature: 0,
-              },
             };
 
-            return await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-              method: "POST",
+            return await httpRequestJson(`${OLLAMA_OPENAI_BASE_URL}/chat/completions`, {
               headers: {
                 "Content-Type": "application/json",
+                Authorization: "Bearer ollama",
               },
               body: JSON.stringify(payload),
-              signal: controller.signal,
+              timeoutMs: OLLAMA_TIMEOUT_MS,
             });
-          } finally {
-            clearTimeout(timeout);
           }
+
+          const payload = {
+            model: OLLAMA_MODEL,
+            messages: [
+              {
+                role: "user",
+                content: prompt,
+                images: [imageBase64],
+              },
+            ],
+            stream: false,
+            options: {
+              temperature: 0,
+            },
+          };
+
+          return await httpRequestJson(`${OLLAMA_BASE_URL}/api/chat`, {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            timeoutMs: OLLAMA_TIMEOUT_MS,
+          });
         };
 
         let r;
         try {
-          r = await doFetch();
+          r = await doOllama();
         } catch (e) {
-          // Retry once for transient timeouts during model warm-up.
-          console.warn("[ocr-server] ollama fetch failed, retrying once", e instanceof Error ? e.message : String(e));
-          r = await doFetch();
+          console.warn("[ocr-server] ollama request failed, retrying once", e instanceof Error ? e.message : String(e));
+          r = await doOllama();
         }
 
-        const raw = await r.text();
+        const raw = r.text;
         if (!r.ok) {
           console.error("[ocr-server] ollama error", r.status, safeSnippet(raw));
-          return sendJson(res, r.status, { error: raw || `Ollama error ${r.status}` });
+          return sendJson(res, r.status || 502, { error: raw || `Ollama error ${r.status}` });
         }
 
         let data;

@@ -63,3 +63,42 @@ ollama serve
 ### Model doesn’t return JSON (JSON tab empty)
 
 Some models ignore “JSON only” instructions. This app will fall back to using the raw model output as Markdown/plain text and return a warning.
+
+## Local OCR via DeepSeek-OCR 2 (GPU, Hugging Face)
+
+If you want to run **DeepSeek-OCR 2** directly on your NVIDIA GPU (instead of Ollama), run the bundled Python service and point `dev:ocr` to it.
+
+### Configure env (local)
+
+Put these variables in your root `.env`:
+
+```bash
+OCR_PROVIDER="deepseek-ocr2"
+DEEPSEEK_OCR2_URL="http://127.0.0.1:9000/v1/ocr"
+DEEPSEEK_OCR2_TIMEOUT_MS="600000"
+```
+
+### Run locally
+
+Terminal 1 (Python OCR service):
+
+```bash
+cd server/deepseek-ocr2-service
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install torch --index-url https://download.pytorch.org/whl/cu124
+pip install -r requirements.txt
+uvicorn app:app --host 127.0.0.1 --port 9000
+```
+
+Terminal 2 (local OCR API used by the frontend):
+
+```bash
+npm run dev:ocr
+```
+
+Terminal 3 (frontend):
+
+```bash
+npm run dev
+```
