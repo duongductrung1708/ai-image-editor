@@ -8,7 +8,7 @@ const features = [
   {
     icon: ScanText,
     title: "OCR chính xác cao",
-    desc: "Sử dụng Gemini 2.5 Pro — model AI hàng đầu cho nhận diện văn bản tiếng Việt.",
+    desc: "Sử dụng AI Model hiện đại cho nhận diện văn bản tiếng Việt.",
   },
   {
     icon: Globe,
@@ -41,7 +41,7 @@ const LandingPage = () => {
         >
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5">
             <div className="h-2 w-2 rounded-full bg-accent" />
-            <span className="text-xs font-medium text-muted-foreground">Powered by Gemini 2.5 Pro</span>
+            <span className="text-xs font-medium text-muted-foreground">Powered by AI Model</span>
           </div>
           <h1 className="mb-4 text-5xl font-bold leading-tight tracking-tight text-foreground font-display">
             Nhận diện văn bản

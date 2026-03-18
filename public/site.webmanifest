@@ -1,0 +1,17 @@
+{
+  "name": "VietOCR",
+  "short_name": "VietOCR",
+  "description": "VietOCR - OCR tiếng Việt nhanh và chính xác.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#89191C",
+  "icons": [
+    {
+      "src": "/src/assets/Viet_Ocr.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    }
+  ]
+}
+

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { ArrowLeft, Copy, Download, Check, Loader2, History, RefreshCw, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -134,8 +135,9 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     setTimeout(() => setCopied(false), 2000);
   }, [activeTab, jsonText, markdownText]);
 
-  const handleDownload = useCallback(() => {
-    const isJson = activeTab === "json";
+  const handleDownload = useCallback((format?: "markdown" | "json") => {
+    const tab = format ?? activeTab;
+    const isJson = tab === "json";
     const content = isJson ? jsonText : markdownText;
     const mime = isJson ? "application/json;charset=utf-8" : "text/markdown;charset=utf-8";
     const filename = isJson ? "ocr-result.json" : "ocr-result.md";
@@ -148,6 +150,115 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     URL.revokeObjectURL(url);
     toast.success("Đã tải xuống file văn bản!");
   }, [activeTab, jsonText, markdownText]);
+
+  const handleExportPdf = useCallback(() => {
+    const text = (activeTab === "json" ? jsonText : markdownText).trim();
+    if (!text && !imageUrl) {
+      toast.error("Chưa có nội dung để xuất PDF.");
+      return;
+    }
+
+    const w = window.open("", "_blank", "noopener,noreferrer");
+    if (!w) {
+      toast.error("Trình duyệt đang chặn popup. Hãy cho phép để xuất PDF.");
+      return;
+    }
+
+    const styles = Array.from(document.querySelectorAll("link[rel='stylesheet'], style"))
+      .map((el) => el.outerHTML)
+      .join("\n");
+
+    const title = imageFile?.name ? `VietOCR — ${imageFile.name}` : "VietOCR";
+    const safeText =
+      text.length > 0
+        ? text
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+        : "";
+
+    const imgHtml =
+      imageUrl && imageUrl.length > 0
+        ? `<img src="${imageUrl}" alt="OCR source" class="preview" />`
+        : "";
+
+    w.document.open();
+    w.document.write(`<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</title>
+    <base href="${window.location.origin}/" />
+    ${styles}
+    <style>
+      @page { margin: 14mm; }
+      body { background: #fff !important; }
+      .pdf-wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 0;
+        font-family: "Be Vietnam Pro", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        color: #111;
+      }
+      .header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+        border-bottom: 1px solid rgba(0,0,0,0.08);
+        padding-bottom: 10px;
+      }
+      .brand { font-weight: 800; letter-spacing: -0.02em; font-size: 20px; color: #89191C; }
+      .meta { font-size: 12px; color: rgba(0,0,0,0.6); }
+      .preview {
+        width: 100%;
+        max-height: 420px;
+        object-fit: contain;
+        border: 1px solid rgba(0,0,0,0.08);
+        border-radius: 10px;
+        margin: 12px 0 14px;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12.5px;
+        line-height: 1.6;
+        padding: 12px;
+        border: 1px solid rgba(0,0,0,0.08);
+        border-radius: 10px;
+        background: #fff;
+      }
+      .hint { display: none; }
+      @media print {
+        .hint { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="pdf-wrap">
+      <div class="header">
+        <div class="brand">VietOCR</div>
+        <div class="meta">${new Date().toLocaleString("vi-VN")}</div>
+      </div>
+      ${imgHtml}
+      ${safeText ? `<pre>${safeText}</pre>` : ""}
+    </div>
+    <script>
+      window.onload = () => {
+        setTimeout(() => {
+          window.focus();
+          window.print();
+        }, 250);
+      };
+    </script>
+  </body>
+</html>`);
+    w.document.close();
+
+    toast.message("Đang mở hộp thoại in — chọn “Save as PDF” để xuất file.");
+  }, [activeTab, imageFile?.name, imageUrl, jsonText, markdownText]);
 
   const handleHistorySelect = (entry: {
     id: string;
@@ -238,15 +349,30 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? "Đã sao chép" : "Sao chép"}
           </Button>
-          <Button
-            size="sm"
-            onClick={handleDownload}
-            disabled={(!markdownText && !jsonText) || isProcessing}
-            className="gap-1.5"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Tải xuống
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                disabled={(!markdownText && !jsonText) || isProcessing}
+                className="gap-1.5"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Tải
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleDownload("markdown")}>
+                Tải Markdown (.md)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownload("json")}>
+                Tải JSON (.json)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleExportPdf}>
+                Xuất PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       {isProcessing && (

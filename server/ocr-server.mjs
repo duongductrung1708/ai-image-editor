@@ -119,7 +119,7 @@ function httpRequestJson(urlString, { method = "POST", headers = {}, body, timeo
 }
 
 const PORT = Number(getEnv("OCR_API_PORT", "8787"));
-const OCR_PROVIDER = getEnv("OCR_PROVIDER", "ollama"); // "ollama" | "gemini"
+const OCR_PROVIDER = getEnv("OCR_PROVIDER", "ollama"); // "ollama" | "gemini" | "lmstudio"
 const OLLAMA_MODEL = getEnv("OLLAMA_MODEL");
 const OLLAMA_BASE_URL = normalizeBaseUrl(getEnv("OLLAMA_BASE_URL", "http://localhost:11434"));
 const OLLAMA_TIMEOUT_MS = Number(getEnv("OLLAMA_TIMEOUT_MS", String(10 * 60 * 1000)));
@@ -146,6 +146,10 @@ const GEMINI_SYSTEM_PROMPT = getEnv(
   ].join("\n"),
 );
 
+const LMSTUDIO_BASE_URL = normalizeBaseUrl(getEnv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"));
+const LMSTUDIO_MODEL = getEnv("LMSTUDIO_MODEL", "");
+const LMSTUDIO_TIMEOUT_MS = Number(getEnv("LMSTUDIO_TIMEOUT_MS", String(10 * 60 * 1000)));
+
 if (OCR_PROVIDER === "ollama" && !OLLAMA_MODEL) {
   console.error("Missing env OLLAMA_MODEL. Set it in your root .env");
   process.exit(1);
@@ -153,6 +157,11 @@ if (OCR_PROVIDER === "ollama" && !OLLAMA_MODEL) {
 
 if (OCR_PROVIDER === "gemini" && !GEMINI_API_KEY) {
   console.error("Missing env GEMINI_API_KEY. Set it in your root .env");
+  process.exit(1);
+}
+
+if (OCR_PROVIDER === "lmstudio" && !LMSTUDIO_MODEL) {
+  console.error("Missing env LMSTUDIO_MODEL. Set it in your root .env");
   process.exit(1);
 }
 
@@ -306,6 +315,63 @@ async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
   }
 }
 
+async function callLmStudio({ imageBase64, mimeType, prompt }) {
+  const url = `${LMSTUDIO_BASE_URL}/chat/completions`;
+  const payload = {
+    model: LMSTUDIO_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an OCR and document-to-Markdown helper. Extract ALL text from the image without summarizing.",
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+        ],
+      },
+    ],
+    temperature: 0,
+    stream: false,
+  };
+
+  try {
+    const r = await httpRequestJson(url, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      timeoutMs: LMSTUDIO_TIMEOUT_MS,
+    });
+    const raw = r.text;
+    if (!r.ok) {
+      console.error("[ocr-server] lmstudio error", r.status, safeSnippet(raw));
+      return { ok: false, status: r.status || 502, raw: raw || "LM Studio error" };
+    }
+
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      console.error("[ocr-server] invalid JSON envelope from lmstudio", safeSnippet(raw));
+      return { ok: false, status: 502, raw: "Invalid JSON from LM Studio" };
+    }
+
+    const contentText = data?.choices?.[0]?.message?.content;
+    if (typeof contentText !== "string" || contentText.length === 0) {
+      console.error("[ocr-server] empty content from lmstudio", safeSnippet(raw));
+      return { ok: false, status: 502, raw: "Empty response from LM Studio" };
+    }
+
+    return { ok: true, status: 200, contentText };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, status: 502, raw: msg };
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   if (!req.url) return sendJson(res, 404, { error: "Not found" });
 
@@ -319,9 +385,10 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { error: "imageBase64 is required" });
       }
 
-      const prompt = OCR_PROVIDER === "gemini"
-        ? buildPrompt(GEMINI_BBOX_JSON ? "both" : "markdown")
-        : buildPrompt(OCR_MODE);
+      const prompt =
+        OCR_PROVIDER === "gemini" || OCR_PROVIDER === "lmstudio"
+          ? buildPrompt(GEMINI_BBOX_JSON ? "both" : "markdown")
+          : buildPrompt(OCR_MODE);
 
       let content;
       if (OCR_PROVIDER === "gemini") {
@@ -341,6 +408,14 @@ const server = http.createServer(async (req, res) => {
             full_text: out.contentText,
             blocks: [],
           });
+      } else if (OCR_PROVIDER === "lmstudio") {
+        const out = await callLmStudio({ imageBase64, mimeType, prompt });
+        if (!out.ok) return sendJson(res, out.status, { error: out.raw });
+        content = JSON.stringify({
+          markdown: out.contentText,
+          full_text: out.contentText,
+          blocks: [],
+        });
       } else {
         const doOllama = async () => {
           if (OLLAMA_API === "openai") {
@@ -481,8 +556,11 @@ server.listen(PORT, "127.0.0.1", () => {
   if (OCR_PROVIDER === "ollama") {
     console.log(`[ocr-server] ollama base: ${OLLAMA_BASE_URL}`);
     console.log(`[ocr-server] model: ${OLLAMA_MODEL}`);
-  } else {
+  } else if (OCR_PROVIDER === "gemini") {
     console.log(`[ocr-server] gemini model: ${GEMINI_MODEL}`);
+  } else if (OCR_PROVIDER === "lmstudio") {
+    console.log(`[ocr-server] lmstudio base: ${LMSTUDIO_BASE_URL}`);
+    console.log(`[ocr-server] lmstudio model: ${LMSTUDIO_MODEL}`);
   }
   void healthCheck();
 });
