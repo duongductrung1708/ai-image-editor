@@ -80,16 +80,13 @@ function normalizeImageBase64AndMimeType(imageBase64Input, mimeTypeInput) {
   if (!imageBase64)
     return { imageBase64: "", mimeType: mimeType || "image/png" };
 
-  // Accept either raw base64 or a full data URL: data:<mime>;base64,<data>
   const dataUrlMatch = /^data:([^;]+);base64,(.*)$/i.exec(imageBase64);
   if (dataUrlMatch) {
     if (!mimeType) mimeType = dataUrlMatch[1];
     imageBase64 = dataUrlMatch[2] || "";
   }
 
-  // Some sources insert whitespace/newlines into base64.
   imageBase64 = imageBase64.replace(/\s+/g, "");
-
   return { imageBase64, mimeType: mimeType || "image/png" };
 }
 
@@ -148,7 +145,11 @@ function httpRequestJson(
 }
 
 const PORT = Number(getEnv("OCR_API_PORT", "8787"));
-const OCR_PROVIDER = getEnv("OCR_PROVIDER", "ollama"); // "ollama" | "gemini" | "lmstudio"
+const OCR_PROVIDER = getEnv("OCR_PROVIDER", "ollama"); // "ollama" | "gemini" | "lmstudio" | "openai"
+const OCR_MODE = getEnv("OCR_MODE", "both"); // "both" | "json" | "markdown"
+const OCR_MARKDOWN_STYLE = getEnv("OCR_MARKDOWN_STYLE", "raw"); // "raw" | "clean"
+
+// Ollama Config
 const OLLAMA_MODEL = getEnv("OLLAMA_MODEL");
 const OLLAMA_BASE_URL = normalizeBaseUrl(
   getEnv("OLLAMA_BASE_URL", "http://localhost:11434"),
@@ -156,14 +157,12 @@ const OLLAMA_BASE_URL = normalizeBaseUrl(
 const OLLAMA_TIMEOUT_MS = Number(
   getEnv("OLLAMA_TIMEOUT_MS", String(10 * 60 * 1000)),
 );
-const OCR_MODE = getEnv("OCR_MODE", "both"); // "both" | "json" | "markdown"
 const OLLAMA_API = getEnv("OLLAMA_API", "native"); // "native" | "openai"
-const OCR_MARKDOWN_STYLE = getEnv("OCR_MARKDOWN_STYLE", "raw"); // "raw" | "clean"
-
 const OLLAMA_OPENAI_BASE_URL = normalizeBaseUrl(
   getEnv("OLLAMA_OPENAI_BASE_URL", `${OLLAMA_BASE_URL}/v1`),
 );
 
+// Gemini Config
 const GEMINI_API_KEY = getEnv("GEMINI_API_KEY");
 const GEMINI_MODEL = getEnv("GEMINI_MODEL", "gemini-2.5-flash");
 const GEMINI_TIMEOUT_MS = Number(
@@ -183,6 +182,7 @@ const GEMINI_SYSTEM_PROMPT = getEnv(
   ].join("\n"),
 );
 
+// LM Studio Config
 const LMSTUDIO_BASE_URL = normalizeBaseUrl(
   getEnv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
 );
@@ -190,28 +190,37 @@ const LMSTUDIO_MODEL = getEnv("LMSTUDIO_MODEL", "");
 const LMSTUDIO_TIMEOUT_MS = Number(
   getEnv("LMSTUDIO_TIMEOUT_MS", String(10 * 60 * 1000)),
 );
-const LMSTUDIO_CONTEXT_LENGTH = Number(
-  getEnv("LMSTUDIO_CONTEXT_LENGTH", "8192"),
+
+// OpenAI (ChatGPT / OpenRouter) Config
+const OPENAI_API_KEY = getEnv("OPENAI_API_KEY");
+const OPENAI_MODEL = getEnv("OPENAI_MODEL", "gpt-4o");
+const OPENAI_BASE_URL = normalizeBaseUrl(
+  getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+);
+const OPENAI_TIMEOUT_MS = Number(
+  getEnv("OPENAI_TIMEOUT_MS", String(60 * 1000)),
 );
 
+// Environment Checks
 if (OCR_PROVIDER === "ollama" && !OLLAMA_MODEL) {
-  console.error("Missing env OLLAMA_MODEL. Set it in your root .env");
+  console.error("Missing env OLLAMA_MODEL");
   process.exit(1);
 }
-
 if (OCR_PROVIDER === "gemini" && !GEMINI_API_KEY) {
-  console.error("Missing env GEMINI_API_KEY. Set it in your root .env");
+  console.error("Missing env GEMINI_API_KEY");
   process.exit(1);
 }
-
 if (OCR_PROVIDER === "lmstudio" && !LMSTUDIO_MODEL) {
-  console.error("Missing env LMSTUDIO_MODEL. Set it in your root .env");
+  console.error("Missing env LMSTUDIO_MODEL");
+  process.exit(1);
+}
+if (OCR_PROVIDER === "openai" && !OPENAI_API_KEY) {
+  console.error("Missing env OPENAI_API_KEY");
   process.exit(1);
 }
 
 function buildPrompt(mode) {
   if (OCR_PROVIDER === "lmstudio") {
-    // Keep prompts minimal for LM Studio since some builds account image data towards context.
     return (
       "Extract ALL text from this image.\n" +
       "Do not summarize or paraphrase.\n" +
@@ -228,8 +237,7 @@ function buildPrompt(mode) {
 
   const baseClean =
     baseRaw +
-    "\n" +
-    "Additionally, try to format as readable Markdown WITHOUT changing the meaning/content:\n" +
+    "\nAdditionally, try to format as readable Markdown WITHOUT changing the meaning/content:\n" +
     "- Only transform formatting (headings, emphasis, lists, tables). Do not rewrite sentences.\n" +
     "- Use Markdown headings (#, ##, ###) when you are confident a line is a heading.\n" +
     "- Use bullet/numbered lists when the document clearly uses them.\n" +
@@ -238,94 +246,138 @@ function buildPrompt(mode) {
 
   const base = OCR_MARKDOWN_STYLE === "clean" ? baseClean : baseRaw;
 
-  if (mode === "markdown") {
+  if (mode === "markdown")
     return (
       base +
       "Return ONLY Markdown/plain text (no code fences, no extra explanations).\n"
     );
-  }
-
-  if (mode === "json") {
+  if (mode === "json")
     return (
       base +
-      "Return ONLY valid JSON (no markdown wrappers, no extra text) with fields:\n" +
-      "- full_text: string (plain extracted text)\n" +
-      "- markdown: string (best-effort Markdown/plain text version)\n" +
-      "- blocks: array of {text, x, y, width, height} using percentage coordinates (0-100)\n" +
-      "If bounding boxes are uncertain, still return best-effort approximate values.\n"
+      "Return ONLY valid JSON (no markdown wrappers, no extra text) with fields:\n- full_text: string\n- markdown: string\n- blocks: array of {text, x, y, width, height} (0-100)\nIf bounding boxes are uncertain, still return approximate values.\n"
     );
-  }
-
   return (
     base +
-    "Return ONLY valid JSON (no markdown wrappers, no extra text) with fields:\n" +
-    "- markdown: string (best-effort document in Markdown, preserve headings/lists/tables if present)\n" +
-    "- full_text: string (plain extracted text)\n" +
-    "- blocks: array of {text, x, y, width, height} using percentage coordinates (0-100)\n" +
-    "If bounding boxes are uncertain, still return best-effort approximate values.\n"
+    "Return ONLY valid JSON (no markdown wrappers, no extra text) with fields:\n- markdown: string\n- full_text: string\n- blocks: array of {text, x, y, width, height} (0-100)\nIf bounding boxes are uncertain, still return approximate values.\n"
   );
-}
-
-function splitTableRow(line) {
-  // Minimal Markdown table row splitter; expects leading/trailing pipes are optional.
-  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
-  return trimmed.split("|").map((c) => c.trim());
 }
 
 function postProcessMarkdown(markdown) {
   if (typeof markdown !== "string" || markdown.length === 0) return markdown;
   let lines = markdown.split(/\r?\n/);
   if (OCR_MARKDOWN_STYLE === "clean") {
-    // Remove common OCR artefact lines (kept conservative).
     lines = lines.filter((l) => {
       const t = l.trim();
       if (!t) return true;
-      if (/^\d+\s*-\s*Text\s*$/i.test(t)) return false;
-      if (/^\d+\s*-\s*Marginalia\s*$/i.test(t)) return false;
-      if (/^Marginalia\s*$/i.test(t)) return false;
-      if (/^Text\s*$/i.test(t)) return false;
-      if (/^Sheet\s+\d+(\s*\/\s*\d+)?\s*$/i.test(t)) return false;
+      if (
+        /^\d+\s*-\s*Text\s*$/i.test(t) ||
+        /^\d+\s*-\s*Marginalia\s*$/i.test(t) ||
+        /^Marginalia\s*$/i.test(t) ||
+        /^Text\s*$/i.test(t) ||
+        /^Sheet\s+\d+(\s*\/\s*\d+)?\s*$/i.test(t)
+      )
+        return false;
       return true;
     });
   }
-  // No semantic post-processing (e.g., GV/HS conversion). Only light whitespace cleanup.
-  // Cleanup: collapse excessive blank lines.
   return lines
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
+// --------------------------------------------------------------------------------------
+// HÀM GỘP: Xử lý chung cho tất cả các model dùng chuẩn OpenAI (ChatGPT, OpenRouter, LM Studio, Ollama-v1)
+// --------------------------------------------------------------------------------------
+async function callOpenAIFormat({
+  baseUrl,
+  apiKey,
+  model,
+  imageBase64,
+  mimeType,
+  prompt,
+  timeoutMs,
+}) {
+  const url = `${baseUrl}/chat/completions`;
+  const payload = {
+    model,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an expert OCR assistant. Extract text exactly as seen in the image.",
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          {
+            type: "image_url",
+            image_url: { url: `data:${mimeType};base64,${imageBase64}` },
+          },
+        ],
+      },
+    ],
+    temperature: 0,
+    max_tokens: 4096,
+  };
+
+  if (prompt.includes("ONLY valid JSON"))
+    payload.response_format = { type: "json_object" };
+
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
+  try {
+    const r = await httpRequestJson(url, {
+      headers,
+      body: JSON.stringify(payload),
+      timeoutMs,
+    });
+    const raw = r.text;
+    if (!r.ok) {
+      console.error("[ocr-server] API error", r.status, safeSnippet(raw));
+      return { ok: false, status: r.status || 502, raw: raw || "API error" };
+    }
+
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return { ok: false, status: 502, raw: "Invalid JSON from API" };
+    }
+
+    const contentText = data?.choices?.[0]?.message?.content;
+    if (typeof contentText !== "string" || contentText.length === 0)
+      return { ok: false, status: 502, raw: "Empty response from API" };
+
+    return { ok: true, status: 200, contentText };
+  } catch (e) {
+    return {
+      ok: false,
+      status: 502,
+      raw: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
 async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
   try {
-    const url =
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}` +
-      `:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
-
-    const systemInstruction = GEMINI_SYSTEM_PROMPT;
-
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
     const payload = {
-      systemInstruction: { parts: [{ text: systemInstruction }] },
+      systemInstruction: { parts: [{ text: GEMINI_SYSTEM_PROMPT }] },
       contents: [
         {
           role: "user",
           parts: [
             { text: prompt },
-            {
-              inline_data: {
-                mime_type: mimeType,
-                data: imageBase64,
-              },
-            },
+            { inline_data: { mime_type: mimeType, data: imageBase64 } },
           ],
         },
       ],
-      generationConfig: {
-        temperature: 0,
-        responseMimeType,
-      },
+      generationConfig: { temperature: 0, responseMimeType },
     };
 
     let r;
@@ -338,14 +390,8 @@ async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // Node fetch throws "This operation was aborted" on AbortController timeout.
-      if (msg.toLowerCase().includes("aborted")) {
-        return {
-          ok: false,
-          status: 504,
-          raw: `Gemini request timed out after ${GEMINI_TIMEOUT_MS}ms`,
-        };
-      }
+      if (msg.toLowerCase().includes("aborted"))
+        return { ok: false, status: 504, raw: `Gemini request timed out` };
       return { ok: false, status: 502, raw: msg };
     }
 
@@ -359,91 +405,18 @@ async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
     try {
       data = JSON.parse(raw);
     } catch {
-      console.error(
-        "[ocr-server] invalid JSON envelope from gemini",
-        safeSnippet(raw),
-      );
       return { ok: false, status: 502, raw: "Invalid JSON from Gemini" };
     }
 
     const contentText = data?.candidates?.[0]?.content?.parts?.find(
       (p) => typeof p?.text === "string",
     )?.text;
-    if (typeof contentText !== "string" || contentText.length === 0) {
-      console.error("[ocr-server] empty content from gemini", safeSnippet(raw));
+    if (!contentText)
       return { ok: false, status: 502, raw: "Empty response from Gemini" };
-    }
 
     return { ok: true, status: 200, contentText };
   } finally {
     clearTimeout(timeout);
-  }
-}
-
-async function callLmStudio({ imageBase64, mimeType, prompt }) {
-  // Thay vì dùng URL nội bộ dễ lỗi của LM Studio, ta ép nó dùng chuẩn OpenAI
-  const url = `${LMSTUDIO_BASE_URL}/chat/completions`;
-
-  const payload = {
-    model: LMSTUDIO_MODEL,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are an expert OCR assistant. Extract text exactly as seen in the image.",
-      },
-      {
-        role: "user",
-        content: [
-          // Đảo ảnh lên trước, text xuống sau để GLM-OCR dễ "nhìn" hơn
-          {
-            type: "image_url",
-            image_url: { url: `data:${mimeType};base64,${imageBase64}` },
-          },
-          { type: "text", text: prompt },
-        ],
-      },
-    ],
-    temperature: 0,
-    max_tokens: 4096, // Rất quan trọng: Cấp đủ "đất" để AI đọc hết trang A4
-    stream: false,
-  };
-
-  try {
-    const r = await httpRequestJson(url, {
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      timeoutMs: LMSTUDIO_TIMEOUT_MS, // Thời gian chờ đủ dài (bạn đã cấu hình 10p)
-    });
-
-    const raw = r.text;
-    if (!r.ok) {
-      console.error("[ocr-server] lmstudio error", r.status, safeSnippet(raw));
-      return {
-        ok: false,
-        status: r.status || 502,
-        raw: raw || "LM Studio error",
-      };
-    }
-
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return { ok: false, status: 502, raw: "Invalid JSON from LM Studio" };
-    }
-
-    // Lấy nội dung theo đúng cấu trúc chuẩn của OpenAI
-    const contentText = data?.choices?.[0]?.message?.content;
-
-    if (typeof contentText !== "string" || contentText.length === 0) {
-      return { ok: false, status: 502, raw: "Empty response from LM Studio" };
-    }
-
-    return { ok: true, status: 200, contentText };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, status: 502, raw: msg };
   }
 }
 
@@ -457,19 +430,18 @@ const server = http.createServer(async (req, res) => {
         body?.imageBase64,
         body?.mimeType,
       );
-      const imageBase64 = normalized.imageBase64;
-      const mimeType = normalized.mimeType;
+      const { imageBase64, mimeType } = normalized;
 
-      if (!imageBase64 || typeof imageBase64 !== "string") {
+      if (!imageBase64 || typeof imageBase64 !== "string")
         return sendJson(res, 400, { error: "imageBase64 is required" });
-      }
 
-      const prompt =
-        OCR_PROVIDER === "gemini" || OCR_PROVIDER === "lmstudio"
-          ? buildPrompt(GEMINI_BBOX_JSON ? "both" : "markdown")
-          : buildPrompt(OCR_MODE);
+      const prompt = ["gemini", "lmstudio", "openai"].includes(OCR_PROVIDER)
+        ? buildPrompt(OCR_MODE === "json" ? "both" : "markdown")
+        : buildPrompt(OCR_MODE);
 
       let content;
+
+      // 1. Tuyến xử lý Gemini
       if (OCR_PROVIDER === "gemini") {
         const out = await callGemini({
           imageBase64,
@@ -480,8 +452,6 @@ const server = http.createServer(async (req, res) => {
             : "text/plain",
         });
         if (!out.ok) return sendJson(res, out.status, { error: out.raw });
-        // If bbox JSON is enabled, Gemini is expected to return JSON with blocks.
-        // Otherwise, wrap plain markdown/text into our JSON shape.
         content = GEMINI_BBOX_JSON
           ? out.contentText
           : JSON.stringify({
@@ -489,65 +459,57 @@ const server = http.createServer(async (req, res) => {
               full_text: out.contentText,
               blocks: [],
             });
-      } else if (OCR_PROVIDER === "lmstudio") {
-        const out = await callLmStudio({ imageBase64, mimeType, prompt });
-        if (!out.ok) return sendJson(res, out.status, { error: out.raw });
-        content = JSON.stringify({
-          markdown: out.contentText,
-          full_text: out.contentText,
-          blocks: [],
+      }
+
+      // 2. Tuyến xử lý GỘP cho OpenAI / LM Studio / Ollama (chế độ OpenAI)
+      else if (
+        OCR_PROVIDER === "openai" ||
+        OCR_PROVIDER === "lmstudio" ||
+        (OCR_PROVIDER === "ollama" && OLLAMA_API === "openai")
+      ) {
+        let baseUrl, apiKey, model, timeoutMs;
+
+        if (OCR_PROVIDER === "openai") {
+          baseUrl = OPENAI_BASE_URL;
+          apiKey = OPENAI_API_KEY;
+          model = OPENAI_MODEL;
+          timeoutMs = OPENAI_TIMEOUT_MS;
+        } else if (OCR_PROVIDER === "lmstudio") {
+          baseUrl = LMSTUDIO_BASE_URL;
+          apiKey = "";
+          model = LMSTUDIO_MODEL;
+          timeoutMs = LMSTUDIO_TIMEOUT_MS;
+        } else {
+          baseUrl = OLLAMA_OPENAI_BASE_URL;
+          apiKey = "ollama";
+          model = OLLAMA_MODEL;
+          timeoutMs = OLLAMA_TIMEOUT_MS;
+        }
+
+        const out = await callOpenAIFormat({
+          baseUrl,
+          apiKey,
+          model,
+          imageBase64,
+          mimeType,
+          prompt,
+          timeoutMs,
         });
-      } else {
+        if (!out.ok) return sendJson(res, out.status, { error: out.raw });
+        content = out.contentText;
+      }
+
+      // 3. Tuyến xử lý cho Ollama (chế độ Native cũ)
+      else {
         const doOllama = async () => {
-          if (OLLAMA_API === "openai") {
-            const payload = {
-              model: OLLAMA_MODEL,
-              messages: [
-                {
-                  role: "user",
-                  content: [
-                    { type: "text", text: prompt },
-                    {
-                      type: "image_url",
-                      image_url: {
-                        url: `data:${mimeType};base64,${imageBase64}`,
-                      },
-                    },
-                  ],
-                },
-              ],
-              temperature: 0,
-              stream: false,
-            };
-
-            return await httpRequestJson(
-              `${OLLAMA_OPENAI_BASE_URL}/chat/completions`,
-              {
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: "Bearer ollama",
-                },
-                body: JSON.stringify(payload),
-                timeoutMs: OLLAMA_TIMEOUT_MS,
-              },
-            );
-          }
-
           const payload = {
             model: OLLAMA_MODEL,
             messages: [
-              {
-                role: "user",
-                content: prompt,
-                images: [imageBase64],
-              },
+              { role: "user", content: prompt, images: [imageBase64] },
             ],
             stream: false,
-            options: {
-              temperature: 0,
-            },
+            options: { temperature: 0 },
           };
-
           return await httpRequestJson(`${OLLAMA_BASE_URL}/api/chat`, {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -559,57 +521,32 @@ const server = http.createServer(async (req, res) => {
         try {
           r = await doOllama();
         } catch (e) {
-          console.warn(
-            "[ocr-server] ollama request failed, retrying once",
-            e instanceof Error ? e.message : String(e),
-          );
           r = await doOllama();
-        }
-
-        const raw = r.text;
-        if (!r.ok) {
-          console.error(
-            "[ocr-server] ollama error",
-            r.status,
-            safeSnippet(raw),
-          );
+        } // Retry once
+        if (!r.ok)
           return sendJson(res, r.status || 502, {
-            error: raw || `Ollama error ${r.status}`,
+            error: r.text || `Ollama error ${r.status}`,
           });
-        }
 
         let data;
         try {
-          data = JSON.parse(raw);
+          data = JSON.parse(r.text);
         } catch {
-          console.error(
-            "[ocr-server] invalid JSON envelope from ollama",
-            safeSnippet(raw),
-          );
           return sendJson(res, 502, { error: "Invalid JSON from Ollama" });
         }
-
-        content =
-          OLLAMA_API === "openai"
-            ? data?.choices?.[0]?.message?.content
-            : data?.message?.content;
+        content = data?.message?.content;
       }
 
-      if (typeof content !== "string" || content.length === 0) {
-        console.error("[ocr-server] empty content from provider");
+      if (!content)
         return sendJson(res, 502, {
           error: "Empty response from OCR provider",
         });
-      }
 
+      // Post-Processing
       let parsed;
       try {
         parsed = JSON.parse(content);
       } catch {
-        // Fallback: some models ignore JSON-only instruction. Still return useful output.
-        console.warn(
-          "[ocr-server] content not JSON, falling back to markdown/plaintext",
-        );
         const cleaned = postProcessMarkdown(content);
         return sendJson(res, 200, {
           markdown: cleaned,
@@ -620,27 +557,19 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
-      const markdown =
-        typeof parsed?.markdown === "string" ? parsed.markdown : "";
-      const cleanedMarkdown = postProcessMarkdown(markdown);
       return sendJson(res, 200, {
-        markdown: cleanedMarkdown,
+        markdown: postProcessMarkdown(
+          typeof parsed?.markdown === "string" ? parsed.markdown : "",
+        ),
         full_text:
           typeof parsed?.full_text === "string" ? parsed.full_text : "",
         blocks: Array.isArray(parsed?.blocks) ? parsed.blocks : [],
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      const details =
-        err && typeof err === "object" && "cause" in err
-          ? String(err.cause)
-          : undefined;
-      console.error(
-        "[ocr-server] internal error",
-        msg,
-        details ? `cause=${details}` : "",
-      );
-      return sendJson(res, 500, { error: msg, details });
+      console.error("[ocr-server] internal error", err);
+      return sendJson(res, 500, {
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
     }
   }
 
@@ -648,63 +577,29 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.on("error", (err) => {
-  if (!err || typeof err !== "object") {
-    console.error("[ocr-server] server error", err);
-    process.exit(1);
-  }
-
-  const code = "code" in err ? err.code : undefined;
-  if (code === "EADDRINUSE") {
+  if (err?.code === "EADDRINUSE") {
     console.error(`[ocr-server] port ${PORT} is already in use (EADDRINUSE)`);
-    console.error(
-      "[ocr-server] tip: stop the process using the port, or set OCR_API_PORT to a free port in .env",
-    );
-    console.error(
-      "[ocr-server] windows: `netstat -ano | findstr 127.0.0.1:" +
-        PORT +
-        "` then `taskkill /PID <pid> /F`",
-    );
     process.exit(1);
   }
-
   console.error("[ocr-server] server error", err);
   process.exit(1);
 });
 
-async function healthCheck() {
-  if (OCR_PROVIDER !== "ollama") return;
-  try {
-    const r = await fetch(`${OLLAMA_BASE_URL}/api/version`);
-    const t = await r.text();
-    if (!r.ok) {
-      console.warn(
-        "[ocr-server] ollama healthcheck failed",
-        r.status,
-        safeSnippet(t),
-      );
-      return;
-    }
-    console.log("[ocr-server] ollama healthcheck OK", safeSnippet(t, 200));
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.warn("[ocr-server] ollama healthcheck fetch failed", msg);
-    console.warn(
-      '[ocr-server] tip: try OLLAMA_BASE_URL="http://127.0.0.1:11434" and ensure `ollama serve` is running',
-    );
-  }
-}
-
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`[ocr-server] listening on http://127.0.0.1:${PORT}`);
   console.log(`[ocr-server] provider: ${OCR_PROVIDER}`);
-  if (OCR_PROVIDER === "ollama") {
-    console.log(`[ocr-server] ollama base: ${OLLAMA_BASE_URL}`);
-    console.log(`[ocr-server] model: ${OLLAMA_MODEL}`);
-  } else if (OCR_PROVIDER === "gemini") {
+  if (OCR_PROVIDER === "ollama")
+    console.log(
+      `[ocr-server] ollama base: ${OLLAMA_BASE_URL} | model: ${OLLAMA_MODEL}`,
+    );
+  else if (OCR_PROVIDER === "gemini")
     console.log(`[ocr-server] gemini model: ${GEMINI_MODEL}`);
-  } else if (OCR_PROVIDER === "lmstudio") {
-    console.log(`[ocr-server] lmstudio base: ${LMSTUDIO_BASE_URL}`);
-    console.log(`[ocr-server] lmstudio model: ${LMSTUDIO_MODEL}`);
-  }
-  void healthCheck();
+  else if (OCR_PROVIDER === "lmstudio")
+    console.log(
+      `[ocr-server] lmstudio base: ${LMSTUDIO_BASE_URL} | model: ${LMSTUDIO_MODEL}`,
+    );
+  else if (OCR_PROVIDER === "openai")
+    console.log(
+      `[ocr-server] openai base: ${OPENAI_BASE_URL} | model: ${OPENAI_MODEL}`,
+    );
 });
