@@ -1,5 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
-import { ArrowLeft, Copy, Download, Check, Loader2, History, RefreshCw, ImagePlus } from "lucide-react";
+import { ArrowLeft, Copy, Download, Check, Loader2, History, RefreshCw, ImagePlus, Bold, Italic, Heading2, List, ListOrdered, Quote } from "lucide-react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { marked } from "marked";
+import TurndownService from "turndown";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,6 +33,32 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   const [showHistory, setShowHistory] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [activeTab, setActiveTab] = useState<"markdown" | "json">("markdown");
+
+  const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+
+  const editor = useEditor({
+    extensions: [StarterKit],
+    content: markdownText ? (marked.parse(markdownText) as string) : "",
+    editorProps: {
+      attributes: {
+        class:
+          "prose prose-sm max-w-none min-h-full text-foreground focus:outline-none font-body",
+      },
+    },
+    onUpdate({ editor }) {
+      const html = editor.getHTML();
+      const md = turndown.turndown(html);
+      setMarkdownText(md);
+    },
+  });
+
+  useEffect(() => {
+    if (!editor) return;
+    const currentHtml = editor.getHTML();
+    const nextHtml = markdownText ? (marked.parse(markdownText) as string) : "";
+    if (currentHtml.trim() === nextHtml.trim()) return;
+    editor.commands.setContent(nextHtml || "");
+  }, [editor, markdownText]);
 
   const fileToBase64 = useCallback((file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -172,9 +202,9 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     const safeText =
       text.length > 0
         ? text
-            .replaceAll("&", "&amp;")
-            .replaceAll("<", "&lt;")
-            .replaceAll(">", "&gt;")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
         : "";
 
     const imgHtml =
@@ -188,7 +218,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${title.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</title>
+    <title>${title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</title>
     <base href="${window.location.origin}/" />
     ${styles}
     <style>
@@ -428,13 +458,76 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
                     <Skeleton className="h-4 w-2/3" />
                   </div>
                 ) : (
-                  <textarea
-                    value={markdownText}
-                    onChange={(e) => setMarkdownText(e.target.value)}
-                    placeholder={isProcessing ? "Đang xử lý..." : "Markdown sẽ xuất hiện ở đây..."}
-                    className="h-full w-full resize-none bg-card p-4 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground font-body"
-                    disabled={isProcessing}
-                  />
+                  <div className="flex h-full flex-col">
+                    <div className="flex items-center gap-1 border-b border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground">
+                      <span className="mr-1 text-[11px] font-medium">Định dạng nhanh:</span>
+                      <button
+                        type="button"
+                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+                        onClick={() => editor?.chain().focus().toggleBold().run()}
+                        disabled={isProcessing || !editor}
+                        aria-label="Đậm"
+                      >
+                        <Bold className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+                        onClick={() => editor?.chain().focus().toggleItalic().run()}
+                        disabled={isProcessing || !editor}
+                        aria-label="Nghiêng"
+                      >
+                        <Italic className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+                        onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+                        disabled={isProcessing || !editor}
+                        aria-label="Tiêu đề"
+                      >
+                        <Heading2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+                        onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                        disabled={isProcessing || !editor}
+                        aria-label="Danh sách"
+                      >
+                        <List className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+                        onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                        disabled={isProcessing || !editor}
+                        aria-label="Danh sách đánh số"
+                      >
+                        <ListOrdered className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+                        onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+                        disabled={isProcessing || !editor}
+                        aria-label="Trích dẫn"
+                      >
+                        <Quote className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-auto bg-card px-4 py-3">
+                      {editor ? (
+                        <EditorContent editor={editor} className="h-full" />
+                      ) : (
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-1/2" />
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-11/12" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </TabsContent>
               <TabsContent value="json" className="m-0 h-full">
