@@ -64,14 +64,21 @@ function sendJson(res, status, payload) {
 
 function safeSnippet(s, max = 2000) {
   if (typeof s !== "string") return "";
-  return s.length > max ? `${s.slice(0, max)}\n...<truncated ${s.length - max} chars>` : s;
+  return s.length > max
+    ? `${s.slice(0, max)}\n...<truncated ${s.length - max} chars>`
+    : s;
 }
 
 function normalizeImageBase64AndMimeType(imageBase64Input, mimeTypeInput) {
-  let mimeType = typeof mimeTypeInput === "string" && mimeTypeInput ? mimeTypeInput : undefined;
-  let imageBase64 = typeof imageBase64Input === "string" ? imageBase64Input.trim() : "";
+  let mimeType =
+    typeof mimeTypeInput === "string" && mimeTypeInput
+      ? mimeTypeInput
+      : undefined;
+  let imageBase64 =
+    typeof imageBase64Input === "string" ? imageBase64Input.trim() : "";
 
-  if (!imageBase64) return { imageBase64: "", mimeType: mimeType || "image/png" };
+  if (!imageBase64)
+    return { imageBase64: "", mimeType: mimeType || "image/png" };
 
   // Accept either raw base64 or a full data URL: data:<mime>;base64,<data>
   const dataUrlMatch = /^data:([^;]+);base64,(.*)$/i.exec(imageBase64);
@@ -96,7 +103,10 @@ function normalizeBaseUrl(baseUrl) {
   return baseUrl.replace(/\/+$/, "");
 }
 
-function httpRequestJson(urlString, { method = "POST", headers = {}, body, timeoutMs }) {
+function httpRequestJson(
+  urlString,
+  { method = "POST", headers = {}, body, timeoutMs },
+) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlString);
     const isHttps = url.protocol === "https:";
@@ -140,17 +150,25 @@ function httpRequestJson(urlString, { method = "POST", headers = {}, body, timeo
 const PORT = Number(getEnv("OCR_API_PORT", "8787"));
 const OCR_PROVIDER = getEnv("OCR_PROVIDER", "ollama"); // "ollama" | "gemini" | "lmstudio"
 const OLLAMA_MODEL = getEnv("OLLAMA_MODEL");
-const OLLAMA_BASE_URL = normalizeBaseUrl(getEnv("OLLAMA_BASE_URL", "http://localhost:11434"));
-const OLLAMA_TIMEOUT_MS = Number(getEnv("OLLAMA_TIMEOUT_MS", String(10 * 60 * 1000)));
+const OLLAMA_BASE_URL = normalizeBaseUrl(
+  getEnv("OLLAMA_BASE_URL", "http://localhost:11434"),
+);
+const OLLAMA_TIMEOUT_MS = Number(
+  getEnv("OLLAMA_TIMEOUT_MS", String(10 * 60 * 1000)),
+);
 const OCR_MODE = getEnv("OCR_MODE", "both"); // "both" | "json" | "markdown"
 const OLLAMA_API = getEnv("OLLAMA_API", "native"); // "native" | "openai"
 const OCR_MARKDOWN_STYLE = getEnv("OCR_MARKDOWN_STYLE", "raw"); // "raw" | "clean"
 
-const OLLAMA_OPENAI_BASE_URL = normalizeBaseUrl(getEnv("OLLAMA_OPENAI_BASE_URL", `${OLLAMA_BASE_URL}/v1`));
+const OLLAMA_OPENAI_BASE_URL = normalizeBaseUrl(
+  getEnv("OLLAMA_OPENAI_BASE_URL", `${OLLAMA_BASE_URL}/v1`),
+);
 
 const GEMINI_API_KEY = getEnv("GEMINI_API_KEY");
 const GEMINI_MODEL = getEnv("GEMINI_MODEL", "gemini-2.5-flash");
-const GEMINI_TIMEOUT_MS = Number(getEnv("GEMINI_TIMEOUT_MS", String(60 * 1000)));
+const GEMINI_TIMEOUT_MS = Number(
+  getEnv("GEMINI_TIMEOUT_MS", String(60 * 1000)),
+);
 const GEMINI_BBOX_JSON = getEnv("GEMINI_BBOX_JSON", "0") === "1";
 const GEMINI_SYSTEM_PROMPT = getEnv(
   "GEMINI_SYSTEM_PROMPT",
@@ -165,10 +183,16 @@ const GEMINI_SYSTEM_PROMPT = getEnv(
   ].join("\n"),
 );
 
-const LMSTUDIO_BASE_URL = normalizeBaseUrl(getEnv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"));
+const LMSTUDIO_BASE_URL = normalizeBaseUrl(
+  getEnv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
+);
 const LMSTUDIO_MODEL = getEnv("LMSTUDIO_MODEL", "");
-const LMSTUDIO_TIMEOUT_MS = Number(getEnv("LMSTUDIO_TIMEOUT_MS", String(10 * 60 * 1000)));
-const LMSTUDIO_CONTEXT_LENGTH = Number(getEnv("LMSTUDIO_CONTEXT_LENGTH", "8192"));
+const LMSTUDIO_TIMEOUT_MS = Number(
+  getEnv("LMSTUDIO_TIMEOUT_MS", String(10 * 60 * 1000)),
+);
+const LMSTUDIO_CONTEXT_LENGTH = Number(
+  getEnv("LMSTUDIO_CONTEXT_LENGTH", "8192"),
+);
 
 if (OCR_PROVIDER === "ollama" && !OLLAMA_MODEL) {
   console.error("Missing env OLLAMA_MODEL. Set it in your root .env");
@@ -225,8 +249,8 @@ function buildPrompt(mode) {
     return (
       base +
       "Return ONLY valid JSON (no markdown wrappers, no extra text) with fields:\n" +
-      '- full_text: string (plain extracted text)\n' +
-      '- markdown: string (best-effort Markdown/plain text version)\n' +
+      "- full_text: string (plain extracted text)\n" +
+      "- markdown: string (best-effort Markdown/plain text version)\n" +
       "- blocks: array of {text, x, y, width, height} using percentage coordinates (0-100)\n" +
       "If bounding boxes are uncertain, still return best-effort approximate values.\n"
     );
@@ -235,8 +259,8 @@ function buildPrompt(mode) {
   return (
     base +
     "Return ONLY valid JSON (no markdown wrappers, no extra text) with fields:\n" +
-    '- markdown: string (best-effort document in Markdown, preserve headings/lists/tables if present)\n' +
-    '- full_text: string (plain extracted text)\n' +
+    "- markdown: string (best-effort document in Markdown, preserve headings/lists/tables if present)\n" +
+    "- full_text: string (plain extracted text)\n" +
     "- blocks: array of {text, x, y, width, height} using percentage coordinates (0-100)\n" +
     "If bounding boxes are uncertain, still return best-effort approximate values.\n"
   );
@@ -266,7 +290,10 @@ function postProcessMarkdown(markdown) {
   }
   // No semantic post-processing (e.g., GV/HS conversion). Only light whitespace cleanup.
   // Cleanup: collapse excessive blank lines.
-  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return lines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
@@ -313,7 +340,11 @@ async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
       const msg = e instanceof Error ? e.message : String(e);
       // Node fetch throws "This operation was aborted" on AbortController timeout.
       if (msg.toLowerCase().includes("aborted")) {
-        return { ok: false, status: 504, raw: `Gemini request timed out after ${GEMINI_TIMEOUT_MS}ms` };
+        return {
+          ok: false,
+          status: 504,
+          raw: `Gemini request timed out after ${GEMINI_TIMEOUT_MS}ms`,
+        };
       }
       return { ok: false, status: 502, raw: msg };
     }
@@ -328,12 +359,16 @@ async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
     try {
       data = JSON.parse(raw);
     } catch {
-      console.error("[ocr-server] invalid JSON envelope from gemini", safeSnippet(raw));
+      console.error(
+        "[ocr-server] invalid JSON envelope from gemini",
+        safeSnippet(raw),
+      );
       return { ok: false, status: 502, raw: "Invalid JSON from Gemini" };
     }
 
-    const contentText =
-      data?.candidates?.[0]?.content?.parts?.find((p) => typeof p?.text === "string")?.text;
+    const contentText = data?.candidates?.[0]?.content?.parts?.find(
+      (p) => typeof p?.text === "string",
+    )?.text;
     if (typeof contentText !== "string" || contentText.length === 0) {
       console.error("[ocr-server] empty content from gemini", safeSnippet(raw));
       return { ok: false, status: 502, raw: "Empty response from Gemini" };
@@ -347,27 +382,31 @@ async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
 
 async function callLmStudio({ imageBase64, mimeType, prompt }) {
   // Thay vì dùng URL nội bộ dễ lỗi của LM Studio, ta ép nó dùng chuẩn OpenAI
-  const url = `${LMSTUDIO_BASE_URL}/chat/completions`; 
+  const url = `${LMSTUDIO_BASE_URL}/chat/completions`;
 
   const payload = {
     model: LMSTUDIO_MODEL,
     messages: [
       {
         role: "system",
-        content: "You are an expert OCR assistant. Extract text exactly as seen in the image."
+        content:
+          "You are an expert OCR assistant. Extract text exactly as seen in the image.",
       },
       {
         role: "user",
         content: [
           // Đảo ảnh lên trước, text xuống sau để GLM-OCR dễ "nhìn" hơn
-          { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
-          { type: "text", text: prompt }
-        ]
-      }
+          {
+            type: "image_url",
+            image_url: { url: `data:${mimeType};base64,${imageBase64}` },
+          },
+          { type: "text", text: prompt },
+        ],
+      },
     ],
     temperature: 0,
     max_tokens: 4096, // Rất quan trọng: Cấp đủ "đất" để AI đọc hết trang A4
-    stream: false
+    stream: false,
   };
 
   try {
@@ -376,11 +415,15 @@ async function callLmStudio({ imageBase64, mimeType, prompt }) {
       body: JSON.stringify(payload),
       timeoutMs: LMSTUDIO_TIMEOUT_MS, // Thời gian chờ đủ dài (bạn đã cấu hình 10p)
     });
-    
+
     const raw = r.text;
     if (!r.ok) {
       console.error("[ocr-server] lmstudio error", r.status, safeSnippet(raw));
-      return { ok: false, status: r.status || 502, raw: raw || "LM Studio error" };
+      return {
+        ok: false,
+        status: r.status || 502,
+        raw: raw || "LM Studio error",
+      };
     }
 
     let data;
@@ -392,7 +435,7 @@ async function callLmStudio({ imageBase64, mimeType, prompt }) {
 
     // Lấy nội dung theo đúng cấu trúc chuẩn của OpenAI
     const contentText = data?.choices?.[0]?.message?.content;
-    
+
     if (typeof contentText !== "string" || contentText.length === 0) {
       return { ok: false, status: 502, raw: "Empty response from LM Studio" };
     }
@@ -410,7 +453,10 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/api/ocr") {
     try {
       const body = await readJson(req);
-      const normalized = normalizeImageBase64AndMimeType(body?.imageBase64, body?.mimeType);
+      const normalized = normalizeImageBase64AndMimeType(
+        body?.imageBase64,
+        body?.mimeType,
+      );
       const imageBase64 = normalized.imageBase64;
       const mimeType = normalized.mimeType;
 
@@ -429,7 +475,9 @@ const server = http.createServer(async (req, res) => {
           imageBase64,
           mimeType,
           prompt,
-          responseMimeType: GEMINI_BBOX_JSON ? "application/json" : "text/plain",
+          responseMimeType: GEMINI_BBOX_JSON
+            ? "application/json"
+            : "text/plain",
         });
         if (!out.ok) return sendJson(res, out.status, { error: out.raw });
         // If bbox JSON is enabled, Gemini is expected to return JSON with blocks.
@@ -437,10 +485,10 @@ const server = http.createServer(async (req, res) => {
         content = GEMINI_BBOX_JSON
           ? out.contentText
           : JSON.stringify({
-            markdown: out.contentText,
-            full_text: out.contentText,
-            blocks: [],
-          });
+              markdown: out.contentText,
+              full_text: out.contentText,
+              blocks: [],
+            });
       } else if (OCR_PROVIDER === "lmstudio") {
         const out = await callLmStudio({ imageBase64, mimeType, prompt });
         if (!out.ok) return sendJson(res, out.status, { error: out.raw });
@@ -459,7 +507,12 @@ const server = http.createServer(async (req, res) => {
                   role: "user",
                   content: [
                     { type: "text", text: prompt },
-                    { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+                    {
+                      type: "image_url",
+                      image_url: {
+                        url: `data:${mimeType};base64,${imageBase64}`,
+                      },
+                    },
                   ],
                 },
               ],
@@ -467,14 +520,17 @@ const server = http.createServer(async (req, res) => {
               stream: false,
             };
 
-            return await httpRequestJson(`${OLLAMA_OPENAI_BASE_URL}/chat/completions`, {
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: "Bearer ollama",
+            return await httpRequestJson(
+              `${OLLAMA_OPENAI_BASE_URL}/chat/completions`,
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: "Bearer ollama",
+                },
+                body: JSON.stringify(payload),
+                timeoutMs: OLLAMA_TIMEOUT_MS,
               },
-              body: JSON.stringify(payload),
-              timeoutMs: OLLAMA_TIMEOUT_MS,
-            });
+            );
           }
 
           const payload = {
@@ -503,21 +559,33 @@ const server = http.createServer(async (req, res) => {
         try {
           r = await doOllama();
         } catch (e) {
-          console.warn("[ocr-server] ollama request failed, retrying once", e instanceof Error ? e.message : String(e));
+          console.warn(
+            "[ocr-server] ollama request failed, retrying once",
+            e instanceof Error ? e.message : String(e),
+          );
           r = await doOllama();
         }
 
         const raw = r.text;
         if (!r.ok) {
-          console.error("[ocr-server] ollama error", r.status, safeSnippet(raw));
-          return sendJson(res, r.status || 502, { error: raw || `Ollama error ${r.status}` });
+          console.error(
+            "[ocr-server] ollama error",
+            r.status,
+            safeSnippet(raw),
+          );
+          return sendJson(res, r.status || 502, {
+            error: raw || `Ollama error ${r.status}`,
+          });
         }
 
         let data;
         try {
           data = JSON.parse(raw);
         } catch {
-          console.error("[ocr-server] invalid JSON envelope from ollama", safeSnippet(raw));
+          console.error(
+            "[ocr-server] invalid JSON envelope from ollama",
+            safeSnippet(raw),
+          );
           return sendJson(res, 502, { error: "Invalid JSON from Ollama" });
         }
 
@@ -529,7 +597,9 @@ const server = http.createServer(async (req, res) => {
 
       if (typeof content !== "string" || content.length === 0) {
         console.error("[ocr-server] empty content from provider");
-        return sendJson(res, 502, { error: "Empty response from OCR provider" });
+        return sendJson(res, 502, {
+          error: "Empty response from OCR provider",
+        });
       }
 
       let parsed;
@@ -537,28 +607,39 @@ const server = http.createServer(async (req, res) => {
         parsed = JSON.parse(content);
       } catch {
         // Fallback: some models ignore JSON-only instruction. Still return useful output.
-        console.warn("[ocr-server] content not JSON, falling back to markdown/plaintext");
+        console.warn(
+          "[ocr-server] content not JSON, falling back to markdown/plaintext",
+        );
         const cleaned = postProcessMarkdown(content);
         return sendJson(res, 200, {
           markdown: cleaned,
           full_text: cleaned,
           blocks: [],
-          warning: "Model did not return JSON; returned plain text/markdown instead.",
+          warning:
+            "Model did not return JSON; returned plain text/markdown instead.",
         });
       }
 
-      const markdown = typeof parsed?.markdown === "string" ? parsed.markdown : "";
+      const markdown =
+        typeof parsed?.markdown === "string" ? parsed.markdown : "";
       const cleanedMarkdown = postProcessMarkdown(markdown);
       return sendJson(res, 200, {
         markdown: cleanedMarkdown,
-        full_text: typeof parsed?.full_text === "string" ? parsed.full_text : "",
+        full_text:
+          typeof parsed?.full_text === "string" ? parsed.full_text : "",
         blocks: Array.isArray(parsed?.blocks) ? parsed.blocks : [],
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       const details =
-        err && typeof err === "object" && "cause" in err ? String(err.cause) : undefined;
-      console.error("[ocr-server] internal error", msg, details ? `cause=${details}` : "");
+        err && typeof err === "object" && "cause" in err
+          ? String(err.cause)
+          : undefined;
+      console.error(
+        "[ocr-server] internal error",
+        msg,
+        details ? `cause=${details}` : "",
+      );
       return sendJson(res, 500, { error: msg, details });
     }
   }
@@ -575,8 +656,14 @@ server.on("error", (err) => {
   const code = "code" in err ? err.code : undefined;
   if (code === "EADDRINUSE") {
     console.error(`[ocr-server] port ${PORT} is already in use (EADDRINUSE)`);
-    console.error("[ocr-server] tip: stop the process using the port, or set OCR_API_PORT to a free port in .env");
-    console.error('[ocr-server] windows: `netstat -ano | findstr 127.0.0.1:' + PORT + '` then `taskkill /PID <pid> /F`');
+    console.error(
+      "[ocr-server] tip: stop the process using the port, or set OCR_API_PORT to a free port in .env",
+    );
+    console.error(
+      "[ocr-server] windows: `netstat -ano | findstr 127.0.0.1:" +
+        PORT +
+        "` then `taskkill /PID <pid> /F`",
+    );
     process.exit(1);
   }
 
@@ -590,14 +677,20 @@ async function healthCheck() {
     const r = await fetch(`${OLLAMA_BASE_URL}/api/version`);
     const t = await r.text();
     if (!r.ok) {
-      console.warn("[ocr-server] ollama healthcheck failed", r.status, safeSnippet(t));
+      console.warn(
+        "[ocr-server] ollama healthcheck failed",
+        r.status,
+        safeSnippet(t),
+      );
       return;
     }
     console.log("[ocr-server] ollama healthcheck OK", safeSnippet(t, 200));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.warn("[ocr-server] ollama healthcheck fetch failed", msg);
-    console.warn('[ocr-server] tip: try OLLAMA_BASE_URL="http://127.0.0.1:11434" and ensure `ollama serve` is running');
+    console.warn(
+      '[ocr-server] tip: try OLLAMA_BASE_URL="http://127.0.0.1:11434" and ensure `ollama serve` is running',
+    );
   }
 }
 
@@ -615,4 +708,3 @@ server.listen(PORT, "127.0.0.1", () => {
   }
   void healthCheck();
 });
-
