@@ -1,20 +1,35 @@
-import { useState, useCallback, useEffect } from "react";
-import { ArrowLeft, Copy, Download, Check, Loader2, History, RefreshCw, ImagePlus, Bold, Italic, Heading2, List, ListOrdered, Quote } from "lucide-react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useMemo, useState, useCallback, useEffect } from "react";
+import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import UnderlineExtension from "@tiptap/extension-underline";
+import Highlight from "@tiptap/extension-highlight";
+import TextAlign from "@tiptap/extension-text-align";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TableCell } from "@tiptap/extension-table-cell";
 import { marked } from "marked";
 import TurndownService from "turndown";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { gfm } from "turndown-plugin-gfm";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import ImageViewer, { type BoundingBox } from "@/components/ImageViewer";
 import HistorySidebar from "@/components/HistorySidebar";
 import type { Json } from "@/integrations/supabase/types";
-import { isOcrErrorResponse, isOcrSuccessResponse, type OcrApiResponse } from "@/types/ocr";
+import {
+  isOcrErrorResponse,
+  isOcrSuccessResponse,
+  type OcrApiResponse,
+} from "@/types/ocr";
+import OCRToolbar from "@/components/ocr/OCRToolbar";
+import MarkdownEditor from "@/components/ocr/MarkdownEditor";
+import JsonViewer from "@/components/ocr/JsonViewer";
 
 interface OCRWorkspaceProps {
   imageFile: File;
@@ -32,12 +47,39 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   const [copied, setCopied] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
-  const [activeTab, setActiveTab] = useState<"markdown" | "json">("markdown");
+  const [activeTab, setActiveTab] = useState<"markdown" | "json" | "tables">(
+    "markdown",
+  );
 
-  const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+  marked.setOptions({ gfm: true, breaks: true });
+
+  const turndown = useMemo(() => {
+    const td = new TurndownService({
+      headingStyle: "atx",
+      codeBlockStyle: "fenced",
+    });
+    td.use(gfm);
+    return td;
+  }, []);
 
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit.configure({
+        bulletList: { keepMarks: true },
+        orderedList: { keepMarks: true },
+      }),
+      UnderlineExtension,
+      Highlight,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      TextAlign.configure({
+        types: ["heading", "paragraph"],
+      }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
+    ],
     content: markdownText ? (marked.parse(markdownText) as string) : "",
     editorProps: {
       attributes: {
@@ -45,18 +87,11 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
           "prose prose-sm max-w-none min-h-full text-foreground focus:outline-none font-body",
       },
     },
-    onUpdate({ editor }) {
-      const html = editor.getHTML();
-      const md = turndown.turndown(html);
-      setMarkdownText(md);
-    },
   });
 
   useEffect(() => {
     if (!editor) return;
-    const currentHtml = editor.getHTML();
     const nextHtml = markdownText ? (marked.parse(markdownText) as string) : "";
-    if (currentHtml.trim() === nextHtml.trim()) return;
     editor.commands.setContent(nextHtml || "");
   }, [editor, markdownText]);
 
@@ -98,7 +133,8 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         setLoadingProgress(80);
         const data: OcrApiResponse | null = await r.json().catch(() => null);
         if (!r.ok) {
-          const msg = data && isOcrErrorResponse(data) ? data.error : "OCR failed";
+          const msg =
+            data && isOcrErrorResponse(data) ? data.error : "OCR failed";
           throw new Error(msg);
         }
 
@@ -108,9 +144,16 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
 
         const md = data.markdown.length > 0 ? data.markdown : "";
         const fullText = data.full_text.length > 0 ? data.full_text : "";
-        const blocks: BoundingBox[] = Array.isArray(data.blocks) ? (data.blocks as unknown as BoundingBox[]) : [];
+        const blocks: BoundingBox[] = Array.isArray(data.blocks)
+          ? (data.blocks as unknown as BoundingBox[])
+          : [];
 
-        const mdOut = md.length > 0 ? md : fullText.length > 0 ? fullText : "Không phát hiện văn bản.";
+        const mdOut =
+          md.length > 0
+            ? md
+            : fullText.length > 0
+              ? fullText
+              : "Không phát hiện văn bản.";
         setMarkdownText(mdOut);
         setJsonText(
           JSON.stringify(
@@ -118,7 +161,9 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
               markdown: mdOut,
               full_text: fullText,
               blocks,
-              ...(typeof data.warning === "string" ? { warning: data.warning } : null),
+              ...(typeof data.warning === "string"
+                ? { warning: data.warning }
+                : null),
             },
             null,
             2,
@@ -158,137 +203,165 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   }, [imageFile, processImage]);
 
   const handleCopy = useCallback(() => {
-    const toCopy = activeTab === "json" ? jsonText : markdownText;
+    let toCopy = "";
+    if (activeTab === "json") {
+      toCopy = jsonText;
+    } else if (activeTab === "markdown") {
+      toCopy = editor ? turndown.turndown(editor.getHTML()) : markdownText;
+    } else {
+      toCopy = "";
+    }
     navigator.clipboard.writeText(toCopy);
     setCopied(true);
     toast.success("Đã sao chép văn bản!");
     setTimeout(() => setCopied(false), 2000);
-  }, [activeTab, jsonText, markdownText]);
+  }, [activeTab, editor, jsonText, markdownText, turndown]);
 
-  const handleDownload = useCallback((format?: "markdown" | "json") => {
-    const tab = format ?? activeTab;
-    const isJson = tab === "json";
-    const content = isJson ? jsonText : markdownText;
-    const mime = isJson ? "application/json;charset=utf-8" : "text/markdown;charset=utf-8";
-    const filename = isJson ? "ocr-result.json" : "ocr-result.md";
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Đã tải xuống file văn bản!");
-  }, [activeTab, jsonText, markdownText]);
+  const handleDownload = useCallback(
+    (format?: "markdown" | "json") => {
+      const tab = format ?? activeTab;
+      const isJson = tab === "json";
+      const content = isJson
+        ? jsonText
+        : editor
+          ? turndown.turndown(editor.getHTML())
+          : markdownText;
+      const mime = isJson
+        ? "application/json;charset=utf-8"
+        : "text/markdown;charset=utf-8";
+      const filename = isJson ? "ocr-result.json" : "ocr-result.md";
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Đã tải xuống file văn bản!");
+    },
+    [activeTab, editor, jsonText, markdownText, turndown],
+  );
 
   const handleExportPdf = useCallback(() => {
-    const text = (activeTab === "json" ? jsonText : markdownText).trim();
+    const currentMarkdown =
+      activeTab === "json"
+        ? jsonText
+        : editor
+          ? turndown.turndown(editor.getHTML())
+          : markdownText;
+    const text = currentMarkdown.trim();
     if (!text && !imageUrl) {
       toast.error("Chưa có nội dung để xuất PDF.");
       return;
     }
 
-    const w = window.open("", "_blank", "noopener,noreferrer");
-    if (!w) {
-      toast.error("Trình duyệt đang chặn popup. Hãy cho phép để xuất PDF.");
-      return;
-    }
-
-    const styles = Array.from(document.querySelectorAll("link[rel='stylesheet'], style"))
-      .map((el) => el.outerHTML)
-      .join("\n");
-
     const title = imageFile?.name ? `VietOCR — ${imageFile.name}` : "VietOCR";
-    const safeText =
-      text.length > 0
-        ? text
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-        : "";
 
-    const imgHtml =
-      imageUrl && imageUrl.length > 0
-        ? `<img src="${imageUrl}" alt="OCR source" class="preview" />`
-        : "";
+    const doc = new jsPDF({
+      unit: "mm",
+      format: "a4",
+      putOnlyUsedFonts: true,
+    });
 
-    w.document.open();
-    w.document.write(`<!doctype html>
-<html lang="vi">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</title>
-    <base href="${window.location.origin}/" />
-    ${styles}
-    <style>
-      @page { margin: 14mm; }
-      body { background: #fff !important; }
-      .pdf-wrap {
-        max-width: 860px;
-        margin: 0 auto;
-        padding: 0;
-        font-family: "Be Vietnam Pro", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        color: #111;
-      }
-      .header {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 12px;
-        border-bottom: 1px solid rgba(0,0,0,0.08);
-        padding-bottom: 10px;
-      }
-      .brand { font-weight: 800; letter-spacing: -0.02em; font-size: 20px; color: #89191C; }
-      .meta { font-size: 12px; color: rgba(0,0,0,0.6); }
-      .preview {
-        width: 100%;
-        max-height: 420px;
-        object-fit: contain;
-        border: 1px solid rgba(0,0,0,0.08);
-        border-radius: 10px;
-        margin: 12px 0 14px;
-      }
-      pre {
-        white-space: pre-wrap;
-        word-break: break-word;
-        font-size: 12.5px;
-        line-height: 1.6;
-        padding: 12px;
-        border: 1px solid rgba(0,0,0,0.08);
-        border-radius: 10px;
-        background: #fff;
-      }
-      .hint { display: none; }
-      @media print {
-        .hint { display: none; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="pdf-wrap">
-      <div class="header">
-        <div class="brand">VietOCR</div>
-        <div class="meta">${new Date().toLocaleString("vi-VN")}</div>
-      </div>
-      ${imgHtml}
-      ${safeText ? `<pre>${safeText}</pre>` : ""}
-    </div>
-    <script>
-      window.onload = () => {
-        setTimeout(() => {
-          window.focus();
-          window.print();
-        }, 250);
-      };
-    </script>
-  </body>
-</html>`);
-    w.document.close();
+    const marginX = 15;
+    let cursorY = 20;
 
-    toast.message("Đang mở hộp thoại in — chọn “Save as PDF” để xuất file.");
-  }, [activeTab, imageFile?.name, imageUrl, jsonText, markdownText]);
+    doc.setFontSize(14);
+    doc.setTextColor(137, 25, 28);
+    doc.text("VietOCR", marginX, cursorY);
+
+    doc.setFontSize(9);
+    doc.setTextColor(80);
+    doc.text(new Date().toLocaleString("vi-VN"), 210 - marginX, cursorY, { align: "right" });
+
+    cursorY += 8;
+
+    let capturedEditor = false;
+    const captureEditorPromise =
+      editor && document.querySelector<HTMLElement>(".ProseMirror")
+        ? (() => {
+            const el = document.querySelector(".ProseMirror") as HTMLElement;
+            const h = Math.max(el.scrollHeight, el.clientHeight);
+            return html2canvas(el, {
+              scale: window.devicePixelRatio || 2,
+              backgroundColor: "#ffffff",
+              height: h,
+              windowHeight: h,
+              scrollY: -window.scrollY,
+              useCORS: true,
+            }).then((canvas) => {
+            const imgData = canvas.toDataURL("image/png");
+            const pageWidth = 210 - marginX * 2;
+            const imgWidth = pageWidth;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+            if (cursorY + imgHeight > 287) {
+              doc.addPage();
+              cursorY = 20;
+            }
+
+            doc.addImage(imgData, "PNG", marginX, cursorY, imgWidth, imgHeight);
+            cursorY += imgHeight + 4;
+            capturedEditor = true;
+          });
+          })()
+        : Promise.resolve();
+
+    const addImagePromise =
+      imageUrl && imageUrl.startsWith("data:")
+        ? new Promise<void>((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              const maxWidth = 210 - marginX * 2;
+              const maxHeight = 80;
+              let w = img.width;
+              let h = img.height;
+              const ratio = Math.min(maxWidth / w, maxHeight / h);
+              w *= ratio;
+              h *= ratio;
+              if (cursorY + h > 287) {
+                doc.addPage();
+                cursorY = 20;
+              }
+              doc.addImage(img, "PNG", marginX, cursorY, w, h);
+              cursorY += h + 6;
+              resolve();
+            };
+            img.onerror = () => resolve();
+            img.src = imageUrl;
+          })
+        : Promise.resolve();
+
+    Promise.all([captureEditorPromise, addImagePromise]).then(() => {
+      // Nếu đã capture đúng "Kết quả OCR" (giữ format), không append text thô nữa
+      // để tránh bị dư/loạn ký tự (đặc biệt với bảng HTML).
+      if (!capturedEditor) {
+        doc.setFontSize(11);
+        doc.setTextColor(0, 0, 0);
+        const lines = doc.splitTextToSize(text || "", 210 - marginX * 2);
+
+        for (const line of lines) {
+          if (cursorY > 287) {
+            doc.addPage();
+            cursorY = 20;
+          }
+          doc.text(line as string, marginX, cursorY);
+          cursorY += 5;
+        }
+      }
+
+      doc.save(`${title || "vietocr"}.pdf`);
+      toast.success("Đã xuất PDF và tải về máy.");
+    });
+  }, [
+    activeTab,
+    editor,
+    imageFile?.name,
+    imageUrl,
+    jsonText,
+    markdownText,
+    turndown,
+  ]);
 
   const handleHistorySelect = (entry: {
     id: string;
@@ -321,90 +394,21 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
 
   return (
     <div className="flex h-screen flex-col">
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-3">
-        <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
-          <ArrowLeft className="h-4 w-4" />
-          Quay lại
-        </Button>
-        <div className="h-5 w-px bg-border" />
-        <span className="text-sm font-medium text-muted-foreground truncate max-w-[200px]">
-          {imageFile.name}
-        </span>
-
-        {isProcessing && (
-          <div className="flex items-center gap-1.5 text-primary">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span className="text-xs font-medium">{loadingLabel || "Đang nhận diện..."}</span>
-          </div>
-        )}
-
-        <div className="ml-auto flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => processImage(imageFile)}
-            disabled={isProcessing}
-            className="gap-1.5"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Nhận diện lại
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onBack}
-            disabled={isProcessing}
-            className="gap-1.5"
-          >
-            <ImagePlus className="h-3.5 w-3.5" />
-            Ảnh khác
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowHistory(!showHistory)}
-            className="gap-1.5"
-          >
-            <History className="h-3.5 w-3.5" />
-            Lịch sử
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopy}
-            disabled={(!markdownText && !jsonText) || isProcessing}
-            className="gap-1.5"
-          >
-            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? "Đã sao chép" : "Sao chép"}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="sm"
-                disabled={(!markdownText && !jsonText) || isProcessing}
-                className="gap-1.5"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Tải
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleDownload("markdown")}>
-                Tải Markdown (.md)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownload("json")}>
-                Tải JSON (.json)
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleExportPdf}>
-                Xuất PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+      <OCRToolbar
+        fileName={imageFile.name}
+        isProcessing={isProcessing}
+        loadingLabel={loadingLabel}
+        hasText={Boolean(markdownText || jsonText)}
+        copied={copied}
+        onBack={onBack}
+        onReprocess={() => processImage(imageFile)}
+        onPickAnother={onBack}
+        onToggleHistory={() => setShowHistory((v) => !v)}
+        onCopy={handleCopy}
+        onDownloadMarkdown={() => handleDownload("markdown")}
+        onDownloadJson={() => handleDownload("json")}
+        onExportPdf={handleExportPdf}
+      />
       {isProcessing && (
         <div className="border-b border-border bg-card px-4 py-2">
           <Progress value={loadingProgress} className="h-2" />
@@ -425,12 +429,19 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         {/* Right: Text editor */}
         <div className="flex flex-1 flex-col">
           <div className="border-b border-border px-4 py-2.5 flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Kết quả OCR</span>
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Kết quả OCR
+            </span>
             <div className="flex items-center gap-3">
               {boundingBoxes.length > 0 && (
-                <span className="text-[10px] text-accent font-medium">{boundingBoxes.length} vùng phát hiện</span>
+                <span className="text-[10px] text-accent font-medium">
+                  {boundingBoxes.length} vùng phát hiện
+                </span>
               )}
-              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "markdown" | "json")}>
+              <Tabs
+                value={activeTab}
+                onValueChange={(v) => setActiveTab(v as "markdown" | "json")}
+              >
                 <TabsList className="h-8">
                   <TabsTrigger className="px-2 py-1 text-xs" value="markdown">
                     Markdown
@@ -444,112 +455,20 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
           </div>
 
           <div className="flex-1 overflow-hidden">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "markdown" | "json")} className="h-full">
+            <Tabs
+              value={activeTab}
+              onValueChange={(v) => setActiveTab(v as "markdown" | "json")}
+              className="h-full"
+            >
               <TabsContent value="markdown" className="m-0 h-full">
-                {isProcessing && !markdownText ? (
-                  <div className="h-full w-full p-4 space-y-3">
-                    <Skeleton className="h-5 w-2/3" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-11/12" />
-                    <Skeleton className="h-4 w-10/12" />
-                    <Skeleton className="h-4 w-9/12" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-5/6" />
-                    <Skeleton className="h-4 w-2/3" />
-                  </div>
-                ) : (
-                  <div className="flex h-full flex-col">
-                    <div className="flex items-center gap-1 border-b border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground">
-                      <span className="mr-1 text-[11px] font-medium">Định dạng nhanh:</span>
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
-                        onClick={() => editor?.chain().focus().toggleBold().run()}
-                        disabled={isProcessing || !editor}
-                        aria-label="Đậm"
-                      >
-                        <Bold className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
-                        onClick={() => editor?.chain().focus().toggleItalic().run()}
-                        disabled={isProcessing || !editor}
-                        aria-label="Nghiêng"
-                      >
-                        <Italic className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
-                        onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-                        disabled={isProcessing || !editor}
-                        aria-label="Tiêu đề"
-                      >
-                        <Heading2 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
-                        onClick={() => editor?.chain().focus().toggleBulletList().run()}
-                        disabled={isProcessing || !editor}
-                        aria-label="Danh sách"
-                      >
-                        <List className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
-                        onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-                        disabled={isProcessing || !editor}
-                        aria-label="Danh sách đánh số"
-                      >
-                        <ListOrdered className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
-                        onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-                        disabled={isProcessing || !editor}
-                        aria-label="Trích dẫn"
-                      >
-                        <Quote className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div className="flex-1 overflow-auto bg-card px-4 py-3">
-                      {editor ? (
-                        <EditorContent editor={editor} className="h-full" />
-                      ) : (
-                        <div className="space-y-2">
-                          <Skeleton className="h-4 w-1/2" />
-                          <Skeleton className="h-4 w-full" />
-                          <Skeleton className="h-4 w-11/12" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <MarkdownEditor editor={editor} isProcessing={isProcessing} />
               </TabsContent>
               <TabsContent value="json" className="m-0 h-full">
-                {isProcessing && !jsonText ? (
-                  <div className="h-full w-full p-4 space-y-3">
-                    <Skeleton className="h-4 w-1/2" />
-                    <Skeleton className="h-4 w-11/12" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-10/12" />
-                    <Skeleton className="h-4 w-9/12" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-11/12" />
-                  </div>
-                ) : (
-                  <textarea
-                    value={jsonText}
-                    onChange={(e) => setJsonText(e.target.value)}
-                    placeholder={isProcessing ? "Đang xử lý..." : "JSON sẽ xuất hiện ở đây..."}
-                    className="h-full w-full resize-none bg-card p-4 font-mono text-xs leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
-                    disabled={isProcessing}
-                  />
-                )}
+                <JsonViewer
+                  jsonText={jsonText}
+                  isProcessing={isProcessing}
+                  onChange={setJsonText}
+                />
               </TabsContent>
             </Tabs>
           </div>
