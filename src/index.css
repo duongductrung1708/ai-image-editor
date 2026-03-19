@@ -69,6 +69,35 @@
   }
 }
 
+/* Scrollbar styling (Chrome/Edge/Safari + Firefox) */
+html {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(137, 25, 28, 0.55) rgba(0, 0, 0, 0.06);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(137, 25, 28, 0.55);
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(137, 25, 28, 0.72);
+}
+
+*::-webkit-scrollbar-corner {
+  background: rgba(0, 0, 0, 0.05);
+}
+
 .ProseMirror table {
   width: 100%;
   border-collapse: collapse;

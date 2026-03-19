@@ -393,7 +393,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   };
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col min-h-0">
       <OCRToolbar
         fileName={imageFile.name}
         isProcessing={isProcessing}
@@ -416,9 +416,9 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
       )}
 
       {/* Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-0">
         {/* Left: Image with bounding boxes */}
-        <div className="flex w-1/2 border-r border-border">
+        <div className="flex w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-border min-h-[240px] lg:min-h-0">
           <ImageViewer
             imageUrl={imageUrl}
             boxes={boundingBoxes}
@@ -427,7 +427,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         </div>
 
         {/* Right: Text editor */}
-        <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 flex-col min-h-0 w-full lg:w-auto">
           <div className="border-b border-border px-4 py-2.5 flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Kết quả OCR
@@ -454,7 +454,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
             </div>
           </div>
 
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden min-h-0">
             <Tabs
               value={activeTab}
               onValueChange={(v) => setActiveTab(v as "markdown" | "json")}
