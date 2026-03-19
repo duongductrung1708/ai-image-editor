@@ -2,6 +2,16 @@ import { useEffect, useState } from "react";
 import { Clock, Trash2, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -20,8 +30,18 @@ interface HistorySidebarProps {
   refreshKey: number;
 }
 
-const HistorySidebar = ({ isOpen, onSelect, refreshKey }: HistorySidebarProps) => {
+const HistorySidebar = ({
+  isOpen,
+  onSelect,
+  refreshKey,
+}: HistorySidebarProps) => {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: string;
+    imageName: string;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchHistory = async () => {
     const { data, error } = await supabase
@@ -40,14 +60,33 @@ const HistorySidebar = ({ isOpen, onSelect, refreshKey }: HistorySidebarProps) =
     fetchHistory();
   }, [refreshKey]);
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleRequestDelete = (id: string, imageName: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const { error } = await supabase.from("ocr_history").delete().eq("id", id);
-    if (error) {
-      toast.error("Lỗi khi xóa");
-    } else {
-      setEntries((prev) => prev.filter((e) => e.id !== id));
+    setPendingDelete({ id, imageName });
+    setIsConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("ocr_history")
+        .delete()
+        .eq("id", pendingDelete.id);
+
+      if (error) {
+        toast.error("Lỗi khi xóa");
+        return;
+      }
+
+      setEntries((prev) => prev.filter((entry) => entry.id !== pendingDelete.id));
       toast.success("Đã xóa");
+    } finally {
+      setIsDeleting(false);
+      setIsConfirmOpen(false);
+      setPendingDelete(null);
     }
   };
 
@@ -55,9 +94,44 @@ const HistorySidebar = ({ isOpen, onSelect, refreshKey }: HistorySidebarProps) =
 
   return (
     <div className="w-72 border-l border-border bg-card flex flex-col overflow-hidden">
+      <AlertDialog
+        open={isConfirmOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isDeleting) {
+            setIsConfirmOpen(false);
+            setPendingDelete(null);
+          } else {
+            setIsConfirmOpen(nextOpen);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa lịch sử OCR?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `Bạn có chắc chắn muốn xóa "${pendingDelete.imageName}"?`
+                : "Bạn có chắc chắn muốn xóa mục này không?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleConfirmDelete}
+            >
+              Xóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Clock className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-semibold text-foreground">Lịch sử OCR</span>
+        <span className="text-sm font-semibold text-foreground">
+          Lịch sử OCR
+        </span>
       </div>
       <div className="flex-1 overflow-y-auto">
         {entries.length === 0 ? (
@@ -92,7 +166,10 @@ const HistorySidebar = ({ isOpen, onSelect, refreshKey }: HistorySidebarProps) =
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6"
-                  onClick={(e) => { e.stopPropagation(); onSelect(entry); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(entry);
+                  }}
                 >
                   <Eye className="h-3 w-3" />
                 </Button>
@@ -100,7 +177,10 @@ const HistorySidebar = ({ isOpen, onSelect, refreshKey }: HistorySidebarProps) =
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 text-destructive"
-                  onClick={(e) => handleDelete(entry.id, e)}
+                  onClick={(e) =>
+                    handleRequestDelete(entry.id, entry.image_name, e)
+                  }
+                  disabled={isDeleting}
                 >
                   <Trash2 className="h-3 w-3" />
                 </Button>

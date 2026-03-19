@@ -67,7 +67,9 @@ const MarkdownEditor = ({ editor, isProcessing }: MarkdownEditorProps) => {
         <button
           type="button"
           className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
-          onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+          onClick={() =>
+            editor?.chain().focus().toggleHeading({ level: 2 }).run()
+          }
           disabled={isProcessing || !editor}
           aria-label="Tiêu đề"
         >
@@ -206,4 +208,3 @@ const MarkdownEditor = ({ editor, isProcessing }: MarkdownEditorProps) => {
 };
 
 export default MarkdownEditor;
-

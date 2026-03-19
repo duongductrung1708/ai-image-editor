@@ -25,7 +25,9 @@ const JsonViewer = ({ jsonText, isProcessing, onChange }: JsonViewerProps) => {
     <textarea
       value={jsonText}
       onChange={(e) => onChange(e.target.value)}
-      placeholder={isProcessing ? "Đang xử lý..." : "JSON sẽ xuất hiện ở đây..."}
+      placeholder={
+        isProcessing ? "Đang xử lý..." : "JSON sẽ xuất hiện ở đây..."
+      }
       className="h-full w-full resize-none bg-card p-4 font-mono text-xs leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
       disabled={isProcessing}
     />
@@ -33,4 +35,3 @@ const JsonViewer = ({ jsonText, isProcessing, onChange }: JsonViewerProps) => {
 };
 
 export default JsonViewer;
-

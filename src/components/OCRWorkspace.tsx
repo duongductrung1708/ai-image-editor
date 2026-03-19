@@ -50,8 +50,26 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   const [activeTab, setActiveTab] = useState<"markdown" | "json" | "tables">(
     "markdown",
   );
+  const [isLg, setIsLg] = useState(false);
 
   marked.setOptions({ gfm: true, breaks: true });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsLg(mq.matches);
+    update();
+
+    // Back-compat for older browsers
+    if (mq.addEventListener) {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
 
   const turndown = useMemo(() => {
     const td = new TurndownService({
@@ -62,8 +80,8 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     return td;
   }, []);
 
-  const editor = useEditor({
-    extensions: [
+  const extensions = useMemo(
+    () => [
       StarterKit.configure({
         bulletList: { keepMarks: true },
         orderedList: { keepMarks: true },
@@ -80,6 +98,11 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
       TableHeader,
       TableCell,
     ],
+    [],
+  );
+
+  const editor = useEditor({
+    extensions,
     content: markdownText ? (marked.parse(markdownText) as string) : "",
     editorProps: {
       attributes: {
@@ -272,7 +295,9 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
 
     doc.setFontSize(9);
     doc.setTextColor(80);
-    doc.text(new Date().toLocaleString("vi-VN"), 210 - marginX, cursorY, { align: "right" });
+    doc.text(new Date().toLocaleString("vi-VN"), 210 - marginX, cursorY, {
+      align: "right",
+    });
 
     cursorY += 8;
 
@@ -290,20 +315,27 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
               scrollY: -window.scrollY,
               useCORS: true,
             }).then((canvas) => {
-            const imgData = canvas.toDataURL("image/png");
-            const pageWidth = 210 - marginX * 2;
-            const imgWidth = pageWidth;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+              const imgData = canvas.toDataURL("image/png");
+              const pageWidth = 210 - marginX * 2;
+              const imgWidth = pageWidth;
+              const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-            if (cursorY + imgHeight > 287) {
-              doc.addPage();
-              cursorY = 20;
-            }
+              if (cursorY + imgHeight > 287) {
+                doc.addPage();
+                cursorY = 20;
+              }
 
-            doc.addImage(imgData, "PNG", marginX, cursorY, imgWidth, imgHeight);
-            cursorY += imgHeight + 4;
-            capturedEditor = true;
-          });
+              doc.addImage(
+                imgData,
+                "PNG",
+                marginX,
+                cursorY,
+                imgWidth,
+                imgHeight,
+              );
+              cursorY += imgHeight + 4;
+              capturedEditor = true;
+            });
           })()
         : Promise.resolve();
 
@@ -393,7 +425,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   };
 
   return (
-    <div className="flex h-screen flex-col min-h-0">
+    <div className="flex h-[100dvh] flex-col min-h-0">
       <OCRToolbar
         fileName={imageFile.name}
         isProcessing={isProcessing}
@@ -418,7 +450,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
       {/* Content */}
       <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-0">
         {/* Left: Image with bounding boxes */}
-        <div className="flex w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-border min-h-[240px] lg:min-h-0">
+        <div className="flex flex-1 w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-border min-h-[240px] lg:min-h-0">
           <ImageViewer
             imageUrl={imageUrl}
             boxes={boundingBoxes}
@@ -428,7 +460,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
 
         {/* Right: Text editor */}
         <div className="flex flex-1 flex-col min-h-0 w-full lg:w-auto">
-          <div className="border-b border-border px-4 py-2.5 flex items-center justify-between">
+          <div className="border-b border-border px-4 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Kết quả OCR
             </span>
@@ -474,13 +506,37 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
           </div>
         </div>
 
-        {/* History sidebar */}
-        <HistorySidebar
-          isOpen={showHistory}
-          onSelect={handleHistorySelect}
-          refreshKey={historyRefresh}
-        />
+        {/* History sidebar (desktop) */}
+        {showHistory && isLg && (
+          <HistorySidebar
+            isOpen={true}
+            onSelect={handleHistorySelect}
+            refreshKey={historyRefresh}
+          />
+        )}
       </div>
+
+      {/* History sidebar (mobile drawer) */}
+      {showHistory && !isLg && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40"
+          onClick={() => setShowHistory(false)}
+        >
+          <div
+            className="absolute right-0 top-0 h-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <HistorySidebar
+              isOpen={true}
+              onSelect={(entry) => {
+                handleHistorySelect(entry);
+                setShowHistory(false);
+              }}
+              refreshKey={historyRefresh}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

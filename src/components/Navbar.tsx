@@ -9,13 +9,21 @@ const Navbar = () => {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <ScanText className="h-4 w-4 text-primary-foreground" />
           </div>
-          <span className="text-lg font-bold font-display text-foreground">VietOCR</span>
+          <span className="text-lg font-bold font-display text-foreground">
+            VietOCR
+          </span>
         </Link>
         <div className="flex items-center gap-6">
-          <Link to="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+          <Link
+            to="/"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
             Trang chủ
           </Link>
-          <Link to="/app" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+          <Link
+            to="/app"
+            className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+          >
             Bắt đầu OCR
           </Link>
         </div>

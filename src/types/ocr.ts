@@ -21,7 +21,12 @@ export type OcrErrorResponse = {
 export type OcrApiResponse = OcrSuccessResponse | OcrErrorResponse;
 
 export function isOcrErrorResponse(v: unknown): v is OcrErrorResponse {
-  return typeof v === "object" && v !== null && "error" in v && typeof (v as { error?: unknown }).error === "string";
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    "error" in v &&
+    typeof (v as { error?: unknown }).error === "string"
+  );
 }
 
 export function isOcrSuccessResponse(v: unknown): v is OcrSuccessResponse {
@@ -33,4 +38,3 @@ export function isOcrSuccessResponse(v: unknown): v is OcrSuccessResponse {
     Array.isArray(o.blocks)
   );
 }
-

@@ -1,6 +1,21 @@
-import { ArrowLeft, Check, Copy, Download, History, ImagePlus, Loader2, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Download,
+  History,
+  ImagePlus,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface OCRToolbarProps {
   fileName: string;
@@ -34,24 +49,26 @@ const OCRToolbar = ({
   onExportPdf,
 }: OCRToolbarProps) => {
   return (
-    <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-3">
+    <div className="flex flex-wrap items-center gap-3 border-b border-border bg-card px-4 py-3">
       <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
         <ArrowLeft className="h-4 w-4" />
         Quay lại
       </Button>
       <div className="h-5 w-px bg-border" />
-      <span className="text-sm font-medium text-muted-foreground truncate max-w-[200px]">
+      <span className="text-sm font-medium text-muted-foreground truncate max-w-full sm:max-w-[200px]">
         {fileName}
       </span>
 
       {isProcessing && (
         <div className="flex items-center gap-1.5 text-primary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span className="text-xs font-medium">{loadingLabel || "Đang nhận diện..."}</span>
+          <span className="text-xs font-medium">
+            {loadingLabel || "Đang nhận diện..."}
+          </span>
         </div>
       )}
 
-      <div className="ml-auto flex gap-2">
+      <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
         <Button
           variant="outline"
           size="sm"
@@ -88,7 +105,11 @@ const OCRToolbar = ({
           disabled={!hasText || isProcessing}
           className="gap-1.5"
         >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
           {copied ? "Đã sao chép" : "Sao chép"}
         </Button>
         <DropdownMenu>
@@ -110,9 +131,7 @@ const OCRToolbar = ({
               Tải JSON (.json)
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onExportPdf}>
-              Xuất PDF
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onExportPdf}>Xuất PDF</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -121,4 +140,3 @@ const OCRToolbar = ({
 };
 
 export default OCRToolbar;
-

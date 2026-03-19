@@ -27,7 +27,7 @@ const DropZone = ({ onImageSelect }: DropZoneProps) => {
         onImageSelect(file);
       }
     },
-    [onImageSelect]
+    [onImageSelect],
   );
 
   const handleFileInput = useCallback(
@@ -35,7 +35,7 @@ const DropZone = ({ onImageSelect }: DropZoneProps) => {
       const file = e.target.files?.[0];
       if (file) onImageSelect(file);
     },
-    [onImageSelect]
+    [onImageSelect],
   );
 
   // Clipboard paste support
@@ -87,7 +87,9 @@ const DropZone = ({ onImageSelect }: DropZoneProps) => {
         </AnimatePresence>
 
         <p className="mb-1 text-sm font-medium text-foreground">
-          {isDragOver ? "Thả hình ảnh tại đây" : "Kéo thả hình ảnh hoặc nhấn để chọn"}
+          {isDragOver
+            ? "Thả hình ảnh tại đây"
+            : "Kéo thả hình ảnh hoặc nhấn để chọn"}
         </p>
         <p className="text-xs text-muted-foreground">
           Hỗ trợ PNG, JPG, WEBP · Ctrl+V để dán từ clipboard

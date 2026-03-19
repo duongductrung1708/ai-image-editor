@@ -27,7 +27,7 @@ const ImageViewer = ({ imageUrl, boxes, isProcessing }: ImageViewerProps) => {
         <img
           src={imageUrl}
           alt="Uploaded"
-          className="block max-h-[calc(100vh-120px)] max-w-full rounded-md object-contain"
+          className="block max-h-full max-w-full rounded-md object-contain"
         />
 
         {/* Bounding boxes overlay */}

@@ -41,7 +41,9 @@ const LandingPage = () => {
         >
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5">
             <div className="h-2 w-2 rounded-full bg-accent" />
-            <span className="text-xs font-medium text-muted-foreground">Powered by AI Model</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              Powered by AI Model
+            </span>
           </div>
           <h1 className="mb-4 text-5xl font-bold leading-tight tracking-tight text-foreground font-display">
             Nhận diện văn bản
@@ -78,7 +80,9 @@ const LandingPage = () => {
               <h3 className="mb-1 text-base font-semibold text-foreground font-display">
                 {f.title}
               </h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {f.desc}
+              </p>
             </motion.div>
           ))}
         </div>
