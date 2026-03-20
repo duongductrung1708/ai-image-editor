@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import UnderlineExtension from "@tiptap/extension-underline";
@@ -17,10 +17,13 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import ImageViewer, { type BoundingBox } from "@/components/ImageViewer";
 import HistorySidebar from "@/components/HistorySidebar";
+import ImageCropper, { type ImageCropperApi } from "@/components/ocr/ImageCropper";
+import { Crop, RotateCcw, RotateCw, Sparkles } from "lucide-react";
 import type { Json } from "@/integrations/supabase/types";
 import {
   isOcrErrorResponse,
@@ -30,6 +33,7 @@ import {
 import OCRToolbar from "@/components/ocr/OCRToolbar";
 import MarkdownEditor from "@/components/ocr/MarkdownEditor";
 import JsonViewer from "@/components/ocr/JsonViewer";
+import { enhanceFile } from "@/lib/imageProcessing";
 
 interface OCRWorkspaceProps {
   imageFile: File;
@@ -51,6 +55,15 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     "markdown",
   );
   const [isLg, setIsLg] = useState(false);
+
+  const [phase, setPhase] = useState<"edit" | "processing" | "result">("edit");
+  const [editFile, setEditFile] = useState<File>(imageFile);
+  const [editImageUrl, setEditImageUrl] = useState<string>("");
+  const [enhance, setEnhance] = useState(false);
+  const [isEditingBusy, setIsEditingBusy] = useState(false);
+
+  const lastOcrBlobUrlRef = useRef<string | null>(null);
+  const cropperApiRef = useRef<ImageCropperApi | null>(null);
 
   marked.setOptions({ gfm: true, breaks: true });
 
@@ -131,13 +144,14 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   }, []);
 
   const processImage = useCallback(
-    async (file: File) => {
+    async (file: File): Promise<boolean> => {
       setIsProcessing(true);
       setLoadingLabel("Chuẩn bị ảnh...");
       setLoadingProgress(10);
       setMarkdownText("");
       setJsonText("");
       setBoundingBoxes([]);
+      let ok = false;
 
       try {
         setLoadingLabel("Đang mã hóa ảnh...");
@@ -206,6 +220,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         });
         setHistoryRefresh((p) => p + 1);
         setLoadingProgress(100);
+        ok = true;
       } catch (err: unknown) {
         console.error("OCR error:", err);
         toast.error("Lỗi khi xử lý hình ảnh. Vui lòng thử lại.");
@@ -214,16 +229,129 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         setLoadingLabel("");
         setLoadingProgress(0);
       }
+
+      return ok;
     },
     [fileToBase64],
   );
 
   useEffect(() => {
-    const url = URL.createObjectURL(imageFile);
-    setImageUrl(url);
-    processImage(imageFile);
+    // When a new image is uploaded, reset the workspace to "edit" phase.
+    setPhase("edit");
+    setEditFile(imageFile);
+    setEnhance(false);
+    setShowHistory(false);
+    setActiveTab("markdown");
+
+    // Clear current OCR result.
+    setMarkdownText("");
+    setJsonText("");
+    setBoundingBoxes([]);
+  }, [imageFile]);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(editFile);
+    setEditImageUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [imageFile, processImage]);
+  }, [editFile]);
+
+  useEffect(() => {
+    return () => {
+      if (lastOcrBlobUrlRef.current) {
+        URL.revokeObjectURL(lastOcrBlobUrlRef.current);
+        lastOcrBlobUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  const setOcrImageFromFile = useCallback((file: File) => {
+    const url = URL.createObjectURL(file);
+    if (lastOcrBlobUrlRef.current) URL.revokeObjectURL(lastOcrBlobUrlRef.current);
+    lastOcrBlobUrlRef.current = url;
+    setImageUrl(url);
+  }, []);
+
+  const startOcr = useCallback(async () => {
+    if (isProcessing) return;
+    if (!editFile) return;
+
+    setShowHistory(false);
+    setActiveTab("markdown");
+    setPhase("processing");
+
+    let fileForOcr = editFile;
+
+    try {
+      if (cropperApiRef.current) {
+        const blob = await cropperApiRef.current.exportCroppedBlob();
+        const type = blob.type || editFile.type || "image/png";
+        fileForOcr = new File([blob], `${editFile.name}_cropped.png`, {
+          type,
+        });
+      }
+
+      if (enhance) {
+        fileForOcr = await enhanceFile(fileForOcr, {
+          contrast: 1.28,
+          brightness: 1.03,
+          sharpenPass: 1,
+        });
+      }
+    } catch {
+      toast.error("Không thể xuất ảnh đã crop. Vui lòng thử lại.");
+      setPhase("edit");
+      return;
+    }
+
+    setOcrImageFromFile(fileForOcr);
+    const ok = await processImage(fileForOcr);
+    setPhase(ok ? "result" : "edit");
+  }, [enhance, editFile, isProcessing, processImage, setOcrImageFromFile]);
+
+  const applyRotate = useCallback(
+    async (angleDegrees: number) => {
+      if (isProcessing || isEditingBusy) return;
+      setIsEditingBusy(true);
+      try {
+        cropperApiRef.current?.rotate(angleDegrees);
+      } catch {
+        toast.error("Lỗi khi xoay ảnh. Vui lòng thử lại.");
+      } finally {
+        setIsEditingBusy(false);
+      }
+    },
+    [isEditingBusy, isProcessing],
+  );
+
+  const applyEnhance = useCallback(
+    async () => {
+      if (isProcessing || isEditingBusy) return;
+      // Toggle enhancement. Real enhancement is applied right before OCR.
+      setEnhance((v) => !v);
+    },
+    [isEditingBusy, isProcessing],
+  );
+
+  const handleReprocess = useCallback(() => {
+    if (phase === "result") {
+      // Go back to edit mode while keeping the last edited image.
+      setPhase("edit");
+      setShowHistory(false);
+      setMarkdownText("");
+      setJsonText("");
+      setBoundingBoxes([]);
+      setActiveTab("markdown");
+      setEnhance(false);
+      cropperApiRef.current?.reset();
+      return;
+    }
+    void startOcr();
+  }, [phase, startOcr]);
+
+  const toggleHistory = useCallback(() => {
+    if (phase !== "result") return;
+    setShowHistory((v) => !v);
+  }, [phase]);
 
   const handleCopy = useCallback(() => {
     let toCopy = "";
@@ -403,6 +531,14 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     image_data: string | null;
     created_at: string;
   }) => {
+    setPhase("result");
+    setEnhance(false);
+
+    if (lastOcrBlobUrlRef.current) {
+      URL.revokeObjectURL(lastOcrBlobUrlRef.current);
+      lastOcrBlobUrlRef.current = null;
+    }
+
     const blocks: BoundingBox[] = Array.isArray(entry.bounding_boxes)
       ? (entry.bounding_boxes as unknown as BoundingBox[])
       : [];
@@ -421,6 +557,22 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     );
     if (entry.image_data) {
       setImageUrl(entry.image_data);
+      if (entry.image_data.startsWith("data:")) {
+        void (async () => {
+          try {
+            const res = await fetch(entry.image_data);
+            const blob = await res.blob();
+            const type = blob.type || "image/png";
+            setEditFile(
+              new File([blob], entry.image_name || "ocr-history.png", {
+                type,
+              }),
+            );
+          } catch {
+            // If conversion fails, keep editFile as-is.
+          }
+        })();
+      }
     }
   };
 
@@ -433,9 +585,9 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         hasText={Boolean(markdownText || jsonText)}
         copied={copied}
         onBack={onBack}
-        onReprocess={() => processImage(imageFile)}
+        onReprocess={handleReprocess}
         onPickAnother={onBack}
-        onToggleHistory={() => setShowHistory((v) => !v)}
+        onToggleHistory={toggleHistory}
         onCopy={handleCopy}
         onDownloadMarkdown={() => handleDownload("markdown")}
         onDownloadJson={() => handleDownload("json")}
@@ -448,92 +600,235 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
       )}
 
       {/* Content */}
-      <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-0">
-        {/* Left: Image with bounding boxes */}
-        <div className="flex flex-1 w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-border min-h-[240px] lg:min-h-0">
-          <ImageViewer
-            imageUrl={imageUrl}
-            boxes={boundingBoxes}
-            isProcessing={isProcessing}
-          />
-        </div>
-
-        {/* Right: Text editor */}
-        <div className="flex flex-1 flex-col min-h-0 w-full lg:w-auto">
-          <div className="border-b border-border px-4 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Kết quả OCR
-            </span>
-            <div className="flex items-center gap-3">
-              {boundingBoxes.length > 0 && (
-                <span className="text-[10px] text-accent font-medium">
-                  {boundingBoxes.length} vùng phát hiện
-                </span>
-              )}
-              <Tabs
-                value={activeTab}
-                onValueChange={(v) => setActiveTab(v as "markdown" | "json")}
-              >
-                <TabsList className="h-8">
-                  <TabsTrigger className="px-2 py-1 text-xs" value="markdown">
-                    Markdown
-                  </TabsTrigger>
-                  <TabsTrigger className="px-2 py-1 text-xs" value="json">
-                    JSON
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+      {phase === "result" ? (
+        <>
+          <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-0">
+            {/* Left: Image with bounding boxes */}
+            <div className="flex flex-1 w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-border min-h-[240px] lg:min-h-0">
+              <ImageViewer
+                imageUrl={imageUrl}
+                boxes={boundingBoxes}
+                isProcessing={isProcessing}
+              />
             </div>
+
+            {/* Right: Text editor */}
+            <div className="flex flex-1 flex-col min-h-0 w-full lg:w-auto">
+              <div className="border-b border-border px-4 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Kết quả OCR
+                </span>
+                <div className="flex items-center gap-3">
+                  {boundingBoxes.length > 0 && (
+                    <span className="text-[10px] text-accent font-medium">
+                      {boundingBoxes.length} vùng phát hiện
+                    </span>
+                  )}
+                  <Tabs
+                    value={activeTab}
+                    onValueChange={(v) => setActiveTab(v as "markdown" | "json")}
+                  >
+                    <TabsList className="h-8">
+                      <TabsTrigger
+                        className="px-2 py-1 text-xs"
+                        value="markdown"
+                      >
+                        Markdown
+                      </TabsTrigger>
+                      <TabsTrigger className="px-2 py-1 text-xs" value="json">
+                        JSON
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-hidden min-h-0">
+                <Tabs
+                  value={activeTab}
+                  onValueChange={(v) => setActiveTab(v as "markdown" | "json")}
+                  className="h-full"
+                >
+                  <TabsContent value="markdown" className="m-0 h-full">
+                    <MarkdownEditor
+                      editor={editor}
+                      isProcessing={isProcessing}
+                    />
+                  </TabsContent>
+                  <TabsContent value="json" className="m-0 h-full">
+                    <JsonViewer
+                      jsonText={jsonText}
+                      isProcessing={isProcessing}
+                      onChange={setJsonText}
+                    />
+                  </TabsContent>
+                </Tabs>
+              </div>
+            </div>
+
+            {/* History sidebar (desktop) */}
+            {showHistory && isLg && (
+              <HistorySidebar
+                isOpen={true}
+                onSelect={handleHistorySelect}
+                refreshKey={historyRefresh}
+              />
+            )}
           </div>
 
-          <div className="flex-1 overflow-hidden min-h-0">
-            <Tabs
-              value={activeTab}
-              onValueChange={(v) => setActiveTab(v as "markdown" | "json")}
-              className="h-full"
+          {/* History sidebar (mobile drawer) */}
+          {showHistory && !isLg && (
+            <div
+              className="fixed inset-0 z-50 bg-black/40"
+              onClick={() => setShowHistory(false)}
             >
-              <TabsContent value="markdown" className="m-0 h-full">
-                <MarkdownEditor editor={editor} isProcessing={isProcessing} />
-              </TabsContent>
-              <TabsContent value="json" className="m-0 h-full">
-                <JsonViewer
-                  jsonText={jsonText}
-                  isProcessing={isProcessing}
-                  onChange={setJsonText}
+              <div
+                className="absolute right-0 top-0 h-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <HistorySidebar
+                  isOpen={true}
+                  onSelect={(entry) => {
+                    handleHistorySelect(entry);
+                    setShowHistory(false);
+                  }}
+                  refreshKey={historyRefresh}
                 />
-              </TabsContent>
-            </Tabs>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-0">
+          {/* Left: Image preview + crop selector */}
+          <div className="flex flex-1 w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-border min-h-[240px] lg:min-h-0">
+            {editImageUrl ? (
+              <ImageCropper
+                src={editImageUrl}
+                disabled={isProcessing}
+                onApiReady={(api) => {
+                  cropperApiRef.current = api;
+                }}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center p-6 text-sm text-muted-foreground">
+                Đang tải ảnh...
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* History sidebar (desktop) */}
-        {showHistory && isLg && (
-          <HistorySidebar
-            isOpen={true}
-            onSelect={handleHistorySelect}
-            refreshKey={historyRefresh}
-          />
-        )}
-      </div>
+          {/* Right: Tools */}
+          <div className="flex flex-1 flex-col min-h-0 w-full lg:w-auto">
+            <div className="border-b border-border px-4 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Chỉnh sửa ảnh
+              </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">
+                    Kéo để chọn vùng OCR (crop)
+                  </span>
+                </div>
+            </div>
 
-      {/* History sidebar (mobile drawer) */}
-      {showHistory && !isLg && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40"
-          onClick={() => setShowHistory(false)}
-        >
-          <div
-            className="absolute right-0 top-0 h-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <HistorySidebar
-              isOpen={true}
-              onSelect={(entry) => {
-                handleHistorySelect(entry);
-                setShowHistory(false);
-              }}
-              refreshKey={historyRefresh}
-            />
+            <div className="flex-1 overflow-y-auto min-h-0 p-4">
+              <div className="space-y-4">
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+                      <RotateCcw className="h-4 w-4 text-primary" />
+                    </span>
+                    Xoay ảnh
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void applyRotate(-90)}
+                      disabled={isProcessing || isEditingBusy}
+                      className="gap-1.5"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Trái 90°
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void applyRotate(90)}
+                      disabled={isProcessing || isEditingBusy}
+                      className="gap-1.5"
+                    >
+                      <RotateCw className="h-3.5 w-3.5" />
+                      Phải 90°
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                    </span>
+                    Làm rõ ảnh
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void applyEnhance()}
+                    disabled={isProcessing || isEditingBusy}
+                    className="w-full sm:w-auto"
+                  >
+                    <Sparkles className="mr-2 h-3.5 w-3.5" />
+                    {enhance ? "Đang bật" : "Tăng tương phản nhẹ"}
+                  </Button>
+                </div>
+
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+                      <Crop className="h-4 w-4 text-primary" />
+                    </span>
+                    Vùng OCR
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => cropperApiRef.current?.reset()}
+                      disabled={isProcessing || isEditingBusy}
+                    >
+                      Toàn ảnh
+                    </Button>
+                  </div>
+
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Thu nhỏ/di chuyển khung crop để OCR đúng vùng.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setEditFile(imageFile);
+                      setEnhance(false);
+                      cropperApiRef.current?.reset();
+                    }}
+                    disabled={isProcessing || isEditingBusy}
+                  >
+                    Reset ảnh
+                  </Button>
+
+                  <Button
+                    onClick={() => void startOcr()}
+                    disabled={isProcessing || isEditingBusy || !editImageUrl}
+                    className="flex-1"
+                  >
+                    Bắt đầu OCR
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
