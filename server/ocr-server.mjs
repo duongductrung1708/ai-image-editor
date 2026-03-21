@@ -221,6 +221,16 @@ if (OCR_PROVIDER === "openai" && !OPENAI_API_KEY) {
 
 function buildPrompt(mode) {
   if (OCR_PROVIDER === "lmstudio") {
+    // Nếu Front-end cần tọa độ (mode json hoặc both), ta dùng Native Prompt của Qwen
+    if (mode === "json" || mode === "both") {
+      return (
+        "Trích xuất toàn bộ văn bản trong ảnh. BẮT BUỘC định vị vị trí của từng đoạn văn bản.\n" +
+        "Hãy trả về kết quả tuân thủ CHÍNH XÁC định dạng sau cho mỗi đoạn văn bản:\n" +
+        "[Nội dung văn bản] <box>(ymin, xmin), (ymax, xmax)</box>\n" +
+        "Lưu ý: Tọa độ nằm trong khoảng từ 0 đến 1000."
+      );
+    }
+    // Nếu chỉ cần Markdown bình thường
     return (
       "Extract ALL text from this image.\n" +
       "Do not summarize or paraphrase.\n" +
@@ -228,6 +238,8 @@ function buildPrompt(mode) {
       "Return ONLY the extracted text/Markdown (no extra commentary).\n"
     );
   }
+
+  // ... (phần code baseRaw, baseClean giữ nguyên không đổi)
 
   const baseRaw =
     "Extract all Vietnamese text (and other languages if present) from this image.\n" +
@@ -434,6 +446,66 @@ async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
   }
 }
 
+// HÀM HACK: Chuyển đổi định dạng tọa độ gốc của Qwen sang JSON chuẩn cho Front-end
+function parseQwenBoundingBoxes(text) {
+  const blocks = [];
+  const cleanLines = [];
+
+  // Tách văn bản thành từng dòng để xử lý
+  const lines = text.split(/\r?\n/);
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    // Regex "bao dung": Tìm đoạn text theo sau là <box... </box>
+    const boxRegex = /(.*?)\s*<box(.*?)<\/box>/i;
+    const match = line.match(boxRegex);
+
+    if (match) {
+      const textPart = match[1].trim(); // Phần chữ (Ví dụ: "Tiêu chí đánh giá")
+      const coordPart = match[2];       // Phần chứa số (Ví dụ: "(100,3),(200,679)")
+
+      // Trích xuất tất cả các con số có trong phần tọa độ
+      const nums = coordPart.match(/\d+/g);
+
+      if (nums && nums.length >= 4) {
+        // Qwen trả về theo thứ tự: ymin, xmin, ymax, xmax (hệ tọa độ 1000)
+        // Chia 10 để quy đổi ra phần trăm (0-100%) cho Front-end
+        const ymin = parseInt(nums[0], 10) / 10;
+        const xmin = parseInt(nums[1], 10) / 10;
+        const ymax = parseInt(nums[2], 10) / 10;
+        const xmax = parseInt(nums[3], 10) / 10;
+
+        blocks.push({
+          text: textPart,
+          x: xmin,
+          y: ymin,
+          width: xmax - xmin,
+          height: ymax - ymin
+        });
+        cleanLines.push(textPart);
+      } else {
+        // Nếu AI xuất lỗi thiếu số, vẫn giữ lại chữ để không bị mất nội dung
+        cleanLines.push(textPart);
+      }
+    } else {
+      // Dòng nào không có box thì cứ giữ nguyên
+      cleanLines.push(line.trim());
+    }
+  }
+
+  // Chỉ cần bắt được 1 block là coi như thành công
+  if (blocks.length > 0) {
+    return {
+      markdown: cleanLines.join("\n"),
+      full_text: cleanLines.join("\n"),
+      blocks: blocks
+    };
+  }
+  
+  return null;
+}
+
 const server = http.createServer(async (req, res) => {
   if (!req.url) return sendJson(res, 404, { error: "Not found" });
 
@@ -562,6 +634,14 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 502, {
           error: "Empty response from OCR provider",
         });
+
+      if (OCR_PROVIDER === "lmstudio" && (OCR_MODE === "json" || OCR_MODE === "both")) {
+        const qwenData = parseQwenBoundingBoxes(content);
+        if (qwenData) {
+          // Nếu parse thành công, trả thẳng về cho Front-end (bỏ qua bước JSON.parse bên dưới)
+          return sendJson(res, 200, qwenData);
+        }
+      }
 
       // Post-Processing
       let parsed;
