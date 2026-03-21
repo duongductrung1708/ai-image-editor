@@ -255,7 +255,14 @@ function buildPrompt(mode) {
   // Dùng chung cho "json" và "both"
   return (
     base +
-    "Return ONLY valid JSON (no markdown wrappers, no extra text) with fields:\n- markdown: string\n- full_text: string\n- blocks: array of {text, x, y, width, height} (0-100)\nIf bounding boxes are uncertain, still return approximate values.\n"
+    "Return ONLY a single valid JSON object.\n" +
+    "The response MUST start with '{' and end with '}'.\n" +
+    "No Markdown code fences, no commentary, no extra characters.\n" +
+    "JSON must match fields exactly:\n" +
+    "- markdown: string\n" +
+    "- full_text: string\n" +
+    "- blocks: array of {text, x, y, width, height} (each 0-100; can be approximate)\n" +
+    "If bounding boxes are uncertain, still return approximate values (do not omit 'blocks').\n"
   );
 }
 
@@ -559,10 +566,56 @@ const server = http.createServer(async (req, res) => {
       try {
         parsed = JSON.parse(content);
       } catch (e) {
+        // Some providers wrap the JSON in ```json fences or add extra text.
+        // Try to extract the first JSON object we can parse.
+        const asString = typeof content === "string" ? content : "";
+
+        const tryParseJson = (candidate) => {
+          if (!candidate || typeof candidate !== "string") return null;
+          try {
+            return JSON.parse(candidate);
+          } catch {
+            return null;
+          }
+        };
+
+        const fenceMatch = asString.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+        const fenced = fenceMatch?.[1];
+
+        const direct = tryParseJson(asString.trim());
+        const fromFenced = tryParseJson(fenced?.trim());
+
+        let extracted = direct || fromFenced;
+
+        if (!extracted) {
+          const firstBrace = asString.indexOf("{");
+          const lastBrace = asString.lastIndexOf("}");
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            const substring = asString.slice(firstBrace, lastBrace + 1);
+            extracted = tryParseJson(substring);
+          }
+        }
+
+        if (extracted && typeof extracted === "object") {
+          return sendJson(res, 200, {
+            markdown: postProcessMarkdown(
+              typeof extracted?.markdown === "string" ? extracted.markdown : "",
+            ),
+            full_text:
+              typeof extracted?.full_text === "string"
+                ? extracted.full_text
+                : "",
+            blocks: Array.isArray(extracted?.blocks) ? extracted.blocks : [],
+            ...(typeof extracted?.warning === "string"
+              ? { warning: extracted.warning }
+              : null),
+          });
+        }
+
         console.warn(
           "[ocr-server] content not JSON, falling back to markdown/plaintext",
         );
-        const cleaned = postProcessMarkdown(content);
+        const cleaned = postProcessMarkdown(asString);
         return sendJson(res, 200, {
           markdown: cleaned,
           full_text: cleaned,
