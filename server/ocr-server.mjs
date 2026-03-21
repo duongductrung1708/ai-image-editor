@@ -460,18 +460,20 @@ const server = http.createServer(async (req, res) => {
 
       // 1. Tuyến xử lý Gemini
       if (OCR_PROVIDER === "gemini") {
-        // Tự động bật responseMimeType JSON nếu GEMINI_BBOX_JSON=1
+        // Mặc định bật JSON (để lấy bbox) khi OCR_MODE là both/json.
+        // GEMINI_BBOX_JSON vẫn có thể ép bật trong các mode khác.
+        const shouldUseGeminiJson =
+          OCR_MODE === "json" || OCR_MODE === "both" || GEMINI_BBOX_JSON;
+
         const out = await callGemini({
           imageBase64,
           mimeType,
           prompt,
-          responseMimeType: GEMINI_BBOX_JSON
-            ? "application/json"
-            : "text/plain",
+          responseMimeType: shouldUseGeminiJson ? "application/json" : "text/plain",
         });
         if (!out.ok) return sendJson(res, out.status, { error: out.raw });
 
-        content = GEMINI_BBOX_JSON
+        content = shouldUseGeminiJson
           ? out.contentText
           : JSON.stringify({
               markdown: out.contentText,
