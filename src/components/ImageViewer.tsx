@@ -73,7 +73,7 @@ const ImageViewer = ({
 
         {linkedRect && (
           <div
-            className="pointer-events-none absolute z-20 rounded-sm border-2 border-yellow-400 bg-yellow-300/25 shadow-[0_0_0_1px_rgba(250,204,21,0.4)] transition-[opacity,transform] duration-150"
+            className="pointer-events-none absolute z-20 rounded-sm border-2 border-yellow-400 bg-yellow-300/25 shadow-[0_0_0_1px_rgba(250,204,21,0.4)]"
             style={{
               left: `${linkedRect.x}%`,
               top: `${linkedRect.y}%`,

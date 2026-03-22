@@ -115,25 +115,15 @@ const MarkdownEditor = ({
             left: e.clientX,
             top: e.clientY,
           });
-          if (!coords) {
-            clearBatchHighlight();
-            return;
-          }
+          if (!coords) return;
           const pageIdx = getBatchMarkdownPageIndex(editor, coords.pos);
           const pageBoxes = batchBoxPages![pageIdx] ?? [];
-          if (pageBoxes.length === 0) {
-            clearBatchHighlight();
-            return;
-          }
+          if (pageBoxes.length === 0) return;
           const blockText = getBlockTextAtDocPos(editor, coords.pos);
-          if (!blockText) {
-            clearBatchHighlight();
-            return;
-          }
+          if (!blockText) return;
           const indices = findMatchingBoxIndices(blockText, pageBoxes);
-          if (indices.length === 0) clearBatchHighlight();
-          else
-            onBatchMarkdownHighlightChange?.({ pageIndex: pageIdx, indices });
+          if (indices.length === 0) return;
+          onBatchMarkdownHighlightChange?.({ pageIndex: pageIdx, indices });
         });
       };
 
@@ -165,18 +155,12 @@ const MarkdownEditor = ({
           left: e.clientX,
           top: e.clientY,
         });
-        if (!coords) {
-          clearHighlight();
-          return;
-        }
+        if (!coords) return;
         const blockText = getBlockTextAtDocPos(editor, coords.pos);
-        if (!blockText) {
-          clearHighlight();
-          return;
-        }
+        if (!blockText) return;
         const indices = findMatchingBoxIndices(blockText, boundingBoxes);
-        if (indices.length === 0) clearHighlight();
-        else onMarkdownHighlightChange?.(indices);
+        if (indices.length === 0) return;
+        onMarkdownHighlightChange?.(indices);
       });
     };
 
