@@ -15,7 +15,11 @@ interface ImageCropperProps {
   onApiReady?: (api: ImageCropperApi) => void;
 }
 
-const ImageCropper = ({ src, disabled = false, onApiReady }: ImageCropperProps) => {
+const ImageCropper = ({
+  src,
+  disabled = false,
+  onApiReady,
+}: ImageCropperProps) => {
   const [ready, setReady] = useState(false);
   const cropperInstanceRef = useRef<CropperJS | null>(null);
 
@@ -28,7 +32,8 @@ const ImageCropper = ({ src, disabled = false, onApiReady }: ImageCropperProps) 
           const canvas = inst.getCroppedCanvas();
           if (!canvas) return reject(new Error("No cropped canvas"));
           canvas.toBlob((blob) => {
-            if (!blob) return reject(new Error("Failed to export cropped image"));
+            if (!blob)
+              return reject(new Error("Failed to export cropped image"));
             resolve(blob);
           }, "image/png");
         }),
@@ -74,4 +79,3 @@ const ImageCropper = ({ src, disabled = false, onApiReady }: ImageCropperProps) 
 };
 
 export default ImageCropper;
-

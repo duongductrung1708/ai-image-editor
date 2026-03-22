@@ -3,10 +3,11 @@ import { Upload, Image as ImageIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface DropZoneProps {
-  onImageSelect: (file: File) => void;
+  /** Một hoặc nhiều ảnh (thứ tự giữ nguyên; nên sắp xếp theo tên ở caller). */
+  onFilesSelect: (files: File[]) => void;
 }
 
-const DropZone = ({ onImageSelect }: DropZoneProps) => {
+const DropZone = ({ onFilesSelect }: DropZoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -18,24 +19,29 @@ const DropZone = ({ onImageSelect }: DropZoneProps) => {
     setIsDragOver(false);
   }, []);
 
+  const pickImages = useCallback(
+    (list: FileList | File[]) => {
+      const arr = Array.from(list).filter((f) => f.type.startsWith("image/"));
+      if (arr.length) onFilesSelect(arr);
+    },
+    [onFilesSelect],
+  );
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragOver(false);
-      const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith("image/")) {
-        onImageSelect(file);
-      }
+      if (e.dataTransfer.files?.length) pickImages(e.dataTransfer.files);
     },
-    [onImageSelect],
+    [pickImages],
   );
 
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) onImageSelect(file);
+      if (e.target.files?.length) pickImages(e.target.files);
+      e.target.value = "";
     },
-    [onImageSelect],
+    [pickImages],
   );
 
   // Clipboard paste support
@@ -47,7 +53,7 @@ const DropZone = ({ onImageSelect }: DropZoneProps) => {
         if (item.type.startsWith("image/")) {
           const file = item.getAsFile();
           if (file) {
-            onImageSelect(file);
+            onFilesSelect([file]);
             break;
           }
         }
@@ -55,7 +61,7 @@ const DropZone = ({ onImageSelect }: DropZoneProps) => {
     };
     document.addEventListener("paste", handlePaste);
     return () => document.removeEventListener("paste", handlePaste);
-  }, [onImageSelect]);
+  }, [onFilesSelect]);
 
   return (
     <div className="w-full max-w-2xl text-center">
@@ -89,14 +95,15 @@ const DropZone = ({ onImageSelect }: DropZoneProps) => {
         <p className="mb-1 text-sm font-medium text-foreground">
           {isDragOver
             ? "Thả hình ảnh tại đây"
-            : "Kéo thả hình ảnh hoặc nhấn để chọn"}
+            : "Kéo thả một hoặc nhiều ảnh, hoặc nhấn để chọn"}
         </p>
         <p className="text-xs text-muted-foreground">
-          Hỗ trợ PNG, JPG, WEBP · Ctrl+V để dán từ clipboard
+          PNG, JPG, WEBP · Nhiều trang → OCR hàng loạt gộp một file · Ctrl+V dán
         </p>
         <input
           type="file"
           accept="image/*"
+          multiple
           onChange={handleFileInput}
           className="hidden"
         />

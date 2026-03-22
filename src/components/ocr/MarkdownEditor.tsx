@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { EditorContent } from "@tiptap/react";
 import {
@@ -17,13 +18,189 @@ import {
   Italic,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { BoundingBox } from "@/components/ImageViewer";
+import { findMatchingBoxIndices } from "@/lib/bboxTextMatch";
+
+export type BatchMarkdownHighlight = {
+  pageIndex: number;
+  indices: number[];
+};
 
 interface MarkdownEditorProps {
   editor: Editor | null;
   isProcessing: boolean;
+  boundingBoxes?: BoundingBox[];
+  onMarkdownHighlightChange?: (indices: number[] | null) => void;
+  /** OCR hàng loạt: bbox theo từng trang (trùng thứ tự section ## trong markdown gộp). */
+  batchBoxPages?: BoundingBox[][];
+  onBatchMarkdownHighlightChange?: (
+    payload: BatchMarkdownHighlight | null,
+  ) => void;
 }
 
-const MarkdownEditor = ({ editor, isProcessing }: MarkdownEditorProps) => {
+/** Nearest block node text at doc position (paragraph, heading, list item, cell…). */
+function getBlockTextAtDocPos(editor: Editor, pos: number): string {
+  const { doc } = editor.state;
+  if (pos < 0 || pos > doc.content.size) return "";
+  const $pos = doc.resolve(pos);
+  for (let d = $pos.depth; d >= 1; d -= 1) {
+    const node = $pos.node(d);
+    if (node.isBlock) {
+      const t = node.textContent.trim();
+      if (t) return t;
+    }
+  }
+  return "";
+}
+
+/** Trang batch ứng với cursor: đếm heading cấp 2 trước vị trí (theo merge markdown server). */
+function getBatchMarkdownPageIndex(editor: Editor, pos: number): number {
+  const { doc } = editor.state;
+  const end = Math.min(pos, doc.content.size);
+  let h2Before = 0;
+  doc.nodesBetween(0, end, (node, pos2) => {
+    if (node.type.name === "heading" && node.attrs.level === 2 && pos2 < pos) {
+      h2Before += 1;
+    }
+    return true;
+  });
+  return Math.max(0, h2Before - 1);
+}
+
+const MarkdownEditor = ({
+  editor,
+  isProcessing,
+  boundingBoxes = [],
+  onMarkdownHighlightChange,
+  batchBoxPages,
+  onBatchMarkdownHighlightChange,
+}: MarkdownEditorProps) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const clearHighlight = useCallback(() => {
+    onMarkdownHighlightChange?.(null);
+  }, [onMarkdownHighlightChange]);
+
+  const clearBatchHighlight = useCallback(() => {
+    onBatchMarkdownHighlightChange?.(null);
+  }, [onBatchMarkdownHighlightChange]);
+
+  const useBatchHover = Boolean(
+    batchBoxPages && batchBoxPages.length > 0 && onBatchMarkdownHighlightChange,
+  );
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !editor || isProcessing) {
+      clearHighlight();
+      clearBatchHighlight();
+      return;
+    }
+
+    if (useBatchHover) {
+      clearHighlight();
+    } else {
+      clearBatchHighlight();
+    }
+
+    if (useBatchHover) {
+      let raf = 0;
+
+      const onMove = (e: MouseEvent) => {
+        if (raf) cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          const view = editor.view;
+          const coords = view.posAtCoords({
+            left: e.clientX,
+            top: e.clientY,
+          });
+          if (!coords) {
+            clearBatchHighlight();
+            return;
+          }
+          const pageIdx = getBatchMarkdownPageIndex(editor, coords.pos);
+          const pageBoxes = batchBoxPages![pageIdx] ?? [];
+          if (pageBoxes.length === 0) {
+            clearBatchHighlight();
+            return;
+          }
+          const blockText = getBlockTextAtDocPos(editor, coords.pos);
+          if (!blockText) {
+            clearBatchHighlight();
+            return;
+          }
+          const indices = findMatchingBoxIndices(blockText, pageBoxes);
+          if (indices.length === 0) clearBatchHighlight();
+          else
+            onBatchMarkdownHighlightChange?.({ pageIndex: pageIdx, indices });
+        });
+      };
+
+      const onLeave = () => clearBatchHighlight();
+
+      el.addEventListener("mousemove", onMove);
+      el.addEventListener("mouseleave", onLeave);
+      return () => {
+        el.removeEventListener("mousemove", onMove);
+        el.removeEventListener("mouseleave", onLeave);
+        if (raf) cancelAnimationFrame(raf);
+        clearBatchHighlight();
+      };
+    }
+
+    if (boundingBoxes.length === 0) {
+      clearHighlight();
+      return;
+    }
+
+    let raf = 0;
+
+    const onMove = (e: MouseEvent) => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const view = editor.view;
+        const coords = view.posAtCoords({
+          left: e.clientX,
+          top: e.clientY,
+        });
+        if (!coords) {
+          clearHighlight();
+          return;
+        }
+        const blockText = getBlockTextAtDocPos(editor, coords.pos);
+        if (!blockText) {
+          clearHighlight();
+          return;
+        }
+        const indices = findMatchingBoxIndices(blockText, boundingBoxes);
+        if (indices.length === 0) clearHighlight();
+        else onMarkdownHighlightChange?.(indices);
+      });
+    };
+
+    const onLeave = () => clearHighlight();
+
+    el.addEventListener("mousemove", onMove);
+    el.addEventListener("mouseleave", onLeave);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      el.removeEventListener("mouseleave", onLeave);
+      if (raf) cancelAnimationFrame(raf);
+      clearHighlight();
+    };
+  }, [
+    editor,
+    isProcessing,
+    boundingBoxes,
+    onMarkdownHighlightChange,
+    clearHighlight,
+    useBatchHover,
+    batchBoxPages,
+    onBatchMarkdownHighlightChange,
+    clearBatchHighlight,
+  ]);
   if (isProcessing && !editor) {
     return (
       <div className="h-full w-full p-4 space-y-3">
@@ -192,7 +369,7 @@ const MarkdownEditor = ({ editor, isProcessing }: MarkdownEditorProps) => {
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto bg-card px-4 py-3">
+      <div ref={scrollRef} className="flex-1 overflow-auto bg-card px-4 py-3">
         {editor ? (
           <EditorContent editor={editor} className="h-full" />
         ) : (

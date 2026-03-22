@@ -1,18 +1,43 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import DropZone from "@/components/DropZone";
 import OCRWorkspace from "@/components/OCRWorkspace";
+import BatchOCRWorkspace from "@/components/BatchOCRWorkspace";
 import Navbar from "@/components/Navbar";
 import { AnimatePresence, motion } from "framer-motion";
 
 const AppPage = () => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[] | null>(null);
 
-  if (selectedFile) {
+  const handleFilesSelect = useCallback((picked: File[]) => {
+    if (!picked.length) return;
+    const sorted = [...picked].sort((a, b) =>
+      a.name.localeCompare(b.name, "vi", { numeric: true }),
+    );
+    setFiles(sorted);
+  }, []);
+
+  if (files && files.length > 1) {
+    const clear = () => setFiles(null);
     return (
-      <OCRWorkspace
-        imageFile={selectedFile}
-        onBack={() => setSelectedFile(null)}
-      />
+      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <BatchOCRWorkspace
+            files={files}
+            onBack={clear}
+            onPickAnother={clear}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (files?.length === 1) {
+    return (
+      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <OCRWorkspace imageFile={files[0]} onBack={() => setFiles(null)} />
+        </div>
+      </div>
     );
   }
 
@@ -28,9 +53,9 @@ const AppPage = () => {
           OCR Tiếng Việt
         </h1>
         <p className="mb-8 text-muted-foreground">
-          Kéo thả hình ảnh để nhận diện và chỉnh sửa văn bản tiếng Việt bằng AI
+          Kéo thả một hoặc nhiều ảnh — OCR từng trang và gộp Markdown / Word
         </p>
-        <DropZone onImageSelect={setSelectedFile} />
+        <DropZone onFilesSelect={handleFilesSelect} />
       </motion.div>
     </div>
   );

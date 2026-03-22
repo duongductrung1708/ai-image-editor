@@ -38,3 +38,35 @@ export function isOcrSuccessResponse(v: unknown): v is OcrSuccessResponse {
     Array.isArray(o.blocks)
   );
 }
+
+export type OcrBatchPageResult = {
+  index: number;
+  name: string;
+  ok: boolean;
+  markdown: string;
+  full_text: string;
+  blocks: OcrBlock[];
+  error?: string;
+  warning?: string;
+};
+
+export type OcrBatchSuccessResponse = {
+  markdown: string;
+  full_text: string;
+  pages: OcrBatchPageResult[];
+  pageCount: number;
+  concurrency: number;
+};
+
+export function isOcrBatchSuccessResponse(
+  v: unknown,
+): v is OcrBatchSuccessResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const o = v as Partial<OcrBatchSuccessResponse>;
+  return (
+    typeof o.markdown === "string" &&
+    typeof o.full_text === "string" &&
+    Array.isArray(o.pages) &&
+    typeof o.pageCount === "number"
+  );
+}

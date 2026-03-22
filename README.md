@@ -17,6 +17,10 @@ This project uses a small local API server that calls **Ollama OpenAI-compatible
   - `GEMINI_API_KEY` (required when `OCR_PROVIDER=gemini`)
   - `GEMINI_MODEL` (optional; default: `gemini-2.5-flash`)
   - `GEMINI_TIMEOUT_MS` (optional; default: `60000`, increase for large images)
+  - **Batch OCR** (optional):
+    - `OCR_BATCH_CONCURRENCY` (default: `2`, max `8`) — parallel pages per batch request
+    - `OCR_BATCH_MAX_IMAGES` (default: `30`, max `100`) — max images per `/api/ocr/batch` body
+  - Batch requests accept up to **120MB** JSON body (many base64 images); reduce image size if you hit limits.
 
 ### Configure env (local)
 
