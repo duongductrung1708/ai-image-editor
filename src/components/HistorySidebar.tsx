@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Clock, Trash2, Eye } from "lucide-react";
+import { Clock, Trash2, Eye, Images } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import type { Json } from "@/integrations/supabase/types";
+import { Badge } from "@/components/ui/badge";
 
 interface HistoryEntry {
   id: string;
@@ -22,6 +23,8 @@ interface HistoryEntry {
   bounding_boxes: Json | null;
   image_data: string | null;
   created_at: string;
+  /** If this entry is linked to a batch session */
+  batch_page_count?: number;
 }
 
 interface HistorySidebarProps {
@@ -44,16 +47,31 @@ const HistorySidebar = ({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchHistory = async () => {
-    const { data, error } = await supabase
+    // Fetch single OCR history
+    const { data: histData, error: histErr } = await supabase
       .from("ocr_history")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50);
-    if (error) {
-      console.error("Error fetching history:", error);
-    } else {
-      setEntries(data || []);
+    if (histErr) {
+      console.error("Error fetching history:", histErr);
     }
+
+    // Enrich with batch page count
+    const enriched: HistoryEntry[] = (histData || []).map((entry) => {
+      const bb = entry.bounding_boxes;
+      let batch_page_count: number | undefined;
+      if (
+        bb && typeof bb === "object" && !Array.isArray(bb) &&
+        (bb as { batch?: boolean }).batch === true &&
+        Array.isArray((bb as { pages?: unknown }).pages)
+      ) {
+        batch_page_count = ((bb as { pages: unknown[] }).pages).length;
+      }
+      return { ...entry, batch_page_count };
+    });
+
+    setEntries(enriched);
   };
 
   useEffect(() => {
@@ -146,9 +164,17 @@ const HistorySidebar = ({
               className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 transition-colors hover:bg-secondary/50"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">
-                  {entry.image_name}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-medium text-foreground truncate">
+                    {entry.image_name}
+                  </p>
+                  {entry.batch_page_count && (
+                    <Badge variant="secondary" className="shrink-0 text-[9px] px-1 py-0 h-4 gap-0.5">
+                      <Images className="h-2.5 w-2.5" />
+                      {entry.batch_page_count}
+                    </Badge>
+                  )}
+                </div>
                 <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
                   {entry.extracted_text.slice(0, 80)}...
                 </p>
