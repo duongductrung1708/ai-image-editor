@@ -71,6 +71,7 @@ export type Database = {
           ok_count: number
           page_count: number
           preview_image_data: string | null
+          user_id: string | null
         }
         Insert: {
           concurrency?: number
@@ -81,6 +82,7 @@ export type Database = {
           ok_count?: number
           page_count?: number
           preview_image_data?: string | null
+          user_id?: string | null
         }
         Update: {
           concurrency?: number
@@ -91,6 +93,7 @@ export type Database = {
           ok_count?: number
           page_count?: number
           preview_image_data?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -102,6 +105,7 @@ export type Database = {
           id: string
           image_data: string | null
           image_name: string
+          user_id: string | null
         }
         Insert: {
           bounding_boxes?: Json | null
@@ -110,6 +114,7 @@ export type Database = {
           id?: string
           image_data?: string | null
           image_name: string
+          user_id?: string | null
         }
         Update: {
           bounding_boxes?: Json | null
@@ -118,6 +123,31 @@ export type Database = {
           id?: string
           image_data?: string | null
           image_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
         }
         Relationships: []
       }

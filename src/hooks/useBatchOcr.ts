@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { OcrHistoryEntry } from "@/components/ocr/OcrHistoryMobileDrawer";
@@ -15,6 +16,7 @@ import {
 export type BatchPhase = "ready" | "processing" | "result";
 
 export function useBatchOcr(files: File[]) {
+  const { user } = useAuth();
   const [phase, setPhase] = useState<BatchPhase>("ready");
   const [markdownText, setMarkdownText] = useState("");
   const [jsonText, setJsonText] = useState("");
@@ -176,6 +178,7 @@ export function useBatchOcr(files: File[]) {
             concurrency: data.concurrency,
             merged_markdown: data.markdown,
             preview_image_data,
+            user_id: user?.id,
           })
           .select("id")
           .single();
@@ -212,6 +215,7 @@ export function useBatchOcr(files: File[]) {
             })),
           } as unknown as Json,
           image_data: preview_image_data,
+          user_id: user?.id,
         });
         setHistoryRefresh((k) => k + 1);
       } catch (histErr) {

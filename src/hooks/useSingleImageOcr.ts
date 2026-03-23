@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import type { Json } from "@/integrations/supabase/types";
 import type { BoundingBox } from "@/components/ImageViewer";
 import { fileToBase64 } from "@/lib/fileToBase64";
@@ -14,6 +15,7 @@ import {
  * Gọi API OCR một ảnh, lưu lịch sử, hỗ trợ Abort / hủy.
  */
 export function useSingleImageOcr() {
+  const { user } = useAuth();
   const [markdownText, setMarkdownText] = useState("");
   const [jsonText, setJsonText] = useState("");
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>([]);
@@ -120,6 +122,7 @@ export function useSingleImageOcr() {
         extracted_text: mdOut,
         bounding_boxes: blocks as unknown as Json,
         image_data: `data:${file.type};base64,${base64}`,
+        user_id: user?.id,
       });
       setHistoryRefresh((p) => p + 1);
       setLoadingProgress(100);
