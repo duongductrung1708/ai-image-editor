@@ -164,12 +164,44 @@ export function useBatchOcr(files: File[]) {
       try {
         const firstB64 = await fileToBase64(files[0]);
         const mime = files[0].type || "image/png";
-        const image_data = `data:${mime};base64,${firstB64}`;
+        const preview_image_data = `data:${mime};base64,${firstB64}`;
+
+        // Insert batch session
+        const { data: session, error: sessErr } = await supabase
+          .from("ocr_batch_sessions")
+          .insert({
+            page_count: data.pages.length,
+            ok_count: okCount,
+            fail_count: failCount,
+            concurrency: data.concurrency,
+            merged_markdown: data.markdown,
+            preview_image_data,
+          })
+          .select("id")
+          .single();
+
+        if (sessErr) throw sessErr;
+
+        // Insert batch pages
+        const pageRows = data.pages.map((p) => ({
+          session_id: session.id,
+          page_index: p.index,
+          file_name: p.name,
+          ok: p.ok,
+          markdown: p.markdown,
+          full_text: p.full_text,
+          blocks: (p.blocks ?? []) as unknown as Json,
+          error: p.error ?? null,
+        }));
+        await supabase.from("ocr_batch_pages").insert(pageRows);
+
+        // Also save to ocr_history for unified history view
         await supabase.from("ocr_history").insert({
           image_name: `Hàng loạt (${files.length} ảnh)`,
           extracted_text: data.markdown,
           bounding_boxes: {
             batch: true,
+            batch_session_id: session.id,
             pages: data.pages.map((p) => ({
               index: p.index,
               name: p.name,
@@ -179,7 +211,7 @@ export function useBatchOcr(files: File[]) {
               blocks: p.blocks,
             })),
           } as unknown as Json,
-          image_data,
+          image_data: preview_image_data,
         });
         setHistoryRefresh((k) => k + 1);
       } catch (histErr) {
