@@ -104,8 +104,24 @@ const MarkdownEditor = ({
       clearBatchHighlight();
     }
 
+    // Batch mode: debounce update to avoid highlight flicker when pageIndex changes
+    // due to tiny mouse-position jitter near section boundaries.
+    // Keep it small so the highlight still appears immediately when hovering.
+    const HIGHLIGHT_UPDATE_DEBOUNCE_MS = 70;
+
     if (useBatchHover) {
       let raf = 0;
+      let highlightUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleBatchHighlightUpdate = (
+        payload: BatchMarkdownHighlight,
+      ) => {
+        if (highlightUpdateTimer) clearTimeout(highlightUpdateTimer);
+        highlightUpdateTimer = setTimeout(() => {
+          highlightUpdateTimer = null;
+          onBatchMarkdownHighlightChange?.(payload);
+        }, HIGHLIGHT_UPDATE_DEBOUNCE_MS);
+      };
 
       const onMove = (e: MouseEvent) => {
         if (raf) cancelAnimationFrame(raf);
@@ -124,11 +140,15 @@ const MarkdownEditor = ({
           if (!blockText) return;
           const indices = findMatchingBoxIndices(blockText, pageBoxes);
           if (indices.length === 0) return;
-          onBatchMarkdownHighlightChange?.({ pageIndex: pageIdx, indices });
+          scheduleBatchHighlightUpdate({ pageIndex: pageIdx, indices });
         });
       };
 
-      const onLeave = () => clearBatchHighlight();
+      const onLeave = () => {
+        if (highlightUpdateTimer) clearTimeout(highlightUpdateTimer);
+        highlightUpdateTimer = null;
+        clearBatchHighlight();
+      };
 
       el.addEventListener("mousemove", onMove);
       el.addEventListener("mouseleave", onLeave);
@@ -136,6 +156,7 @@ const MarkdownEditor = ({
         el.removeEventListener("mousemove", onMove);
         el.removeEventListener("mouseleave", onLeave);
         if (raf) cancelAnimationFrame(raf);
+        if (highlightUpdateTimer) clearTimeout(highlightUpdateTimer);
         clearBatchHighlight();
       };
     }

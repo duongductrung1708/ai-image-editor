@@ -137,13 +137,22 @@ const HistorySidebar = ({
   };
 
   const handleSelectPage = (page: BatchPageDetail, parentEntry: HistoryEntry) => {
+    // For batch entries, we may store preview images per page inside
+    // `parentEntry.bounding_boxes.pages[].image_data`.
+    const bb = parentEntry.bounding_boxes as
+      | { pages?: Array<{ index?: number; image_data?: string | null }> }
+      | null;
+    const pages = bb?.pages ?? [];
+    const imageData =
+      pages.find((p) => p.index === page.page_index)?.image_data ?? null;
+
     // Create a synthetic history entry for this single page
     const pageEntry: HistoryEntry = {
       id: page.id,
       image_name: page.file_name,
       extracted_text: page.markdown || page.full_text,
       bounding_boxes: page.blocks,
-      image_data: null,
+      image_data: imageData,
       created_at: parentEntry.created_at,
     };
     onSelect(pageEntry);

@@ -69,8 +69,8 @@ const BatchResultView = ({
             </p>
             {restoredFromHistory && (
               <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-500">
-                Từ lịch sử: chỉ lưu ảnh xem trước trang 1 — các trang khác là
-                placeholder.
+                Từ lịch sử: ảnh xem trước theo từng trang (nếu có dữ liệu
+                preview).
               </p>
             )}
           </div>

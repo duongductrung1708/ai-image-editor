@@ -35,6 +35,9 @@ export function useBatchOcr(files: File[]) {
   const [historyFirstImageData, setHistoryFirstImageData] = useState<
     string | null
   >(null);
+  const [historyPageImageDatas, setHistoryPageImageDatas] = useState<
+    Array<string | null>
+  >([]);
   const [sourcePreviewUrls, setSourcePreviewUrls] = useState<string[]>([]);
 
   const batchAbortRef = useRef<AbortController | null>(null);
@@ -79,8 +82,26 @@ export function useBatchOcr(files: File[]) {
     for (let i = 0; i < n; i++) {
       const title = batchPages?.[i]?.name ?? files[i]?.name ?? `Trang ${i + 1}`;
       if (restoredFromHistory) {
-        if (i === 0 && historyFirstImageData) {
-          out.push(historyFirstImageData);
+        const img = historyPageImageDatas[i];
+        if (img) {
+          out.push(img);
+          continue;
+        }
+
+        // Backward compatible:
+        // Old history rows might only have preview_image_data (page 1) and not
+        // store per-page preview images inside bounding_boxes.pages[].image_data.
+        // If current session still has the same file names, use sourcePreviewUrls
+        // to keep bbox overlay aligned with the displayed image.
+        const pageName = batchPages?.[i]?.name;
+        const fileName = files[i]?.name;
+        if (
+          sourcePreviewUrls[i] &&
+          typeof pageName === "string" &&
+          typeof fileName === "string" &&
+          pageName === fileName
+        ) {
+          out.push(sourcePreviewUrls[i]);
         } else {
           out.push(svgPlaceholderPage(title));
         }
@@ -97,6 +118,7 @@ export function useBatchOcr(files: File[]) {
     sourcePreviewUrls,
     restoredFromHistory,
     historyFirstImageData,
+    historyPageImageDatas,
   ]);
 
   const totalBoxCount = useMemo(() => {
@@ -122,6 +144,7 @@ export function useBatchOcr(files: File[]) {
     setBatchPages(null);
     setRestoredFromHistory(false);
     setHistoryFirstImageData(null);
+    setHistoryPageImageDatas([]);
 
     try {
       const images = await Promise.all(
@@ -164,9 +187,10 @@ export function useBatchOcr(files: File[]) {
       setPhase("result");
 
       try {
-        const firstB64 = await fileToBase64(files[0]);
-        const mime = files[0].type || "image/png";
-        const preview_image_data = `data:${mime};base64,${firstB64}`;
+        const previewByIndex = images.map(
+          (img) => `data:${img.mimeType};base64,${img.imageBase64}`,
+        );
+        const preview_image_data = previewByIndex[0] ?? null;
 
         // Insert batch session
         const { data: session, error: sessErr } = await supabase
@@ -212,6 +236,7 @@ export function useBatchOcr(files: File[]) {
               markdown: p.markdown,
               full_text: p.full_text,
               blocks: p.blocks,
+              image_data: previewByIndex[p.index] ?? null,
             })),
           } as unknown as Json,
           image_data: preview_image_data,
@@ -256,6 +281,9 @@ export function useBatchOcr(files: File[]) {
   const applyHistoryEntry = useCallback((entry: OcrHistoryEntry) => {
     batchAbortRef.current?.abort();
     const bb = entry.bounding_boxes;
+    type OcrBatchPageResultWithImage = OcrBatchPageResult & {
+      image_data?: string | null;
+    };
     if (
       bb &&
       typeof bb === "object" &&
@@ -263,7 +291,7 @@ export function useBatchOcr(files: File[]) {
       (bb as { batch?: boolean }).batch === true &&
       Array.isArray((bb as { pages?: unknown }).pages)
     ) {
-      const pages = (bb as { pages: OcrBatchPageResult[] }).pages;
+      const pages = (bb as { pages: OcrBatchPageResultWithImage[] }).pages;
       setBatchPages(pages);
       setMarkdownText(entry.extracted_text);
       setJsonText(
@@ -271,6 +299,7 @@ export function useBatchOcr(files: File[]) {
       );
       setRestoredFromHistory(true);
       setHistoryFirstImageData(entry.image_data);
+      setHistoryPageImageDatas(pages.map((p) => p.image_data ?? null));
       const okCount = pages.filter((p) => p.ok).length;
       setLastBatchMeta({
         okCount,
@@ -289,6 +318,7 @@ export function useBatchOcr(files: File[]) {
     setBatchPages(null);
     setRestoredFromHistory(false);
     setHistoryFirstImageData(null);
+    setHistoryPageImageDatas([]);
     setMarkdownText(entry.extracted_text);
     const flatBlocks = Array.isArray(bb)
       ? (bb as unknown as BoundingBox[])
