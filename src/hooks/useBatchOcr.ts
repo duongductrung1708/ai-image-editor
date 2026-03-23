@@ -215,6 +215,7 @@ export function useBatchOcr(files: File[]) {
             })),
           } as unknown as Json,
           image_data: preview_image_data,
+          user_id: user?.id,
         });
         setHistoryRefresh((k) => k + 1);
       } catch (histErr) {
