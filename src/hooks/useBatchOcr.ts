@@ -16,6 +16,7 @@ import {
 export type BatchPhase = "ready" | "processing" | "result";
 
 export function useBatchOcr(files: File[]) {
+  const { user } = useAuth();
   const [phase, setPhase] = useState<BatchPhase>("ready");
   const [markdownText, setMarkdownText] = useState("");
   const [jsonText, setJsonText] = useState("");
