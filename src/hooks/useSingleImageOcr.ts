@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import type { Json } from "@/integrations/supabase/types";
 import type { BoundingBox } from "@/components/ImageViewer";
 import { fileToBase64 } from "@/lib/fileToBase64";
