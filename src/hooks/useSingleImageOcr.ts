@@ -15,6 +15,7 @@ import {
  * Gọi API OCR một ảnh, lưu lịch sử, hỗ trợ Abort / hủy.
  */
 export function useSingleImageOcr() {
+  const { user } = useAuth();
   const [markdownText, setMarkdownText] = useState("");
   const [jsonText, setJsonText] = useState("");
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>([]);
