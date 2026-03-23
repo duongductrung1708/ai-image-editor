@@ -14,6 +14,86 @@ export type Database = {
   }
   public: {
     Tables: {
+      ocr_batch_pages: {
+        Row: {
+          blocks: Json | null
+          created_at: string
+          error: string | null
+          file_name: string
+          full_text: string
+          id: string
+          markdown: string
+          ok: boolean
+          page_index: number
+          session_id: string
+        }
+        Insert: {
+          blocks?: Json | null
+          created_at?: string
+          error?: string | null
+          file_name?: string
+          full_text?: string
+          id?: string
+          markdown?: string
+          ok?: boolean
+          page_index: number
+          session_id: string
+        }
+        Update: {
+          blocks?: Json | null
+          created_at?: string
+          error?: string | null
+          file_name?: string
+          full_text?: string
+          id?: string
+          markdown?: string
+          ok?: boolean
+          page_index?: number
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocr_batch_pages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "ocr_batch_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ocr_batch_sessions: {
+        Row: {
+          concurrency: number
+          created_at: string
+          fail_count: number
+          id: string
+          merged_markdown: string
+          ok_count: number
+          page_count: number
+          preview_image_data: string | null
+        }
+        Insert: {
+          concurrency?: number
+          created_at?: string
+          fail_count?: number
+          id?: string
+          merged_markdown?: string
+          ok_count?: number
+          page_count?: number
+          preview_image_data?: string | null
+        }
+        Update: {
+          concurrency?: number
+          created_at?: string
+          fail_count?: number
+          id?: string
+          merged_markdown?: string
+          ok_count?: number
+          page_count?: number
+          preview_image_data?: string | null
+        }
+        Relationships: []
+      }
       ocr_history: {
         Row: {
           bounding_boxes: Json | null
