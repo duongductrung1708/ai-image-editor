@@ -5,13 +5,13 @@ import Highlight from "@tiptap/extension-highlight";
 import TextAlign from "@tiptap/extension-text-align";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { marked } from "marked";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
+import { OcrTable } from "@/lib/tiptapOcrTable";
 
 marked.setOptions({ gfm: true, breaks: true });
 
@@ -43,7 +43,7 @@ export function useOcrMarkdownEditor(markdownText: string) {
       TextAlign.configure({
         types: ["heading", "paragraph"],
       }),
-      Table.configure({ resizable: true }),
+      OcrTable.configure({ resizable: true }),
       TableRow,
       TableHeader,
       TableCell,

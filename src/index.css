@@ -121,6 +121,38 @@ html {
   font-weight: 600;
 }
 
+/*
+ * Một hàng 2 ô: giống Word space-between hơn — cột trái giãn theo chữ,
+ * cột phải co sát nội dung và dính mép phải (khoảng trống nằm giữa).
+ */
+.ProseMirror table[data-layout="split"] {
+  table-layout: auto;
+  width: 100%;
+}
+
+.ProseMirror table[data-layout="split"] td,
+.ProseMirror table[data-layout="split"] th {
+  border: none;
+  background: transparent;
+  vertical-align: top;
+}
+
+.ProseMirror table[data-layout="split"] td:first-child,
+.ProseMirror table[data-layout="split"] th:first-child {
+  text-align: left;
+  width: auto;
+  max-width: 75%;
+  padding-right: 0.75rem;
+}
+
+.ProseMirror table[data-layout="split"] td:last-child,
+.ProseMirror table[data-layout="split"] th:last-child {
+  text-align: right;
+  /* Thu hẹp ô phải theo nội dung, đẩy sang phải — mẹo bảng HTML kinh điển */
+  width: 1%;
+  white-space: nowrap;
+}
+
 .ProseMirror {
   white-space: pre-wrap;
 }

@@ -3,6 +3,7 @@ import type { Editor } from "@tiptap/react";
 import { EditorContent } from "@tiptap/react";
 import {
   AlignCenter,
+  AlignHorizontalSpaceBetween,
   AlignJustify,
   AlignLeft,
   AlignRight,
@@ -298,6 +299,24 @@ const MarkdownEditor = ({
         </button>
 
         <span className="mx-1 h-5 w-px bg-border" />
+
+        <button
+          type="button"
+          className="flex h-7 items-center justify-center rounded border border-transparent px-1.5 hover:border-border hover:bg-muted/60"
+          onClick={() =>
+            editor
+              ?.chain()
+              .focus()
+              .insertTable({ rows: 1, cols: 2, withHeaderRow: false })
+              .updateAttributes("table", { dataLayout: "split" })
+              .run()
+          }
+          disabled={isProcessing || !editor}
+          title="Một dòng trái — phải (giống space-between trong Word)"
+          aria-label="Chèn dòng trái phải"
+        >
+          <AlignHorizontalSpaceBetween className="h-3.5 w-3.5" />
+        </button>
 
         <button
           type="button"
