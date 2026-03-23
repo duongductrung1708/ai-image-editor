@@ -122,6 +122,7 @@ export function useSingleImageOcr() {
         extracted_text: mdOut,
         bounding_boxes: blocks as unknown as Json,
         image_data: `data:${file.type};base64,${base64}`,
+        user_id: user?.id,
       });
       setHistoryRefresh((p) => p + 1);
       setLoadingProgress(100);
