@@ -39,10 +39,7 @@ const Index = () => {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
         >
-          <OCRWorkspace
-            imageFile={files[0]}
-            onBack={() => setFiles(null)}
-          />
+          <OCRWorkspace imageFile={files[0]} onBack={() => setFiles(null)} />
         </motion.div>
       ) : (
         <motion.div

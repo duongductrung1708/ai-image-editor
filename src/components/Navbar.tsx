@@ -41,7 +41,11 @@ const Navbar = () => {
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full hover:bg-accent/40 hover:text-accent-foreground/90"
+                >
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={user.user_metadata?.avatar_url} />
                     <AvatarFallback className="bg-primary/10 text-primary text-xs">
@@ -59,7 +63,10 @@ const Navbar = () => {
                     {user.email}
                   </p>
                 </div>
-                <DropdownMenuItem onClick={signOut} className="text-destructive">
+                <DropdownMenuItem
+                  onClick={signOut}
+                  className="text-destructive"
+                >
                   <LogOut className="mr-2 h-3.5 w-3.5" />
                   Đăng xuất
                 </DropdownMenuItem>
