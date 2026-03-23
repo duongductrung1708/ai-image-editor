@@ -164,9 +164,17 @@ const HistorySidebar = ({
               className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 transition-colors hover:bg-secondary/50"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">
-                  {entry.image_name}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-medium text-foreground truncate">
+                    {entry.image_name}
+                  </p>
+                  {entry.batch_page_count && (
+                    <Badge variant="secondary" className="shrink-0 text-[9px] px-1 py-0 h-4 gap-0.5">
+                      <Images className="h-2.5 w-2.5" />
+                      {entry.batch_page_count}
+                    </Badge>
+                  )}
+                </div>
                 <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
                   {entry.extracted_text.slice(0, 80)}...
                 </p>
