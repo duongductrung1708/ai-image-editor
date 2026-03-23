@@ -178,6 +178,7 @@ export function useBatchOcr(files: File[]) {
             concurrency: data.concurrency,
             merged_markdown: data.markdown,
             preview_image_data,
+            user_id: user?.id,
           })
           .select("id")
           .single();
