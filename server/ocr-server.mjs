@@ -457,60 +457,93 @@ async function callGemini({ imageBase64, mimeType, prompt, responseMimeType }) {
 // HÀM HACK: Chuyển đổi định dạng tọa độ gốc của Qwen sang JSON chuẩn cho Front-end
 function parseQwenBoundingBoxes(text) {
   const blocks = [];
-  const cleanLines = [];
+  let markdown = text;
 
-  // Tách văn bản thành từng dòng để xử lý
-  const lines = text.split(/\r?\n/);
+  const toPercentX = (v) => parseInt(v, 10) / 10;
+  const toPercentY = (v) => parseInt(v, 10) / 10;
 
-  for (const line of lines) {
-    if (!line.trim()) continue;
+  // Variant A (Qwen-ish): <box>(x1,y1),(x2,y2)Nội dung</box>
+  const boxRegexA = /<box>\((\d+),(\d+)\),\((\d+),(\d+)\)([\s\S]*?)<\/box>/g;
+  markdown = markdown.replace(
+    boxRegexA,
+    (match, x1, y1, x2, y2, textContent, offset, full) => {
+      const inner = (textContent ?? "").trim();
 
-    // Regex "bao dung": Tìm đoạn text theo sau là <box... </box>
-    const boxRegex = /(.*?)\s*<box(.*?)<\/box>/i;
-    const match = line.match(boxRegex);
+      // If the box has no inner text, infer from a bracket token just before the tag.
+      let inferredText = inner;
+      let returnText = inner;
 
-    if (match) {
-      const textPart = match[1].trim(); // Phần chữ (Ví dụ: "Tiêu chí đánh giá")
-      const coordPart = match[2];       // Phần chứa số (Ví dụ: "(100,3),(200,679)")
-
-      // Trích xuất tất cả các con số có trong phần tọa độ
-      const nums = coordPart.match(/\d+/g);
-
-      if (nums && nums.length >= 4) {
-        // Qwen trả về theo thứ tự: ymin, xmin, ymax, xmax (hệ tọa độ 1000)
-        // Chia 10 để quy đổi ra phần trăm (0-100%) cho Front-end
-        const ymin = parseInt(nums[0], 10) / 10;
-        const xmin = parseInt(nums[1], 10) / 10;
-        const ymax = parseInt(nums[2], 10) / 10;
-        const xmax = parseInt(nums[3], 10) / 10;
-
-        blocks.push({
-          text: textPart,
-          x: xmin,
-          y: ymin,
-          width: xmax - xmin,
-          height: ymax - ymin
-        });
-        cleanLines.push(textPart);
-      } else {
-        // Nếu AI xuất lỗi thiếu số, vẫn giữ lại chữ để không bị mất nội dung
-        cleanLines.push(textPart);
+      if (!inner && typeof offset === "number" && typeof full === "string") {
+        const lineStart = full.lastIndexOf("\n", offset);
+        const segment = full.slice(lineStart + 1, offset);
+        const labelMatch = /\[([^\]]+)\]\s*$/.exec(segment);
+        inferredText = labelMatch ? labelMatch[1].trim() : "";
+        // Don't duplicate the label in markdown; label token lives outside the box tag.
+        returnText = "";
       }
-    } else {
-      // Dòng nào không có box thì cứ giữ nguyên
-      cleanLines.push(line.trim());
-    }
-  }
 
-  // Chỉ cần bắt được 1 block là coi như thành công
+      const px1 = toPercentX(x1);
+      const py1 = toPercentY(y1);
+      const px2 = toPercentX(x2);
+      const py2 = toPercentY(y2);
+
+      blocks.push({
+        text: inferredText,
+        x: px1,
+        y: py1,
+        width: px2 - px1,
+        height: py2 - py1,
+      });
+
+      return returnText;
+    },
+  );
+
+  // Variant B (lmstudio output): <box(x1,y1),(x2,y2)</box> hoặc <box(x1,y1),(x2,y2)Nội dung</box>
+  // Note: lmstudio hay bỏ dấu ">" sau chữ box.
+  const boxRegexB = /<box\((\d+),(\d+)\),\((\d+),(\d+)\)([\s\S]*?)<\/box>/g;
+  markdown = markdown.replace(
+    boxRegexB,
+    (match, x1, y1, x2, y2, textContent, offset, full) => {
+      const inner = (textContent ?? "").trim();
+
+      let inferredText = inner;
+      let returnText = inner;
+      if (!inner && typeof offset === "number" && typeof full === "string") {
+        const lineStart = full.lastIndexOf("\n", offset);
+        const segment = full.slice(lineStart + 1, offset);
+        const labelMatch = /\[([^\]]+)\]\s*$/.exec(segment);
+        inferredText = labelMatch ? labelMatch[1].trim() : "";
+        returnText = "";
+      }
+
+      const px1 = toPercentX(x1);
+      const py1 = toPercentY(y1);
+      const px2 = toPercentX(x2);
+      const py2 = toPercentY(y2);
+
+      blocks.push({
+        text: inferredText,
+        x: px1,
+        y: py1,
+        width: px2 - px1,
+        height: py2 - py1,
+      });
+
+      return returnText;
+    },
+  );
+
+  // Nếu bóc được tọa độ thì trả về JSON chuẩn
   if (blocks.length > 0) {
+    const cleaned = markdown.trim();
     return {
-      markdown: cleanLines.join("\n"),
-      full_text: cleanLines.join("\n"),
-      blocks: blocks
+      markdown: cleaned,
+      full_text: cleaned,
+      blocks: blocks,
     };
   }
-  
+
   return null;
 }
 
@@ -771,9 +804,7 @@ function mergeBatchMarkdown(pages) {
       );
     } else {
       const err = (p.error || "Unknown error").replace(/`/g, "'");
-      parts.push(
-        `## ${safeLabel.replace(/^#+\s*/, "")} _(lỗi)_\n\n\`${err}\``,
-      );
+      parts.push(`## ${safeLabel.replace(/^#+\s*/, "")} _(lỗi)_\n\n\`${err}\``);
     }
   }
   return parts.join("");
@@ -810,7 +841,8 @@ const server = http.createServer(async (req, res) => {
       const images = body?.images;
       if (!Array.isArray(images) || images.length === 0) {
         return sendJson(res, 400, {
-          error: "images must be a non-empty array of { imageBase64, mimeType?, name? }",
+          error:
+            "images must be a non-empty array of { imageBase64, mimeType?, name? }",
         });
       }
       if (images.length > OCR_BATCH_MAX_IMAGES) {
@@ -820,9 +852,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       const requested = Number(body?.concurrency);
-      const conc = Number.isFinite(requested) && requested > 0
-        ? Math.min(OCR_BATCH_CONCURRENCY, Math.floor(requested))
-        : OCR_BATCH_CONCURRENCY;
+      const conc =
+        Number.isFinite(requested) && requested > 0
+          ? Math.min(OCR_BATCH_CONCURRENCY, Math.floor(requested))
+          : OCR_BATCH_CONCURRENCY;
 
       const tasks = images.map((entry, index) => ({
         index,
