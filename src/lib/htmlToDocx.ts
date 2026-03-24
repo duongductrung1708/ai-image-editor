@@ -25,7 +25,37 @@ type RunStyle = {
   italics?: boolean;
   underline?: { type: "single" };
   highlight?: string;
+  color?: string;
+  size?: number;
 };
+
+function normalizeHexColor(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const v = value.trim().toLowerCase();
+  const short = /^#([0-9a-f]{3})$/i.exec(v);
+  if (short) {
+    const [r, g, b] = short[1].split("");
+    return `${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+  const full = /^#([0-9a-f]{6})$/i.exec(v);
+  if (full) return full[1].toUpperCase();
+  const plain = /^([0-9a-f]{6})$/i.exec(v);
+  if (plain) return plain[1].toUpperCase();
+  const rgb = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(v);
+  if (!rgb) return undefined;
+  const toHex = (n: string) =>
+    Math.max(0, Math.min(255, Number(n))).toString(16).padStart(2, "0");
+  return `${toHex(rgb[1])}${toHex(rgb[2])}${toHex(rgb[3])}`.toUpperCase();
+}
+
+function pxToHalfPoints(value?: string | null): number | undefined {
+  if (!value) return undefined;
+  const match = /^(\d+(\.\d+)?)px$/i.exec(value.trim());
+  if (!match) return undefined;
+  const px = Number(match[1]);
+  if (!Number.isFinite(px) || px <= 0) return undefined;
+  return Math.round(px * 1.5);
+}
 
 function getAlignment(el: HTMLElement): (typeof AlignmentType)[keyof typeof AlignmentType] | undefined {
   const align = el.style?.textAlign || el.getAttribute("align");
@@ -68,11 +98,16 @@ function extractRuns(node: Node, parentStyle: RunStyle = {}): TextRun[] {
         bold: parentStyle.bold || undefined,
         italics: parentStyle.italics || undefined,
         underline: parentStyle.underline,
+        color: parentStyle.color,
+        size: parentStyle.size,
         ...(parentStyle.highlight
           ? {
               shading: {
                 type: ShadingType.CLEAR,
-                fill: parentStyle.highlight === "true" ? "FFFF00" : parentStyle.highlight,
+                fill:
+                  parentStyle.highlight === "true"
+                    ? "FFFF00"
+                    : parentStyle.highlight,
               },
             }
           : {}),
@@ -91,8 +126,12 @@ function extractRuns(node: Node, parentStyle: RunStyle = {}): TextRun[] {
   if (tag === "EM" || tag === "I") style.italics = true;
   if (tag === "U") style.underline = { type: "single" };
   if (tag === "MARK") {
-    style.highlight = el.getAttribute("data-color") || "FFFF00";
+    style.highlight =
+      normalizeHexColor(el.getAttribute("data-color")) || "FFFF00";
   }
+  style.color =
+    normalizeHexColor(el.style.color) || style.color || undefined;
+  style.size = pxToHalfPoints(el.style.fontSize) || style.size || undefined;
   if (tag === "BR") {
     runs.push(new TextRun({ break: 1, text: "" }));
     return runs;

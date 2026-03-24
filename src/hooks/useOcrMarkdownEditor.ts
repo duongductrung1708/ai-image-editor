@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { TextStyle } from "@tiptap/extension-text-style";
+import { Color } from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import TextAlign from "@tiptap/extension-text-align";
 import TaskList from "@tiptap/extension-task-list";
@@ -12,6 +14,7 @@ import { marked } from "marked";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 import { OcrTable } from "@/lib/tiptapOcrTable";
+import { FontSize } from "@/lib/tiptapFontSize";
 
 marked.setOptions({ gfm: true, breaks: true });
 
@@ -37,7 +40,10 @@ export function useOcrMarkdownEditor(markdownText: string) {
         bulletList: { keepMarks: true },
         orderedList: { keepMarks: true },
       }),
-      Highlight,
+      TextStyle,
+      Color,
+      FontSize,
+      Highlight.configure({ multicolor: true }),
       TaskList,
       TaskItem.configure({ nested: true }),
       TextAlign.configure({
