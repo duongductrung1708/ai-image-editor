@@ -4,7 +4,7 @@ import type { Editor } from "@tiptap/react";
 import type TurndownService from "turndown";
 import { downloadMarkdownAsDocx } from "@/lib/exportBatchDocx";
 import { downloadTextFile } from "@/lib/downloadTextFile";
-import { exportBatchPlainPdf } from "@/lib/exportBatchPlainPdf";
+import { exportBatchPlainPdf, exportBatchRichPdf } from "@/lib/exportBatchPlainPdf";
 import type { OcrMarkdownJsonTab } from "@/lib/ocrResultContent";
 import {
   getMarkdownForDocxExport,
