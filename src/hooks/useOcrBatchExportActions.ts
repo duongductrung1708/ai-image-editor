@@ -74,7 +74,7 @@ export function useOcrBatchExportActions(params: {
     }
   }, [activeTab, editor, jsonText, markdownText, turndown]);
 
-  const exportPdf = useCallback(() => {
+  const exportPdf = useCallback(async () => {
     const text = getPlainTextForBatchPdf(
       activeTab,
       editor,
@@ -85,6 +85,17 @@ export function useOcrBatchExportActions(params: {
     if (!text) {
       toast.error("Chưa có nội dung để xuất PDF.");
       return;
+    }
+    // Try rich PDF (html2canvas) first, fall back to plain text
+    if (activeTab === "markdown") {
+      const ok = await exportBatchRichPdf({
+        headerTitle: "VietOCR · Hàng loạt",
+        fileName: "ocr-batch.pdf",
+      });
+      if (ok) {
+        toast.success("Đã xuất PDF.");
+        return;
+      }
     }
     exportBatchPlainPdf({
       text,
