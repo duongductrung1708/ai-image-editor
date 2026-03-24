@@ -64,7 +64,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText);
 
-  const { copied, copy, download, exportPdf } = useSingleImageExportActions({
+  const { copied, copy, download, exportPdf, downloadDocx } = useSingleImageExportActions({
     activeTab,
     editor,
     turndown,
