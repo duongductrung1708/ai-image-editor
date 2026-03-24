@@ -4,8 +4,10 @@ import type { Editor } from "@tiptap/react";
 import type TurndownService from "turndown";
 import { downloadTextFile } from "@/lib/downloadTextFile";
 import { exportSingleImageOcrPdf } from "@/lib/exportSingleImagePdf";
+import { downloadSingleMarkdownAsDocx } from "@/lib/exportSingleDocx";
 import {
   getMarkdownFromEditorOrFallback,
+  getMarkdownForDocxExport,
   getPlainTextForSinglePdf,
   getSingleImageCopyText,
 } from "@/lib/ocrResultContent";
