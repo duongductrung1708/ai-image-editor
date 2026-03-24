@@ -41,7 +41,7 @@ function getAlignment(el: HTMLElement): (typeof AlignmentType)[keyof typeof Alig
   }
 }
 
-function getHeadingLevel(tag: string): HeadingLevel | undefined {
+function getHeadingLevel(tag: string): (typeof HeadingLevel)[keyof typeof HeadingLevel] | undefined {
   switch (tag) {
     case "H1":
       return HeadingLevel.HEADING_1;
