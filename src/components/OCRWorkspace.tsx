@@ -64,7 +64,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText);
 
-  const { copied, copy, download, exportPdf } = useSingleImageExportActions({
+  const { copied, copy, download, exportPdf, downloadDocx } = useSingleImageExportActions({
     activeTab,
     editor,
     turndown,
@@ -336,6 +336,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         onDownloadMarkdown={() => download("markdown")}
         onDownloadJson={() => download("json")}
         onExportPdf={exportPdf}
+        onDownloadDocx={downloadDocx}
         onCancelProcessing={ocrPipelineBusy ? cancelProcessing : undefined}
       />
       {ocrPipelineBusy && (

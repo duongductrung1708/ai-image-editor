@@ -4,8 +4,10 @@ import type { Editor } from "@tiptap/react";
 import type TurndownService from "turndown";
 import { downloadTextFile } from "@/lib/downloadTextFile";
 import { exportSingleImageOcrPdf } from "@/lib/exportSingleImagePdf";
+import { downloadSingleMarkdownAsDocx } from "@/lib/exportSingleDocx";
 import {
   getMarkdownFromEditorOrFallback,
+  getMarkdownForDocxExport,
   getPlainTextForSinglePdf,
   getSingleImageCopyText,
 } from "@/lib/ocrResultContent";
@@ -98,5 +100,26 @@ export function useSingleImageExportActions(params: {
     turndown,
   ]);
 
-  return { copied, copy, download, exportPdf };
+  const downloadDocx = useCallback(async () => {
+    const md = getMarkdownForDocxExport(
+      activeTab === "tables" ? "markdown" : activeTab,
+      editor,
+      turndown,
+      markdownText,
+      jsonText,
+    );
+    if (!md.trim()) {
+      toast.error("Chưa có nội dung để xuất Word.");
+      return;
+    }
+    try {
+      await downloadSingleMarkdownAsDocx(md, "ocr-result.docx");
+      toast.success("Đã tải Word (.docx).");
+    } catch (err) {
+      console.error(err);
+      toast.error("Không thể tạo file Word.");
+    }
+  }, [activeTab, editor, jsonText, markdownText, turndown]);
+
+  return { copied, copy, download, exportPdf, downloadDocx };
 }
