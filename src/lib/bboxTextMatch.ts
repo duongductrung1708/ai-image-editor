@@ -11,13 +11,42 @@ export function normalizeForMatch(s: string): string {
   return s
     .toLowerCase()
     .replace(/\s+/g, " ")
-    .replace(/[`*_#|[\]()]/g, "")
+    .replace(/[`*_#|[\](){}]/g, "")
+    .replace(/[.,;:!?…""''«»"\-–—]/g, "")
     .trim();
+}
+
+/** Character bigrams for Dice coefficient. */
+function bigrams(s: string): Map<string, number> {
+  const m = new Map<string, number>();
+  for (let i = 0; i < s.length - 1; i++) {
+    const bg = s.slice(i, i + 2);
+    m.set(bg, (m.get(bg) || 0) + 1);
+  }
+  return m;
+}
+
+/** Dice coefficient on character bigrams – good for fuzzy Vietnamese matching. */
+function diceCoefficient(a: string, b: string): number {
+  if (a.length < 2 || b.length < 2) {
+    return a === b ? 1 : 0;
+  }
+  const bgA = bigrams(a);
+  const bgB = bigrams(b);
+  let intersection = 0;
+  let sizeA = 0;
+  let sizeB = 0;
+  for (const [k, v] of bgA) {
+    sizeA += v;
+    intersection += Math.min(v, bgB.get(k) || 0);
+  }
+  for (const v of bgB.values()) sizeB += v;
+  return (2 * intersection) / (sizeA + sizeB);
 }
 
 /**
  * Find bbox indices that best match the current markdown block text.
- * Heuristic: substring containment, then token overlap.
+ * Uses multiple strategies: exact substring, token overlap, and bigram Dice.
  */
 export function findMatchingBoxIndices(
   blockText: string,
@@ -29,27 +58,50 @@ export function findMatchingBoxIndices(
   type Scored = { index: number; score: number };
   const scored: Scored[] = [];
 
+  const blockWords = new Set(norm.split(/\s+/).filter((w) => w.length > 1));
+
   boxes.forEach((box, index) => {
     const bt = normalizeForMatch(box.text || "");
     if (!bt || bt.length < 1) return;
 
     let score = 0;
+
+    // Strategy 1: exact substring containment
     if (norm.includes(bt)) {
-      score = 0.5 + 0.5 * (bt.length / Math.max(norm.length, 1));
+      score = Math.max(score, 0.6 + 0.4 * (bt.length / Math.max(norm.length, 1)));
     } else if (bt.includes(norm)) {
-      score = 0.45 + 0.5 * (norm.length / Math.max(bt.length, 1));
-    } else {
-      const wordsA = new Set(norm.split(/\s+/).filter((w) => w.length > 1));
-      const wordsB = bt.split(/\s+/).filter((w) => w.length > 1);
-      if (wordsB.length === 0) return;
-      let inter = 0;
-      for (const w of wordsB) {
-        if (wordsA.has(w)) inter += 1;
-      }
-      score = inter / wordsB.length;
+      score = Math.max(score, 0.55 + 0.4 * (norm.length / Math.max(bt.length, 1)));
     }
 
-    if (score >= 0.18) scored.push({ index, score });
+    // Strategy 2: token overlap (Jaccard-like)
+    if (score < 0.5) {
+      const boxWords = bt.split(/\s+/).filter((w) => w.length > 1);
+      if (boxWords.length > 0) {
+        let inter = 0;
+        for (const w of boxWords) {
+          if (blockWords.has(w)) inter += 1;
+        }
+        const tokenScore = inter / boxWords.length;
+        // Weight by how many box words matched
+        score = Math.max(score, tokenScore * 0.9);
+      }
+    }
+
+    // Strategy 3: Dice coefficient on character bigrams (fuzzy)
+    if (score < 0.4) {
+      const dice = diceCoefficient(norm, bt);
+      score = Math.max(score, dice * 0.85);
+    }
+
+    // Strategy 4: for single short words, check if block contains the word
+    if (score < 0.3 && bt.length >= 2 && !bt.includes(" ")) {
+      const words = norm.split(/\s+/);
+      if (words.some((w) => w === bt || w.includes(bt) || bt.includes(w))) {
+        score = Math.max(score, 0.35);
+      }
+    }
+
+    if (score >= 0.15) scored.push({ index, score });
   });
 
   if (scored.length === 0) return [];
@@ -57,7 +109,7 @@ export function findMatchingBoxIndices(
   scored.sort((a, b) => b.score - a.score);
   const best = scored[0].score;
   return scored
-    .filter((s) => s.score >= best * 0.75)
+    .filter((s) => s.score >= best * 0.6)
     .map((s) => s.index);
 }
 

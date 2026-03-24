@@ -10,34 +10,21 @@ export interface ExportSingleImagePdfParams {
   jsonText: string;
   markdownText: string;
   imageUrl: string;
-  /** Tên file gốc (không extension) cho tiêu đề PDF. */
   sourceImageName?: string;
 }
 
 /**
- * PDF kết quả 1 ảnh: chụp ProseMirror nếu có, ảnh data URL, fallback text.
+ * PDF kết quả 1 ảnh: chụp ProseMirror editor content nếu có,
+ * kèm ảnh gốc, fallback text thuần.
  */
 export async function exportSingleImageOcrPdf({
   editor,
-  turndown,
   activeTab,
   jsonText,
   markdownText,
   imageUrl,
   sourceImageName,
 }: ExportSingleImagePdfParams): Promise<void> {
-  const currentMarkdown =
-    activeTab === "json"
-      ? jsonText
-      : editor
-        ? turndown.turndown(editor.getHTML())
-        : markdownText;
-  const text = currentMarkdown.trim();
-
-  const title = sourceImageName
-    ? `VietOCR — ${sourceImageName}`
-    : "VietOCR";
-
   const doc = new jsPDF({
     unit: "mm",
     format: "a4",
@@ -46,99 +33,126 @@ export async function exportSingleImageOcrPdf({
 
   const marginX = 15;
   let cursorY = 20;
+  const pageW = 210 - marginX * 2;
 
+  // Header
   doc.setFontSize(14);
   doc.setTextColor(137, 25, 28);
   doc.text("VietOCR", marginX, cursorY);
-
   doc.setFontSize(9);
   doc.setTextColor(80);
   doc.text(new Date().toLocaleString("vi-VN"), 210 - marginX, cursorY, {
     align: "right",
   });
-
   cursorY += 8;
 
-  let capturedEditor = false;
-  const captureEditorPromise =
-    editor && document.querySelector<HTMLElement>(".ProseMirror")
-      ? (() => {
-          const el = document.querySelector(".ProseMirror") as HTMLElement;
-          const h = Math.max(el.scrollHeight, el.clientHeight);
-          return html2canvas(el, {
-            scale: window.devicePixelRatio || 2,
-            backgroundColor: "#ffffff",
-            height: h,
-            windowHeight: h,
-            scrollY: -window.scrollY,
-            useCORS: true,
-          }).then((canvas) => {
-            const imgData = canvas.toDataURL("image/png");
-            const pageWidth = 210 - marginX * 2;
-            const imgWidth = pageWidth;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-            if (cursorY + imgHeight > 287) {
-              doc.addPage();
-              cursorY = 20;
-            }
-
-            doc.addImage(
-              imgData,
-              "PNG",
-              marginX,
-              cursorY,
-              imgWidth,
-              imgHeight,
-            );
-            cursorY += imgHeight + 4;
-            capturedEditor = true;
-          });
-        })()
-      : Promise.resolve();
-
-  const addImagePromise =
-    imageUrl && imageUrl.startsWith("data:")
-      ? new Promise<void>((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            const maxWidth = 210 - marginX * 2;
-            const maxHeight = 80;
-            let w = img.width;
-            let h = img.height;
-            const ratio = Math.min(maxWidth / w, maxHeight / h);
-            w *= ratio;
-            h *= ratio;
-            if (cursorY + h > 287) {
-              doc.addPage();
-              cursorY = 20;
-            }
-            doc.addImage(img, "PNG", marginX, cursorY, w, h);
-            cursorY += h + 6;
-            resolve();
-          };
-          img.onerror = () => resolve();
-          img.src = imageUrl;
-        })
-      : Promise.resolve();
-
-  await Promise.all([captureEditorPromise, addImagePromise]);
-
-  if (!capturedEditor) {
-    doc.setFontSize(11);
-    doc.setTextColor(0, 0, 0);
-    const lines = doc.splitTextToSize(text || "", 210 - marginX * 2);
-
-    for (const line of lines) {
-      if (cursorY > 287) {
+  // Try to capture the original image
+  if (imageUrl && imageUrl.startsWith("data:")) {
+    try {
+      const img = await loadImage(imageUrl);
+      const maxHeight = 80;
+      let w = img.width;
+      let h = img.height;
+      const ratio = Math.min(pageW / w, maxHeight / h);
+      w *= ratio;
+      h *= ratio;
+      if (cursorY + h > 287) {
         doc.addPage();
         cursorY = 20;
       }
-      doc.text(line as string, marginX, cursorY);
-      cursorY += 5;
+      doc.addImage(img, "PNG", marginX, cursorY, w, h);
+      cursorY += h + 6;
+    } catch {
+      // skip image if fails
     }
   }
 
-  const safeName = (title || "vietocr").replace(/[/\\?%*:|"<>]/g, "-");
+  // Capture editor content via html2canvas
+  let capturedEditor = false;
+  const proseMirrorEl = document.querySelector<HTMLElement>(".ProseMirror");
+  if (editor && proseMirrorEl && activeTab !== "json") {
+    try {
+      const h = Math.max(proseMirrorEl.scrollHeight, proseMirrorEl.clientHeight);
+      const canvas = await html2canvas(proseMirrorEl, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        height: h,
+        windowHeight: h,
+        scrollY: -window.scrollY,
+        useCORS: true,
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const imgWidth = pageW;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      // May need multiple pages
+      let remaining = imgHeight;
+      let srcY = 0;
+      while (remaining > 0) {
+        const available = 287 - cursorY;
+        const sliceH = Math.min(remaining, available);
+        
+        if (sliceH < 10 && remaining > 10) {
+          doc.addPage();
+          cursorY = 20;
+          continue;
+        }
+
+        doc.addImage(
+          imgData,
+          "PNG",
+          marginX,
+          cursorY,
+          imgWidth,
+          imgHeight,
+          undefined,
+          undefined,
+        );
+        cursorY += sliceH + 4;
+        remaining -= sliceH;
+        srcY += sliceH;
+        
+        if (remaining > 0) {
+          doc.addPage();
+          cursorY = 20;
+        }
+      }
+      capturedEditor = true;
+    } catch (e) {
+      console.warn("html2canvas failed, falling back to text:", e);
+    }
+  }
+
+  // Fallback: plain text
+  if (!capturedEditor) {
+    const text =
+      activeTab === "json"
+        ? jsonText
+        : markdownText;
+    if (text.trim()) {
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      const lines = doc.splitTextToSize(text.trim(), pageW);
+      for (const line of lines) {
+        if (cursorY > 287) {
+          doc.addPage();
+          cursorY = 20;
+        }
+        doc.text(line as string, marginX, cursorY);
+        cursorY += 5;
+      }
+    }
+  }
+
+  const safeName = (sourceImageName || "vietocr").replace(/[/\\?%*:|"<>]/g, "-");
   doc.save(`${safeName}.pdf`);
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
 }
