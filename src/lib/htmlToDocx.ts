@@ -114,18 +114,15 @@ function blockToParagraph(
     children.push(new TextRun(""));
   }
 
-  const opts: IParagraphOptions = {
+  const alignment = getAlignment(el);
+  const heading = getHeadingLevel(el.tagName);
+
+  return new Paragraph({
     children,
     ...overrides,
-  };
-
-  const alignment = getAlignment(el);
-  if (alignment) opts.alignment = alignment;
-
-  const heading = getHeadingLevel(el.tagName);
-  if (heading) opts.heading = heading;
-
-  return new Paragraph(opts);
+    ...(alignment ? { alignment } : {}),
+    ...(heading ? { heading } : {}),
+  });
 }
 
 /** Convert a <table> element to a docx Table. */
