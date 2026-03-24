@@ -4,7 +4,7 @@ import type { Editor } from "@tiptap/react";
 import type TurndownService from "turndown";
 import { downloadMarkdownAsDocx } from "@/lib/exportBatchDocx";
 import { downloadTextFile } from "@/lib/downloadTextFile";
-import { exportBatchPlainPdf } from "@/lib/exportBatchPlainPdf";
+import { exportBatchPlainPdf, exportBatchRichPdf } from "@/lib/exportBatchPlainPdf";
 import type { OcrMarkdownJsonTab } from "@/lib/ocrResultContent";
 import {
   getMarkdownForDocxExport,
@@ -60,12 +60,13 @@ export function useOcrBatchExportActions(params: {
       markdownText,
       jsonText,
     );
-    if (!md.trim()) {
+    if (!md.trim() && !editor) {
       toast.error("Chưa có nội dung để xuất Word.");
       return;
     }
     try {
-      await downloadMarkdownAsDocx(md, "ocr-batch.docx");
+      const editorHtml = editor ? editor.getHTML() : undefined;
+      await downloadMarkdownAsDocx(md, "ocr-batch.docx", editorHtml);
       toast.success("Đã tải Word (.docx).");
     } catch (err) {
       console.error(err);
@@ -73,7 +74,7 @@ export function useOcrBatchExportActions(params: {
     }
   }, [activeTab, editor, jsonText, markdownText, turndown]);
 
-  const exportPdf = useCallback(() => {
+  const exportPdf = useCallback(async () => {
     const text = getPlainTextForBatchPdf(
       activeTab,
       editor,
@@ -84,6 +85,17 @@ export function useOcrBatchExportActions(params: {
     if (!text) {
       toast.error("Chưa có nội dung để xuất PDF.");
       return;
+    }
+    // Try rich PDF (html2canvas) first, fall back to plain text
+    if (activeTab === "markdown") {
+      const ok = await exportBatchRichPdf({
+        headerTitle: "VietOCR · Hàng loạt",
+        fileName: "ocr-batch.pdf",
+      });
+      if (ok) {
+        toast.success("Đã xuất PDF.");
+        return;
+      }
     }
     exportBatchPlainPdf({
       text,
