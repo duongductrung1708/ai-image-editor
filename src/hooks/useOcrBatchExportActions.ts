@@ -60,12 +60,13 @@ export function useOcrBatchExportActions(params: {
       markdownText,
       jsonText,
     );
-    if (!md.trim()) {
+    if (!md.trim() && !editor) {
       toast.error("Chưa có nội dung để xuất Word.");
       return;
     }
     try {
-      await downloadMarkdownAsDocx(md, "ocr-batch.docx");
+      const editorHtml = editor ? editor.getHTML() : undefined;
+      await downloadMarkdownAsDocx(md, "ocr-batch.docx", editorHtml);
       toast.success("Đã tải Word (.docx).");
     } catch (err) {
       console.error(err);
