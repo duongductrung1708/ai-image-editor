@@ -1,7 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-import faviconUrl from "./assets/Viet_Ocr.png";
 
 function setFavicon(href: string) {
   const existing =
@@ -17,7 +16,7 @@ function setFavicon(href: string) {
   }
 }
 
-document.title = "VietOCR";
-setFavicon(faviconUrl);
+document.title = "MonkeyOCR";
+setFavicon("/monkey.png");
 
 createRoot(document.getElementById("root")!).render(<App />);

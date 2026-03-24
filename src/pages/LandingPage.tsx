@@ -91,7 +91,7 @@ const LandingPage = () => {
       {/* Footer */}
       <footer className="border-t border-border py-8 text-center">
         <p className="text-xs text-muted-foreground">
-          VietOCR — Công cụ OCR tiếng Việt bằng AI
+          MonkeyOCR — Công cụ OCR tiếng Việt bằng AI
         </p>
       </footer>
     </div>

@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import monkeyLogo from "@/assets/monkey.png";
 
 const Navbar = () => {
   const { user, signOut } = useAuth();
@@ -17,9 +18,9 @@ const Navbar = () => {
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <ScanText className="h-4 w-4 text-primary-foreground" />
-          </div>
+          {/* <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary"> */}
+          <img src={monkeyLogo} alt="MonkeyOCR Logo" className="h-8 w-10" />
+          {/* </div> */}
           <span className="text-lg font-bold font-display text-foreground">
             MonkeyOCR
           </span>
