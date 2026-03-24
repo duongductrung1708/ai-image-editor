@@ -336,6 +336,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         onDownloadMarkdown={() => download("markdown")}
         onDownloadJson={() => download("json")}
         onExportPdf={exportPdf}
+        onDownloadDocx={downloadDocx}
         onCancelProcessing={ocrPipelineBusy ? cancelProcessing : undefined}
       />
       {ocrPipelineBusy && (
