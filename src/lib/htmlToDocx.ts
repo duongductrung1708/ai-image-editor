@@ -63,17 +63,20 @@ function extractRuns(node: Node, parentStyle: RunStyle = {}): TextRun[] {
   if (node.nodeType === Node.TEXT_NODE) {
     const text = node.textContent || "";
     if (text) {
-      const opts: IRunOptions = { text };
-      if (parentStyle.bold) opts.bold = true;
-      if (parentStyle.italics) opts.italics = true;
-      if (parentStyle.underline) opts.underline = parentStyle.underline;
-      if (parentStyle.highlight) {
-        opts.shading = {
-          type: ShadingType.CLEAR,
-          fill: parentStyle.highlight === "true" ? "FFFF00" : parentStyle.highlight,
-        };
-      }
-      runs.push(new TextRun(opts));
+      runs.push(new TextRun({
+        text,
+        bold: parentStyle.bold || undefined,
+        italics: parentStyle.italics || undefined,
+        underline: parentStyle.underline,
+        ...(parentStyle.highlight
+          ? {
+              shading: {
+                type: ShadingType.CLEAR,
+                fill: parentStyle.highlight === "true" ? "FFFF00" : parentStyle.highlight,
+              },
+            }
+          : {}),
+      }));
     }
     return runs;
   }
