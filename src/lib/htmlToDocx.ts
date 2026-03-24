@@ -27,7 +27,7 @@ type RunStyle = {
   highlight?: string;
 };
 
-function getAlignment(el: HTMLElement): AlignmentType | undefined {
+function getAlignment(el: HTMLElement): (typeof AlignmentType)[keyof typeof AlignmentType] | undefined {
   const align = el.style?.textAlign || el.getAttribute("align");
   switch (align) {
     case "center":
