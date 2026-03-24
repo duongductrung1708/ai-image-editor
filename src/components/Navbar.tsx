@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ScanText, LogOut, User } from "lucide-react";
+import { ScanText, LogOut, User, Settings } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
