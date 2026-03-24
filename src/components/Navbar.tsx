@@ -33,6 +33,12 @@ const Navbar = () => {
             Trang chủ
           </Link>
           <Link
+            to="/pricing"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Bảng giá
+          </Link>
+          <Link
             to="/app"
             className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
           >

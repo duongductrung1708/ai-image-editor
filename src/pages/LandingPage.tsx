@@ -1,5 +1,15 @@
 import { Link } from "react-router-dom";
-import { ScanText, Zap, Globe, Pencil, ArrowRight } from "lucide-react";
+import {
+  ScanText,
+  Zap,
+  Globe,
+  Pencil,
+  ArrowRight,
+  ShieldCheck,
+  FileOutput,
+  Upload,
+  ScanSearch,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
@@ -25,6 +35,41 @@ const features = [
     title: "Nhanh & tiện lợi",
     desc: "Kéo thả, dán từ clipboard — kết quả hiển thị trong vài giây.",
   },
+  {
+    icon: FileOutput,
+    title: "Xuất file linh hoạt",
+    desc: "Xuất Markdown hoặc Word để tái sử dụng nội dung nhanh chóng.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "An toàn dữ liệu",
+    desc: "Phiên làm việc rõ ràng, kiểm soát tốt hơn dữ liệu OCR của bạn.",
+  },
+];
+
+const steps = [
+  {
+    icon: Upload,
+    title: "Tải ảnh lên",
+    desc: "Kéo thả một hoặc nhiều ảnh vào khu vực OCR.",
+  },
+  {
+    icon: ScanSearch,
+    title: "AI nhận diện",
+    desc: "Hệ thống tự động trích xuất văn bản và giữ cấu trúc hợp lý.",
+  },
+  {
+    icon: FileOutput,
+    title: "Xuất kết quả",
+    desc: "Tải về dạng Markdown hoặc Word để chỉnh sửa tiếp.",
+  },
+];
+
+const audiences = [
+  "Sinh viên số hóa tài liệu học tập",
+  "Nhân sự văn phòng nhập liệu nhanh",
+  "Nhóm vận hành xử lý biểu mẫu hàng ngày",
+  "Doanh nghiệp cần chuẩn hóa tài liệu scan",
 ];
 
 const LandingPage = () => {
@@ -48,7 +93,7 @@ const LandingPage = () => {
           <h1 className="mb-4 text-5xl font-bold leading-tight tracking-tight text-foreground font-display">
             Nhận diện văn bản
             <br />
-            <span className="text-primary">tiếng Việt</span> bằng AI
+            <span className="text-primary">đa ngôn ngữ</span> bằng AI
           </h1>
           <p className="mx-auto mb-8 max-w-xl text-lg text-muted-foreground">
             Kéo thả hình ảnh, AI tự động trích xuất văn bản với bounding boxes.
@@ -64,8 +109,20 @@ const LandingPage = () => {
       </section>
 
       {/* Features */}
-      <section className="mx-auto max-w-5xl px-6 pb-24">
-        <div className="grid gap-6 sm:grid-cols-2">
+      <section id="features" className="mx-auto max-w-5xl px-6 pb-14">
+        <div className="mb-8 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+            Tính năng
+          </p>
+          <h2 className="mt-2 text-2xl font-bold text-foreground font-display">
+            Những gì bạn nhận được
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Bộ công cụ OCR tập trung vào tốc độ, độ chính xác và khả năng chỉnh
+            sửa sau khi nhận diện.
+          </p>
+        </div>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((f, i) => (
             <motion.div
               key={f.title}
@@ -85,6 +142,82 @@ const LandingPage = () => {
               </p>
             </motion.div>
           ))}
+        </div>
+      </section>
+
+      <section id="how-it-works" className="mx-auto max-w-5xl px-6 pb-14">
+        <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-card to-card p-6 md:p-8">
+          <div className="mb-8 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+              Quy trình
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-foreground font-display">
+              Bắt đầu trong 3 bước
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Quy trình tối giản để bạn đi từ ảnh đầu vào đến tài liệu hoàn
+              chỉnh.
+            </p>
+          </div>
+          <div className="grid gap-6 md:grid-cols-3">
+            {steps.map((step, i) => (
+              <motion.div
+                key={step.title}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.4 }}
+                transition={{ duration: 0.3, delay: 0.08 * i }}
+                className="relative rounded-xl border border-primary/20 bg-background/90 p-6"
+              >
+                <span className="absolute -top-3 left-4 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-2 text-xs font-semibold text-primary-foreground">
+                  {i + 1}
+                </span>
+                <div className="mb-3 mt-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <step.icon className="h-5 w-5 text-primary" />
+                </div>
+                <h3 className="mb-1 text-base font-semibold text-foreground font-display">
+                  {step.title}
+                </h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {step.desc}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="audiences" className="mx-auto max-w-5xl px-6 pb-24">
+        <div className="mb-8 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+            Đối tượng
+          </p>
+          <h2 className="mt-2 text-2xl font-bold text-foreground font-display">
+            Ai nên dùng MonkeyOCR?
+          </h2>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-6 md:p-8">
+          <h2 className="mb-4 text-xl font-semibold text-foreground font-display">
+            Phù hợp với ai?
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {audiences.map((item) => (
+              <div
+                key={item}
+                className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground"
+              >
+                {item}
+              </div>
+            ))}
+          </div>
+          <div className="mt-6">
+            <Link to="/pricing">
+              <Button variant="outline" className="gap-2">
+                Xem bảng giá
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
         </div>
       </section>
 
