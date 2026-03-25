@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Clock, Trash2, Eye, Images, ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Clock, Trash2, Eye, Images, ChevronDown, ChevronRight, FileText, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,9 +56,39 @@ const HistorySidebar = ({
     imageName: string;
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month">("all");
   const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
   const [batchPages, setBatchPages] = useState<Record<string, BatchPageDetail[]>>({});
   const [loadingPages, setLoadingPages] = useState<string | null>(null);
+
+  const filteredEntries = useMemo(() => {
+    let result = entries;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (e) =>
+          e.image_name.toLowerCase().includes(q) ||
+          e.extracted_text.toLowerCase().includes(q)
+      );
+    }
+
+    if (dateFilter !== "all") {
+      const now = new Date();
+      let cutoff: Date;
+      if (dateFilter === "today") {
+        cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      } else if (dateFilter === "week") {
+        cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      } else {
+        cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+      result = result.filter((e) => new Date(e.created_at) >= cutoff);
+    }
+
+    return result;
+  }, [entries, searchQuery, dateFilter]);
 
   const fetchHistory = async () => {
     const { data: histData, error: histErr } = await supabase
@@ -237,13 +268,50 @@ const HistorySidebar = ({
           Lịch sử OCR
         </span>
       </div>
+
+      {/* Search & filter */}
+      <div className="border-b border-border px-3 py-2 space-y-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Tìm theo tên file..."
+            className="h-8 pl-8 pr-8 text-xs"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="flex gap-1">
+          {(["all", "today", "week", "month"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setDateFilter(f)}
+              className={`rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                dateFilter === f
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
+            >
+              {f === "all" ? "Tất cả" : f === "today" ? "Hôm nay" : f === "week" ? "7 ngày" : "30 ngày"}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto">
-        {entries.length === 0 ? (
+        {filteredEntries.length === 0 ? (
           <p className="p-4 text-center text-xs text-muted-foreground">
-            Chưa có lịch sử
+            {entries.length === 0 ? "Chưa có lịch sử" : "Không tìm thấy kết quả"}
           </p>
         ) : (
-          entries.map((entry) => {
+          filteredEntries.map((entry) => {
             const isBatch = !!entry.batch_page_count;
             const isExpanded = expandedBatch === entry.id;
             const pages = batchPages[entry.id];

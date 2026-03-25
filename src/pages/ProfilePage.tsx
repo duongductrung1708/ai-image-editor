@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Save, Upload } from "lucide-react";
+import { Loader2, Save, Upload, KeyRound } from "lucide-react";
 
 const ProfilePage = () => {
   const { user } = useAuth();
@@ -17,6 +17,10 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -46,6 +50,32 @@ const ProfilePage = () => {
       toast.error("Không thể lưu hồ sơ.");
     } else {
       toast.success("Đã cập nhật hồ sơ!");
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      toast.error("Vui lòng nhập đầy đủ mật khẩu mới.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error("Mật khẩu mới phải có ít nhất 6 ký tự.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Mật khẩu xác nhận không khớp.");
+      return;
+    }
+    setChangingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setChangingPassword(false);
+    if (error) {
+      toast.error(error.message || "Không thể đổi mật khẩu.");
+    } else {
+      toast.success("Đã đổi mật khẩu thành công!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
     }
   };
 
@@ -151,6 +181,45 @@ const ProfilePage = () => {
             <Button onClick={handleSave} disabled={saving} className="w-full gap-1.5">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {saving ? "Đang lưu..." : "Lưu thay đổi"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Change Password */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-xl flex items-center gap-2">
+              <KeyRound className="h-5 w-5" />
+              Đổi mật khẩu
+            </CardTitle>
+            <CardDescription>Cập nhật mật khẩu đăng nhập của bạn</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">Mật khẩu mới</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Nhập mật khẩu mới"
+                minLength={6}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Xác nhận mật khẩu mới</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Nhập lại mật khẩu mới"
+                minLength={6}
+              />
+            </div>
+            <Button onClick={handleChangePassword} disabled={changingPassword} className="w-full gap-1.5">
+              {changingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              {changingPassword ? "Đang đổi..." : "Đổi mật khẩu"}
             </Button>
           </CardContent>
         </Card>
