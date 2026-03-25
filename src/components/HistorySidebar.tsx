@@ -56,9 +56,39 @@ const HistorySidebar = ({
     imageName: string;
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month">("all");
   const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
   const [batchPages, setBatchPages] = useState<Record<string, BatchPageDetail[]>>({});
   const [loadingPages, setLoadingPages] = useState<string | null>(null);
+
+  const filteredEntries = useMemo(() => {
+    let result = entries;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (e) =>
+          e.image_name.toLowerCase().includes(q) ||
+          e.extracted_text.toLowerCase().includes(q)
+      );
+    }
+
+    if (dateFilter !== "all") {
+      const now = new Date();
+      let cutoff: Date;
+      if (dateFilter === "today") {
+        cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      } else if (dateFilter === "week") {
+        cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      } else {
+        cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+      result = result.filter((e) => new Date(e.created_at) >= cutoff);
+    }
+
+    return result;
+  }, [entries, searchQuery, dateFilter]);
 
   const fetchHistory = async () => {
     const { data: histData, error: histErr } = await supabase
