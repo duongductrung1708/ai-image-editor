@@ -183,6 +183,45 @@ const ProfilePage = () => {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Change Password */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-xl flex items-center gap-2">
+              <KeyRound className="h-5 w-5" />
+              Đổi mật khẩu
+            </CardTitle>
+            <CardDescription>Cập nhật mật khẩu đăng nhập của bạn</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">Mật khẩu mới</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Nhập mật khẩu mới"
+                minLength={6}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Xác nhận mật khẩu mới</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Nhập lại mật khẩu mới"
+                minLength={6}
+              />
+            </div>
+            <Button onClick={handleChangePassword} disabled={changingPassword} className="w-full gap-1.5">
+              {changingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              {changingPassword ? "Đang đổi..." : "Đổi mật khẩu"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
