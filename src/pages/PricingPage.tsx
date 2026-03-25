@@ -22,7 +22,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "199.000đ",
+    price: "99.000đ",
     period: "/tháng",
     model: "Model OCR Pro v2",
     outputQuality: "Cao",
@@ -39,7 +39,7 @@ const plans = [
   },
   {
     name: "Business",
-    price: "799.000đ",
+    price: "499.000đ",
     period: "/tháng",
     model: "Model OCR Enterprise X",
     outputQuality: "Rất cao",
