@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Clock, Trash2, Eye, Images, ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Clock, Trash2, Eye, Images, ChevronDown, ChevronRight, FileText, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
