@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Save, Upload } from "lucide-react";
+import { Loader2, Save, Upload, KeyRound } from "lucide-react";
 
 const ProfilePage = () => {
   const { user } = useAuth();
