@@ -399,6 +399,8 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
             cropperApiRef.current?.reset();
           }}
           onStartOcr={() => void startOcr()}
+          quotaRemaining={quotaRemaining}
+          quotaUnlimited={quotaUnlimited}
         />
       )}
     </div>
