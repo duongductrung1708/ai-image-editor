@@ -118,9 +118,15 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     setImageUrl(url);
   }, []);
 
+  const { canUse: quotaCanUse, remaining: quotaRemaining, isUnlimited: quotaUnlimited, refresh: refreshQuota } = useOcrQuota();
+
   const startOcr = useCallback(async () => {
     if (phase === "processing") return;
     if (!editFile) return;
+    if (!quotaCanUse) {
+      toast.error(`Bạn đã hết lượt OCR miễn phí hôm nay (${quotaRemaining}/${10} lượt). Nâng cấp Pro để không giới hạn.`);
+      return;
+    }
 
     try {
       setShowHistory(false);
