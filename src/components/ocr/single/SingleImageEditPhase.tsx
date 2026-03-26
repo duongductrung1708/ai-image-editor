@@ -141,8 +141,13 @@ const SingleImageEditPhase = ({
                 </Button>
               </div>
 
-              <p className="mt-2 text-xs text-muted-foreground">
-                Thu nhỏ/di chuyển khung crop để OCR đúng vùng.
+              {!quotaUnlimited && quotaRemaining !== undefined && (
+                <p className="mt-2 text-xs font-medium text-muted-foreground">
+                  Còn lại: <span className={quotaRemaining <= 3 ? "text-destructive" : "text-primary"}>{quotaRemaining}</span>/10 lượt hôm nay
+                </p>
+              )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                Thu nhỏ/di chuyện khung crop để OCR đúng vùng.
               </p>
             </div>
 
