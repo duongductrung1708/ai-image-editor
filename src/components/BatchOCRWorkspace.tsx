@@ -152,7 +152,7 @@ const BatchOCRWorkspace = ({
           totalBytes={totalBytes}
           extensionSummary={extensionSummary}
           isProcessing={isProcessing}
-          onStartBatch={() => void runBatch()}
+          onStartBatch={guardedRunBatch}
         />
       )}
 
