@@ -1,16 +1,24 @@
 import { Check, Sparkles } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useSubscription } from "@/hooks/useSubscription";
+import { STRIPE_TIERS, type StripeTier } from "@/lib/stripeTiers";
 
 const plans = [
   {
+    tier: null as const,
     name: "Free",
     price: "0đ",
     period: "/tháng",
     model: "Model OCR Lite",
     outputQuality: "Chuẩn",
-    description: "Phù hợp để trải nghiệm OCR cơ bản với đầu ra rõ ràng, dễ đọc.",
+    description:
+      "Phù hợp để trải nghiệm OCR cơ bản với đầu ra rõ ràng, dễ đọc.",
     features: [
       "Model Lite tối ưu cho tài liệu in rõ, bố cục đơn giản",
       "Đầu ra sạch cho đoạn văn ngắn và biểu mẫu cơ bản",
@@ -21,6 +29,7 @@ const plans = [
     highlighted: false,
   },
   {
+    tier: "pro" as const,
     name: "Pro",
     price: "99.000đ",
     period: "/tháng",
@@ -38,6 +47,7 @@ const plans = [
     highlighted: true,
   },
   {
+    tier: "business" as const,
     name: "Business",
     price: "499.000đ",
     period: "/tháng",
@@ -51,12 +61,65 @@ const plans = [
       "Độ ổn định đầu ra cao giữa nhiều loại mẫu chứng từ khác nhau",
       "Phù hợp hệ thống cần chất lượng OCR nhất quán ở quy mô lớn",
     ],
-    cta: "Liên hệ tư vấn",
+    cta: "Chọn gói Business",
     highlighted: false,
   },
 ];
 
 const PricingPage = () => {
+  const navigate = useNavigate();
+  const { user, session } = useAuth();
+  const { tier: currentTier, refresh } = useSubscription();
+  const [checkoutLoading, setCheckoutLoading] = useState<StripeTier | null>(
+    null,
+  );
+
+  const accessToken = session?.access_token;
+
+  useEffect(() => {
+    // Optional: if you later change `success_url` to point here, this will refresh.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("success") === "true") {
+      toast.success("Thanh toán thành công! Đang cập nhật gói...");
+      void refresh();
+    }
+  }, [refresh]);
+
+  const canCheckout = (tier: StripeTier) =>
+    Boolean(user && accessToken && STRIPE_TIERS[tier]);
+
+  const handleCheckout = async (tier: StripeTier) => {
+    if (!user || !accessToken) {
+      navigate("/auth");
+      return;
+    }
+
+    setCheckoutLoading(tier);
+    try {
+      const priceId = STRIPE_TIERS[tier].price_id;
+      const { data, error } = await supabase.functions.invoke(
+        "create-checkout",
+        {
+          body: { priceId },
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
+      if (error) throw error;
+      if (data?.url) window.open(data.url, "_blank");
+    } catch {
+      toast.error("Không thể tạo phiên thanh toán.");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
+
+  const handleSelectFree = () => {
+    // Free users can go straight to OCR.
+    navigate("/app");
+  };
+
+  const sortedPlans = useMemo(() => plans, []);
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -77,71 +140,102 @@ const PricingPage = () => {
         </section>
 
         <section className="grid gap-6 md:grid-cols-3">
-          {plans.map((plan) => (
-            <article
-              key={plan.name}
-              className={`rounded-2xl border bg-card p-6 shadow-sm ${
-                plan.highlighted
-                  ? "border-primary ring-1 ring-primary/20"
-                  : "border-border"
-              }`}
-            >
-              {plan.highlighted ? (
-                <span className="mb-4 inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                  Phổ biến
-                </span>
-              ) : null}
+          {sortedPlans.map((plan) => {
+            const isCurrent = plan.tier && currentTier === plan.tier;
+            const isCheckout = Boolean(plan.tier) && !isCurrent;
 
-              <h2 className="text-xl font-semibold text-foreground font-display">
-                {plan.name}
-              </h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {plan.description}
-              </p>
-              <div className="mt-4 space-y-2 rounded-lg border border-border bg-background/60 p-3">
-                <p className="text-xs text-muted-foreground">
-                  Model:{" "}
-                  <span className="font-medium text-foreground">
-                    {plan.model}
-                  </span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Chất lượng đầu ra:{" "}
-                  <span className="font-medium text-primary">
-                    {plan.outputQuality}
-                  </span>
-                </p>
-              </div>
+            const buttonLabel =
+              plan.tier === null
+                ? plan.cta
+                : isCurrent
+                  ? "Gói hiện tại"
+                  : plan.cta;
 
-              <div className="mt-5 flex items-end gap-1">
-                <span className="text-3xl font-bold text-foreground">
-                  {plan.price}
-                </span>
-                <span className="pb-1 text-sm text-muted-foreground">
-                  {plan.period}
-                </span>
-              </div>
-
-              <ul className="mt-6 space-y-3">
-                {plan.features.map((feature) => (
-                  <li
-                    key={feature}
-                    className="flex items-start gap-2 text-sm text-muted-foreground"
-                  >
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <Button
-                className="mt-7 w-full"
-                variant={plan.highlighted ? "default" : "outline"}
+            return (
+              <article
+                key={plan.name}
+                className={`rounded-2xl border bg-card p-6 shadow-sm ${
+                  plan.highlighted
+                    ? "border-primary ring-1 ring-primary/20"
+                    : "border-border"
+                }`}
               >
-                {plan.cta}
-              </Button>
-            </article>
-          ))}
+                {plan.highlighted ? (
+                  <span className="mb-4 inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                    Phổ biến
+                  </span>
+                ) : null}
+
+                <h2 className="text-xl font-semibold text-foreground font-display">
+                  {plan.name}
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {plan.description}
+                </p>
+                <div className="mt-4 space-y-2 rounded-lg border border-border bg-background/60 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Model:{" "}
+                    <span className="font-medium text-foreground">
+                      {plan.model}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Chất lượng đầu ra:{" "}
+                    <span className="font-medium text-primary">
+                      {plan.outputQuality}
+                    </span>
+                  </p>
+                </div>
+
+                <div className="mt-5 flex items-end gap-1">
+                  <span className="text-3xl font-bold text-foreground">
+                    {plan.price}
+                  </span>
+                  <span className="pb-1 text-sm text-muted-foreground">
+                    {plan.period}
+                  </span>
+                </div>
+
+                <ul className="mt-6 space-y-3">
+                  {plan.features.map((feature) => (
+                    <li
+                      key={feature}
+                      className="flex items-start gap-2 text-sm text-muted-foreground"
+                    >
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <Button
+                  className="mt-7 w-full"
+                  variant={plan.highlighted ? "default" : "outline"}
+                  disabled={
+                    plan.tier !== null &&
+                    (isCurrent || checkoutLoading === plan.tier)
+                  }
+                  onClick={() => {
+                    if (plan.tier === null) {
+                      handleSelectFree();
+                      return;
+                    }
+
+                    if (!canCheckout(plan.tier)) {
+                      navigate("/auth");
+                      return;
+                    }
+
+                    void handleCheckout(plan.tier);
+                  }}
+                >
+                  {checkoutLoading === plan.tier
+                    ? "Đang xử lý..."
+                    : buttonLabel}
+                </Button>
+              </article>
+            );
+          })}
         </section>
 
         <div className="mt-10 text-center">
