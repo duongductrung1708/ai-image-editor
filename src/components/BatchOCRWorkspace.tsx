@@ -81,13 +81,23 @@ const BatchOCRWorkspace = ({
     [],
   );
 
+  const { canUse: quotaCanUse, remaining: quotaRemaining, refresh: refreshQuota } = useOcrQuota();
+
   useEffect(() => {
     setLinkedBatchHighlight(null);
   }, [markdownText, batchPages]);
 
+  const guardedRunBatch = useCallback(() => {
+    if (!quotaCanUse) {
+      toast.error(`Bạn đã hết lượt OCR miễn phí hôm nay. Nâng cấp Pro để không giới hạn.`);
+      return;
+    }
+    void runBatch().then(() => refreshQuota());
+  }, [quotaCanUse, runBatch, refreshQuota]);
+
   const handleToolbarReprocess = useCallback(() => {
-    if (phase === "result") void runBatch();
-  }, [phase, runBatch]);
+    if (phase === "result") guardedRunBatch();
+  }, [phase, guardedRunBatch]);
 
   const toolbarTitle =
     phase === "result"
