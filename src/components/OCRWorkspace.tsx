@@ -13,6 +13,7 @@ import { useOcrMarkdownEditor } from "@/hooks/useOcrMarkdownEditor";
 import { useObjectUrl } from "@/hooks/useObjectUrl";
 import { useSingleImageOcr } from "@/hooks/useSingleImageOcr";
 import { useSingleImageExportActions } from "@/hooks/useSingleImageExportActions";
+import { useOcrQuota } from "@/hooks/useOcrQuota";
 import { enhanceFile } from "@/lib/imageProcessing";
 
 interface OCRWorkspaceProps {
