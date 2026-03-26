@@ -16,6 +16,8 @@ interface SingleImageEditPhaseProps {
   onToggleEnhance: () => void;
   onResetImage: () => void;
   onStartOcr: () => void;
+  quotaRemaining?: number;
+  quotaUnlimited?: boolean;
 }
 
 /**
@@ -32,6 +34,8 @@ const SingleImageEditPhase = ({
   onToggleEnhance,
   onResetImage,
   onStartOcr,
+  quotaRemaining,
+  quotaUnlimited,
 }: SingleImageEditPhaseProps) => {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
@@ -132,8 +136,13 @@ const SingleImageEditPhase = ({
                 </Button>
               </div>
 
-              <p className="mt-2 text-xs text-muted-foreground">
-                Thu nhỏ/di chuyển khung crop để OCR đúng vùng.
+              {!quotaUnlimited && quotaRemaining !== undefined && (
+                <p className="mt-2 text-xs font-medium text-muted-foreground">
+                  Còn lại: <span className={quotaRemaining <= 3 ? "text-destructive" : "text-primary"}>{quotaRemaining}</span>/10 lượt hôm nay
+                </p>
+              )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                Thu nhỏ/di chuyện khung crop để OCR đúng vùng.
               </p>
             </div>
 

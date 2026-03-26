@@ -8,6 +8,8 @@ import { useIsLgScreen } from "@/hooks/useMediaQueryMinWidth";
 import { useOcrMarkdownEditor } from "@/hooks/useOcrMarkdownEditor";
 import { useBatchOcr } from "@/hooks/useBatchOcr";
 import { useOcrBatchExportActions } from "@/hooks/useOcrBatchExportActions";
+import { useOcrQuota } from "@/hooks/useOcrQuota";
+import { toast } from "sonner";
 
 interface BatchOCRWorkspaceProps {
   files: File[];
@@ -79,13 +81,23 @@ const BatchOCRWorkspace = ({
     [],
   );
 
+  const { canUse: quotaCanUse, remaining: quotaRemaining, refresh: refreshQuota } = useOcrQuota();
+
   useEffect(() => {
     setLinkedBatchHighlight(null);
   }, [markdownText, batchPages]);
 
+  const guardedRunBatch = useCallback(() => {
+    if (!quotaCanUse) {
+      toast.error(`Bạn đã hết lượt OCR miễn phí hôm nay. Nâng cấp Pro để không giới hạn.`);
+      return;
+    }
+    void runBatch().then(() => refreshQuota());
+  }, [quotaCanUse, runBatch, refreshQuota]);
+
   const handleToolbarReprocess = useCallback(() => {
-    if (phase === "result") void runBatch();
-  }, [phase, runBatch]);
+    if (phase === "result") guardedRunBatch();
+  }, [phase, guardedRunBatch]);
 
   const toolbarTitle =
     phase === "result"
@@ -140,7 +152,7 @@ const BatchOCRWorkspace = ({
           totalBytes={totalBytes}
           extensionSummary={extensionSummary}
           isProcessing={isProcessing}
-          onStartBatch={() => void runBatch()}
+          onStartBatch={guardedRunBatch}
         />
       )}
 

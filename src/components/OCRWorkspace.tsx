@@ -13,6 +13,7 @@ import { useOcrMarkdownEditor } from "@/hooks/useOcrMarkdownEditor";
 import { useObjectUrl } from "@/hooks/useObjectUrl";
 import { useSingleImageOcr } from "@/hooks/useSingleImageOcr";
 import { useSingleImageExportActions } from "@/hooks/useSingleImageExportActions";
+import { useOcrQuota } from "@/hooks/useOcrQuota";
 import { enhanceFile } from "@/lib/imageProcessing";
 
 interface OCRWorkspaceProps {
@@ -117,9 +118,15 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     setImageUrl(url);
   }, []);
 
+  const { canUse: quotaCanUse, remaining: quotaRemaining, isUnlimited: quotaUnlimited, refresh: refreshQuota } = useOcrQuota();
+
   const startOcr = useCallback(async () => {
     if (phase === "processing") return;
     if (!editFile) return;
+    if (!quotaCanUse) {
+      toast.error(`Bạn đã hết lượt OCR miễn phí hôm nay (${quotaRemaining}/${10} lượt). Nâng cấp Pro để không giới hạn.`);
+      return;
+    }
 
     try {
       setShowHistory(false);
@@ -172,6 +179,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         return;
       }
       setPhase(ok ? "result" : "edit");
+      if (ok) refreshQuota();
     } finally {
       clearCancelRequest();
     }
@@ -182,6 +190,9 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     enhance,
     isCancelRequested,
     phase,
+    quotaCanUse,
+    quotaRemaining,
+    refreshQuota,
     runOcrOnFile,
     setOcrImageFromFile,
     setOcrLoadingUi,
@@ -388,6 +399,8 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
             cropperApiRef.current?.reset();
           }}
           onStartOcr={() => void startOcr()}
+          quotaRemaining={quotaRemaining}
+          quotaUnlimited={quotaUnlimited}
         />
       )}
     </div>
