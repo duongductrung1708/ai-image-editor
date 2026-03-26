@@ -34,6 +34,13 @@ const SingleImageEditPhase = ({
   onToggleEnhance,
   onResetImage,
   onStartOcr,
+  quotaRemaining,
+  quotaUnlimited,
+}: SingleImageEditPhaseProps) => {
+  onRotate,
+  onToggleEnhance,
+  onResetImage,
+  onStartOcr,
 }: SingleImageEditPhaseProps) => {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
