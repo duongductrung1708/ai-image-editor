@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 
-const FREE_DAILY_LIMIT = 10;
+const FREE_DAILY_LIMIT = 5;
 
 export function useOcrQuota() {
   const { user } = useAuth();
