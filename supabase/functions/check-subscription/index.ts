@@ -7,6 +7,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Stripe may return `product` as id string or expanded object on subscription items. */
+function productIdFromPrice(price: { product?: string | { id?: string } } | null | undefined): string | null {
+  if (!price?.product) return null;
+  const p = price.product;
+  if (typeof p === "string") return p;
+  if (typeof p === "object" && p !== null && typeof p.id === "string") return p.id;
+  return null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -31,7 +40,7 @@ serve(async (req) => {
     const user = userData.user;
     if (!user?.email) throw new Error("User not authenticated");
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+    const stripe = new Stripe(stripeKey, { apiVersion: "2024-11-20.acacia" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
 
     if (customers.data.length === 0) {
@@ -43,18 +52,20 @@ serve(async (req) => {
     const customerId = customers.data[0].id;
     const subscriptions = await stripe.subscriptions.list({
       customer: customerId,
-      status: "active",
-      limit: 1,
+      limit: 10,
     });
 
-    const hasActiveSub = subscriptions.data.length > 0;
-    let productId = null;
-    let subscriptionEnd = null;
+    const paidStatuses = new Set(["active", "trialing"]);
+    const sub = subscriptions.data.find((s) => paidStatuses.has(s.status));
 
-    if (hasActiveSub) {
-      const sub = subscriptions.data[0];
+    const hasActiveSub = Boolean(sub);
+    let productId: string | null = null;
+    let subscriptionEnd: string | null = null;
+
+    if (sub) {
       subscriptionEnd = new Date(sub.current_period_end * 1000).toISOString();
-      productId = sub.items.data[0].price.product;
+      const firstItem = sub.items.data[0];
+      productId = firstItem ? productIdFromPrice(firstItem.price) : null;
     }
 
     return new Response(JSON.stringify({
@@ -65,7 +76,9 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("check-subscription error:", message, error);
+    return new Response(JSON.stringify({ error: message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

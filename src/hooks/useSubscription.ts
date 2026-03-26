@@ -11,7 +11,7 @@ interface SubscriptionState {
 }
 
 export function useSubscription() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [state, setState] = useState<SubscriptionState>({
     subscribed: false,
     tier: "free",
@@ -24,8 +24,15 @@ export function useSubscription() {
       setState({ subscribed: false, tier: "free", subscriptionEnd: null, loading: false });
       return;
     }
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      setState({ subscribed: false, tier: "free", subscriptionEnd: null, loading: false });
+      return;
+    }
     try {
-      const { data, error } = await supabase.functions.invoke("check-subscription");
+      const { data, error } = await supabase.functions.invoke("check-subscription", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       if (error) throw error;
       setState({
         subscribed: data.subscribed,
@@ -36,7 +43,7 @@ export function useSubscription() {
     } catch {
       setState((s) => ({ ...s, loading: false }));
     }
-  }, [user]);
+  }, [session, user]);
 
   useEffect(() => {
     check();

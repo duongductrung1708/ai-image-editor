@@ -62,7 +62,7 @@ const plans = [
 ];
 
 const ProfilePage = () => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { tier: currentTier, subscriptionEnd, loading: subLoading, refresh } = useSubscription();
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -150,9 +150,14 @@ const ProfilePage = () => {
   const handleCheckout = async (planKey: "pro" | "business") => {
     setCheckoutLoading(planKey);
     try {
+      if (!session?.access_token) {
+        toast.error("Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.");
+        return;
+      }
       const priceId = STRIPE_TIERS[planKey].price_id;
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: { priceId },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) throw error;
       if (data?.url) window.open(data.url, "_blank");
@@ -163,6 +168,10 @@ const ProfilePage = () => {
   const handleManageSubscription = async () => {
     setPortalLoading(true);
     try {
+      if (!session?.access_token) {
+        toast.error("Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.");
+        return;
+      }
       const { data, error } = await supabase.functions.invoke("customer-portal");
       if (error) throw error;
       if (data?.url) window.open(data.url, "_blank");

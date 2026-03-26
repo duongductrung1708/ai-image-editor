@@ -28,7 +28,7 @@ serve(async (req) => {
     if (!priceId) throw new Error("priceId is required");
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2025-08-27.basil",
+      apiVersion: "2024-11-20.acacia",
     });
 
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
