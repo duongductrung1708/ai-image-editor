@@ -37,11 +37,6 @@ const SingleImageEditPhase = ({
   quotaRemaining,
   quotaUnlimited,
 }: SingleImageEditPhaseProps) => {
-  onRotate,
-  onToggleEnhance,
-  onResetImage,
-  onStartOcr,
-}: SingleImageEditPhaseProps) => {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
       <div className="flex min-h-[240px] w-full flex-1 border-b border-border lg:min-h-0 lg:w-1/2 lg:border-b-0 lg:border-r">
