@@ -8,6 +8,8 @@ import { useIsLgScreen } from "@/hooks/useMediaQueryMinWidth";
 import { useOcrMarkdownEditor } from "@/hooks/useOcrMarkdownEditor";
 import { useBatchOcr } from "@/hooks/useBatchOcr";
 import { useOcrBatchExportActions } from "@/hooks/useOcrBatchExportActions";
+import { useOcrQuota } from "@/hooks/useOcrQuota";
+import { toast } from "sonner";
 
 interface BatchOCRWorkspaceProps {
   files: File[];
