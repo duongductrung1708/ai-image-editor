@@ -179,6 +179,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         return;
       }
       setPhase(ok ? "result" : "edit");
+      if (ok) refreshQuota();
     } finally {
       clearCancelRequest();
     }
@@ -189,6 +190,9 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     enhance,
     isCancelRequested,
     phase,
+    quotaCanUse,
+    quotaRemaining,
+    refreshQuota,
     runOcrOnFile,
     setOcrImageFromFile,
     setOcrLoadingUi,
