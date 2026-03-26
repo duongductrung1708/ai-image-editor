@@ -16,6 +16,8 @@ interface SingleImageEditPhaseProps {
   onToggleEnhance: () => void;
   onResetImage: () => void;
   onStartOcr: () => void;
+  quotaRemaining?: number;
+  quotaUnlimited?: boolean;
 }
 
 /**
