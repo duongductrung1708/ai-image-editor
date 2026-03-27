@@ -16,6 +16,23 @@ import {
 const OCR_FUNCTION_URL =
   "https://stfjeonxdidrqbrunkss.supabase.co/functions/v1/ocr-vietnamese";
 
+function normalizeOcrText(value: string): string {
+  if (!value) return "";
+  let out = value.trim();
+  if (
+    (out.startsWith('"') && out.endsWith('"')) ||
+    (out.startsWith("'") && out.endsWith("'"))
+  ) {
+    try {
+      const parsed = JSON.parse(out);
+      if (typeof parsed === "string") out = parsed;
+    } catch {
+      // keep original
+    }
+  }
+  return out.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+}
+
 export type BatchPhase = "ready" | "processing" | "result";
 
 export function useBatchOcr(files: File[]) {
@@ -175,16 +192,28 @@ export function useBatchOcr(files: File[]) {
         throw new Error("Unexpected batch response");
       }
 
-      const okCount = data.pages.filter((p) => p.ok).length;
-      const failCount = data.pages.length - okCount;
-      setMarkdownText(data.markdown);
-      setJsonText(JSON.stringify(data, null, 2));
+      const normalizedPages = data.pages.map((p) => ({
+        ...p,
+        markdown: normalizeOcrText(p.markdown),
+        full_text: normalizeOcrText(p.full_text),
+      }));
+      const normalizedData = {
+        ...data,
+        markdown: normalizeOcrText(data.markdown),
+        full_text: normalizeOcrText(data.full_text),
+        pages: normalizedPages,
+      };
+
+      const okCount = normalizedData.pages.filter((p) => p.ok).length;
+      const failCount = normalizedData.pages.length - okCount;
+      setMarkdownText(normalizedData.markdown);
+      setJsonText(JSON.stringify(normalizedData, null, 2));
       setLastBatchMeta({
         okCount,
         failCount,
-        concurrency: data.concurrency,
+        concurrency: normalizedData.concurrency,
       });
-      setBatchPages(data.pages);
+      setBatchPages(normalizedData.pages);
       setRestoredFromHistory(false);
       setHistoryFirstImageData(null);
       setPhase("result");
@@ -199,11 +228,11 @@ export function useBatchOcr(files: File[]) {
         const { data: session, error: sessErr } = await supabase
           .from("ocr_batch_sessions")
           .insert({
-            page_count: data.pages.length,
+            page_count: normalizedData.pages.length,
             ok_count: okCount,
             fail_count: failCount,
-            concurrency: data.concurrency,
-            merged_markdown: data.markdown,
+            concurrency: normalizedData.concurrency,
+            merged_markdown: normalizedData.markdown,
             preview_image_data,
             user_id: user?.id,
           })
@@ -213,7 +242,7 @@ export function useBatchOcr(files: File[]) {
         if (sessErr) throw sessErr;
 
         // Insert batch pages
-        const pageRows = data.pages.map((p) => ({
+        const pageRows = normalizedData.pages.map((p) => ({
           session_id: session.id,
           page_index: p.index,
           file_name: p.name,
@@ -228,11 +257,11 @@ export function useBatchOcr(files: File[]) {
         // Also save to ocr_history for unified history view
         await supabase.from("ocr_history").insert({
           image_name: `Hàng loạt (${files.length} ảnh)`,
-          extracted_text: data.markdown,
+          extracted_text: normalizedData.markdown,
           bounding_boxes: {
             batch: true,
             batch_session_id: session.id,
-            pages: data.pages.map((p) => ({
+            pages: normalizedData.pages.map((p) => ({
               index: p.index,
               name: p.name,
               ok: p.ok,
@@ -252,7 +281,7 @@ export function useBatchOcr(files: File[]) {
 
       if (failCount > 0) {
         toast.warning(
-          `Hoàn tất: ${okCount}/${data.pages.length} trang thành công, ${failCount} lỗi.`,
+          `Hoàn tất: ${okCount}/${normalizedData.pages.length} trang thành công, ${failCount} lỗi.`,
         );
       } else {
         toast.success(`Đã OCR xong ${okCount} trang.`);

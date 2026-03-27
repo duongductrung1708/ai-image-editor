@@ -21,6 +21,37 @@ marked.setOptions({ gfm: true, breaks: true });
 const EDITOR_BODY_CLASS =
   "prose prose-sm max-w-none min-h-full text-foreground focus:outline-none font-body";
 
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function toEditorHtml(markdownText: string): string {
+  const trimmed = markdownText.trim();
+  if (!trimmed) return "";
+
+  // Some OCR providers return literal "\n" instead of real newlines.
+  const normalized = trimmed.includes("\\n")
+    ? trimmed.replace(/\\n/g, "\n")
+    : trimmed;
+
+  try {
+    const html = marked.parse(normalized);
+    if (typeof html === "string" && html.trim().length > 0) {
+      return html;
+    }
+  } catch {
+    // Fallback below
+  }
+
+  // Guaranteed renderable fallback: keep text exactly as plain content.
+  return `<p>${escapeHtml(normalized).replace(/\n/g, "<br/>")}</p>`;
+}
+
 /**
  * TipTap + Turndown dùng chung cho OCR Markdown (1 ảnh & batch).
  */
@@ -59,7 +90,7 @@ export function useOcrMarkdownEditor(markdownText: string) {
 
   const editor = useEditor({
     extensions,
-    content: markdownText ? (marked.parse(markdownText) as string) : "",
+    content: toEditorHtml(markdownText),
     editorProps: {
       attributes: {
         class: EDITOR_BODY_CLASS,
@@ -69,9 +100,7 @@ export function useOcrMarkdownEditor(markdownText: string) {
 
   useEffect(() => {
     if (!editor) return;
-    const nextHtml = markdownText
-      ? (marked.parse(markdownText) as string)
-      : "";
+    const nextHtml = toEditorHtml(markdownText);
     editor.commands.setContent(nextHtml || "");
   }, [editor, markdownText]);
 

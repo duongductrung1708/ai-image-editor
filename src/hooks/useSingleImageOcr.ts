@@ -14,6 +14,28 @@ import {
 const OCR_FUNCTION_URL =
   "https://stfjeonxdidrqbrunkss.supabase.co/functions/v1/ocr-vietnamese";
 
+function normalizeOcrText(value: string): string {
+  if (!value) return "";
+  let out = value.trim();
+
+  // Some providers/functions may return a JSON-encoded string inside a string.
+  if (
+    (out.startsWith('"') && out.endsWith('"')) ||
+    (out.startsWith("'") && out.endsWith("'"))
+  ) {
+    try {
+      const parsed = JSON.parse(out);
+      if (typeof parsed === "string") out = parsed;
+    } catch {
+      // keep original
+    }
+  }
+
+  // Normalize escaped newlines/tabs so markdown editor can render reliably.
+  out = out.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+  return out;
+}
+
 /**
  * Gọi API OCR một ảnh, lưu lịch sử, hỗ trợ Abort / hủy.
  */
@@ -85,8 +107,10 @@ export function useSingleImageOcr() {
         return false;
       }
 
-      const md = data.markdown.length > 0 ? data.markdown : "";
-      const fullText = data.full_text.length > 0 ? data.full_text : "";
+      const md = data.markdown.length > 0 ? normalizeOcrText(data.markdown) : "";
+      const fullText = data.full_text.length > 0
+        ? normalizeOcrText(data.full_text)
+        : "";
       const blocks: BoundingBox[] = Array.isArray(data.blocks)
         ? (data.blocks as unknown as BoundingBox[])
         : [];
