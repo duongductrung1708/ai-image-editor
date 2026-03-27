@@ -17,6 +17,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -28,6 +38,7 @@ import {
   Check,
   ExternalLink,
   History,
+  Trash2,
 } from "lucide-react";
 
 const plans = [
@@ -108,7 +119,13 @@ const ProfilePage = () => {
   const [ocrHistory, setOcrHistory] = useState<OcrHistoryItem[]>([]);
   const [ocrHistoryLoading, setOcrHistoryLoading] = useState(false);
   const [ocrHistoryQuery, setOcrHistoryQuery] = useState("");
-  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(
+    null,
+  );
+  const [deletingHistory, setDeletingHistory] = useState(false);
+  const [deletingAllHistory, setDeletingAllHistory] = useState(false);
+  const [confirmDeleteOneOpen, setConfirmDeleteOneOpen] = useState(false);
+  const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -142,7 +159,9 @@ const ProfilePage = () => {
       setOcrHistoryLoading(true);
       const { data, error } = await supabase
         .from("ocr_history")
-        .select("id, image_name, extracted_text, image_data, bounding_boxes, created_at")
+        .select(
+          "id, image_name, extracted_text, image_data, bounding_boxes, created_at",
+        )
         .order("created_at", { ascending: false })
         .limit(100);
 
@@ -172,6 +191,57 @@ const ProfilePage = () => {
 
   const selectedHistory =
     filteredHistory.find((item) => item.id === selectedHistoryId) ?? null;
+
+  const handleDeleteSelectedHistory = async () => {
+    if (!selectedHistory || deletingHistory) return;
+
+    setDeletingHistory(true);
+    try {
+      const { error } = await supabase
+        .from("ocr_history")
+        .delete()
+        .eq("id", selectedHistory.id);
+
+      if (error) {
+        toast.error("Không thể xóa lịch sử OCR.");
+        return;
+      }
+
+      setOcrHistory((prev) => {
+        const next = prev.filter((item) => item.id !== selectedHistory.id);
+        setSelectedHistoryId(next[0]?.id ?? null);
+        return next;
+      });
+      setConfirmDeleteOneOpen(false);
+      toast.success("Đã xóa lịch sử OCR.");
+    } finally {
+      setDeletingHistory(false);
+    }
+  };
+
+  const handleDeleteAllHistory = async () => {
+    if (ocrHistory.length === 0 || deletingAllHistory) return;
+
+    setDeletingAllHistory(true);
+    try {
+      const { error } = await supabase
+        .from("ocr_history")
+        .delete()
+        .neq("id", "");
+
+      if (error) {
+        toast.error("Không thể xóa toàn bộ lịch sử OCR.");
+        return;
+      }
+
+      setOcrHistory([]);
+      setSelectedHistoryId(null);
+      setConfirmDeleteAllOpen(false);
+      toast.success("Đã xóa toàn bộ lịch sử OCR.");
+    } finally {
+      setDeletingAllHistory(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!user) return;
@@ -300,6 +370,70 @@ const ProfilePage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <AlertDialog
+        open={confirmDeleteOneOpen}
+        onOpenChange={(open) => {
+          if (!deletingHistory) setConfirmDeleteOneOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa lịch sử OCR?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedHistory
+                ? `Bạn có chắc muốn xóa "${selectedHistory.image_name}"? Hành động này không thể hoàn tác.`
+                : "Bạn có chắc muốn xóa bản ghi này? Hành động này không thể hoàn tác."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingHistory}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDeleteSelectedHistory();
+              }}
+              disabled={deletingHistory || !selectedHistory}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingHistory ? "Đang xóa..." : "Xóa"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirmDeleteAllOpen}
+        onOpenChange={(open) => {
+          if (!deletingAllHistory) setConfirmDeleteAllOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa toàn bộ lịch sử OCR?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hành động này sẽ xóa toàn bộ lịch sử OCR và không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingAllHistory}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDeleteAllHistory();
+              }}
+              disabled={deletingAllHistory || ocrHistory.length === 0}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingAllHistory ? "Đang xóa..." : "Xóa toàn bộ"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Navbar />
       <div className="mx-auto max-w-2xl px-6 pt-24 pb-16">
         <Tabs defaultValue="profile" className="w-full">
@@ -591,11 +725,28 @@ const ProfilePage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Input
-                  value={ocrHistoryQuery}
-                  onChange={(e) => setOcrHistoryQuery(e.target.value)}
-                  placeholder="Tìm theo tên file hoặc nội dung..."
-                />
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    value={ocrHistoryQuery}
+                    onChange={(e) => setOcrHistoryQuery(e.target.value)}
+                    placeholder="Tìm theo tên file hoặc nội dung..."
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => setConfirmDeleteAllOpen(true)}
+                    disabled={ocrHistory.length === 0 || deletingAllHistory}
+                    className="gap-1.5"
+                  >
+                    {deletingAllHistory ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                    Xóa toàn bộ
+                  </Button>
+                </div>
 
                 {ocrHistoryLoading ? (
                   <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
@@ -617,14 +768,18 @@ const ProfilePage = () => {
                             type="button"
                             onClick={() => setSelectedHistoryId(item.id)}
                             className={`w-full border-b border-border px-3 py-2 text-left transition-colors last:border-b-0 ${
-                              isActive ? "bg-secondary" : "hover:bg-secondary/40"
+                              isActive
+                                ? "bg-secondary"
+                                : "hover:bg-secondary/40"
                             }`}
                           >
                             <p className="truncate text-xs font-medium text-foreground">
                               {item.image_name}
                             </p>
                             <p className="mt-1 text-[10px] text-muted-foreground">
-                              {new Date(item.created_at).toLocaleString("vi-VN")}
+                              {new Date(item.created_at).toLocaleString(
+                                "vi-VN",
+                              )}
                             </p>
                           </button>
                         );
@@ -634,15 +789,31 @@ const ProfilePage = () => {
                     <div className="rounded-md border border-border bg-card p-3">
                       {selectedHistory ? (
                         <div className="space-y-3">
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">
-                              {selectedHistory.image_name}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(selectedHistory.created_at).toLocaleString(
-                                "vi-VN",
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                {selectedHistory.image_name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(
+                                  selectedHistory.created_at,
+                                ).toLocaleString("vi-VN")}
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              className="gap-1.5"
+                              onClick={() => setConfirmDeleteOneOpen(true)}
+                              disabled={deletingHistory}
+                            >
+                              {deletingHistory ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
                               )}
-                            </p>
+                            </Button>
                           </div>
 
                           {selectedHistory.image_data ? (
@@ -655,7 +826,8 @@ const ProfilePage = () => {
 
                           <div className="max-h-48 overflow-y-auto rounded border border-border bg-background p-2">
                             <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">
-                              {selectedHistory.extracted_text || "(Không có nội dung)"}
+                              {selectedHistory.extracted_text ||
+                                "(Không có nội dung)"}
                             </p>
                           </div>
                         </div>
