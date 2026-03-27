@@ -115,7 +115,7 @@ export function useOcrMarkdownEditor(markdownText: string) {
     // Use queueMicrotask to ensure editor is fully ready
     queueMicrotask(() => {
       if (editor.isDestroyed) return;
-      editor.commands.setContent(nextHtml || "", false);
+      editor.commands.setContent(nextHtml || "");
     });
   }, [editor, markdownText]);
 
