@@ -24,6 +24,8 @@ interface BatchReadyViewProps {
   extensionSummary: [string, number][];
   isProcessing: boolean;
   onStartBatch: () => void;
+  quotaRemaining?: number;
+  quotaUnlimited?: boolean;
 }
 
 /**
