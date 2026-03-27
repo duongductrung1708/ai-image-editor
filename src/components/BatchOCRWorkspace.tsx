@@ -23,6 +23,7 @@ const BatchOCRWorkspace = ({
   onBack,
   onPickAnother,
 }: BatchOCRWorkspaceProps) => {
+  const { user } = useAuth();
   const isLg = useIsLgScreen();
   const [showHistory, setShowHistory] = useState(false);
   const [linkedBatchHighlight, setLinkedBatchHighlight] = useState<{
