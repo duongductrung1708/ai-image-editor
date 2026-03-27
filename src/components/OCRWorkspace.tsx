@@ -126,7 +126,17 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     if (phase === "processing") return;
     if (!editFile) return;
     if (!quotaCanUse) {
-      toast.error(`Bạn đã hết lượt OCR miễn phí hôm nay (${quotaRemaining}/${10} lượt). Nâng cấp Pro để không giới hạn.`);
+      if (!user) {
+        toast.error("Bạn đã hết lượt dùng thử hôm nay. Đăng ký tài khoản miễn phí để có thêm lượt!", {
+          action: { label: "Đăng ký", onClick: () => window.location.href = "/auth" },
+          duration: 8000,
+        });
+      } else {
+        toast.error("Bạn đã hết lượt OCR miễn phí hôm nay. Nâng cấp Pro để không giới hạn.", {
+          action: { label: "Nâng cấp", onClick: () => window.location.href = "/profile?tab=pricing" },
+          duration: 8000,
+        });
+      }
       return;
     }
 
