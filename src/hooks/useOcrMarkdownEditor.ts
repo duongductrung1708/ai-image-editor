@@ -90,7 +90,8 @@ export function useOcrMarkdownEditor(markdownText: string) {
 
   const editor = useEditor({
     extensions,
-    content: toEditorHtml(markdownText),
+    content: "",
+    immediatelyRender: false,
     editorProps: {
       attributes: {
         class: EDITOR_BODY_CLASS,
@@ -98,10 +99,24 @@ export function useOcrMarkdownEditor(markdownText: string) {
     },
   });
 
+  // Track the last markdown we pushed into the editor to avoid redundant updates
+  const lastSetRef = useRef("");
+
   useEffect(() => {
-    if (!editor) return;
-    const nextHtml = toEditorHtml(markdownText);
-    editor.commands.setContent(nextHtml || "");
+    if (!editor || editor.isDestroyed) return;
+    const trimmed = markdownText.trim();
+
+    // Skip if content hasn't actually changed
+    if (trimmed === lastSetRef.current) return;
+    lastSetRef.current = trimmed;
+
+    const nextHtml = toEditorHtml(trimmed);
+
+    // Use queueMicrotask to ensure editor is fully ready
+    queueMicrotask(() => {
+      if (editor.isDestroyed) return;
+      editor.commands.setContent(nextHtml || "", false);
+    });
   }, [editor, markdownText]);
 
   return { editor, turndown };
