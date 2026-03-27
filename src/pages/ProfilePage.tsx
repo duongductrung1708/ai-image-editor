@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { STRIPE_TIERS } from "@/lib/stripeTiers";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import {
   CreditCard,
   Check,
   ExternalLink,
+  History,
 } from "lucide-react";
 
 const plans = [
@@ -77,6 +79,15 @@ const plans = [
 ];
 
 const ProfilePage = () => {
+  interface OcrHistoryItem {
+    id: string;
+    image_name: string;
+    extracted_text: string;
+    image_data: string | null;
+    bounding_boxes: Json | null;
+    created_at: string;
+  }
+
   const { user, session } = useAuth();
   const {
     tier: currentTier,
@@ -94,6 +105,10 @@ const ProfilePage = () => {
   const [changingPassword, setChangingPassword] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [ocrHistory, setOcrHistory] = useState<OcrHistoryItem[]>([]);
+  const [ocrHistoryLoading, setOcrHistoryLoading] = useState(false);
+  const [ocrHistoryQuery, setOcrHistoryQuery] = useState("");
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -119,6 +134,44 @@ const ProfilePage = () => {
       refresh();
     }
   }, [refresh]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchOcrHistory = async () => {
+      setOcrHistoryLoading(true);
+      const { data, error } = await supabase
+        .from("ocr_history")
+        .select("id, image_name, extracted_text, image_data, bounding_boxes, created_at")
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (error) {
+        toast.error("Không thể tải lịch sử OCR.");
+        setOcrHistoryLoading(false);
+        return;
+      }
+
+      const rows = (data ?? []) as OcrHistoryItem[];
+      setOcrHistory(rows);
+      setSelectedHistoryId((prev) => prev ?? rows[0]?.id ?? null);
+      setOcrHistoryLoading(false);
+    };
+
+    void fetchOcrHistory();
+  }, [user]);
+
+  const filteredHistory = ocrHistory.filter((item) => {
+    if (!ocrHistoryQuery.trim()) return true;
+    const q = ocrHistoryQuery.trim().toLowerCase();
+    return (
+      item.image_name.toLowerCase().includes(q) ||
+      item.extracted_text.toLowerCase().includes(q)
+    );
+  });
+
+  const selectedHistory =
+    filteredHistory.find((item) => item.id === selectedHistoryId) ?? null;
 
   const handleSave = async () => {
     if (!user) return;
@@ -250,7 +303,7 @@ const ProfilePage = () => {
       <Navbar />
       <div className="mx-auto max-w-2xl px-6 pt-24 pb-16">
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="profile" className="gap-1.5">
               <User className="h-4 w-4" />
               Hồ sơ
@@ -262,6 +315,10 @@ const ProfilePage = () => {
             <TabsTrigger value="plan" className="gap-1.5">
               <CreditCard className="h-4 w-4" />
               Gói dịch vụ
+            </TabsTrigger>
+            <TabsTrigger value="history" className="gap-1.5">
+              <History className="h-4 w-4" />
+              Lịch sử OCR
             </TabsTrigger>
           </TabsList>
 
@@ -523,6 +580,95 @@ const ProfilePage = () => {
                 );
               })}
             </div>
+          </TabsContent>
+
+          <TabsContent value="history">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl">Lịch sử OCR</CardTitle>
+                <CardDescription>
+                  Xem nhanh các lần nhận diện trước đó của bạn.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Input
+                  value={ocrHistoryQuery}
+                  onChange={(e) => setOcrHistoryQuery(e.target.value)}
+                  placeholder="Tìm theo tên file hoặc nội dung..."
+                />
+
+                {ocrHistoryLoading ? (
+                  <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Đang tải lịch sử...
+                  </div>
+                ) : filteredHistory.length === 0 ? (
+                  <p className="py-10 text-center text-sm text-muted-foreground">
+                    Chưa có dữ liệu lịch sử OCR.
+                  </p>
+                ) : (
+                  <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+                    <div className="max-h-[420px] overflow-y-auto rounded-md border border-border">
+                      {filteredHistory.map((item) => {
+                        const isActive = item.id === selectedHistory?.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setSelectedHistoryId(item.id)}
+                            className={`w-full border-b border-border px-3 py-2 text-left transition-colors last:border-b-0 ${
+                              isActive ? "bg-secondary" : "hover:bg-secondary/40"
+                            }`}
+                          >
+                            <p className="truncate text-xs font-medium text-foreground">
+                              {item.image_name}
+                            </p>
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                              {new Date(item.created_at).toLocaleString("vi-VN")}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="rounded-md border border-border bg-card p-3">
+                      {selectedHistory ? (
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">
+                              {selectedHistory.image_name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(selectedHistory.created_at).toLocaleString(
+                                "vi-VN",
+                              )}
+                            </p>
+                          </div>
+
+                          {selectedHistory.image_data ? (
+                            <img
+                              src={selectedHistory.image_data}
+                              alt={selectedHistory.image_name}
+                              className="max-h-56 w-full rounded border border-border object-contain"
+                            />
+                          ) : null}
+
+                          <div className="max-h-48 overflow-y-auto rounded border border-border bg-background p-2">
+                            <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">
+                              {selectedHistory.extracted_text || "(Không có nội dung)"}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Chọn một bản ghi để xem chi tiết.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
