@@ -23,6 +23,7 @@ interface OCRWorkspaceProps {
 }
 
 const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
+  const { user } = useAuth();
   const [imageUrl, setImageUrl] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<"markdown" | "json" | "tables">(
