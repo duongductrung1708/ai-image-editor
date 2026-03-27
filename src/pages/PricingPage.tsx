@@ -11,7 +11,7 @@ import { STRIPE_TIERS, type StripeTier } from "@/lib/stripeTiers";
 
 const plans = [
   {
-    tier: null as const,
+    tier: null as StripeTier | null,
     name: "Free",
     price: "0đ",
     period: "/tháng",

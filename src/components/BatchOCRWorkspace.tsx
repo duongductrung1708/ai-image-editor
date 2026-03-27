@@ -8,7 +8,8 @@ import { useIsLgScreen } from "@/hooks/useMediaQueryMinWidth";
 import { useOcrMarkdownEditor } from "@/hooks/useOcrMarkdownEditor";
 import { useBatchOcr } from "@/hooks/useBatchOcr";
 import { useOcrBatchExportActions } from "@/hooks/useOcrBatchExportActions";
-import { useOcrQuota } from "@/hooks/useOcrQuota";
+import { useOcrQuota, incrementGuestUsage } from "@/hooks/useOcrQuota";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 interface BatchOCRWorkspaceProps {
@@ -22,6 +23,7 @@ const BatchOCRWorkspace = ({
   onBack,
   onPickAnother,
 }: BatchOCRWorkspaceProps) => {
+  const { user } = useAuth();
   const isLg = useIsLgScreen();
   const [showHistory, setShowHistory] = useState(false);
   const [linkedBatchHighlight, setLinkedBatchHighlight] = useState<{
@@ -92,7 +94,10 @@ const BatchOCRWorkspace = ({
       toast.error(`Bạn đã hết lượt OCR miễn phí hôm nay. Nâng cấp Pro để không giới hạn.`);
       return;
     }
-    void runBatch().then(() => refreshQuota());
+    void runBatch().then(() => {
+      if (!user) incrementGuestUsage(files.length);
+      refreshQuota();
+    });
   }, [quotaCanUse, runBatch, refreshQuota]);
 
   const handleToolbarReprocess = useCallback(() => {
@@ -153,6 +158,8 @@ const BatchOCRWorkspace = ({
           extensionSummary={extensionSummary}
           isProcessing={isProcessing}
           onStartBatch={guardedRunBatch}
+          quotaRemaining={quotaRemaining}
+          quotaUnlimited={!quotaCanUse ? false : quotaRemaining === Infinity}
         />
       )}
 

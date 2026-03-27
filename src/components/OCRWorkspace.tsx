@@ -13,7 +13,8 @@ import { useOcrMarkdownEditor } from "@/hooks/useOcrMarkdownEditor";
 import { useObjectUrl } from "@/hooks/useObjectUrl";
 import { useSingleImageOcr } from "@/hooks/useSingleImageOcr";
 import { useSingleImageExportActions } from "@/hooks/useSingleImageExportActions";
-import { useOcrQuota } from "@/hooks/useOcrQuota";
+import { useOcrQuota, incrementGuestUsage } from "@/hooks/useOcrQuota";
+import { useAuth } from "@/hooks/useAuth";
 import { enhanceFile } from "@/lib/imageProcessing";
 
 interface OCRWorkspaceProps {
@@ -22,6 +23,7 @@ interface OCRWorkspaceProps {
 }
 
 const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
+  const { user } = useAuth();
   const [imageUrl, setImageUrl] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<"markdown" | "json" | "tables">(
@@ -179,7 +181,10 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         return;
       }
       setPhase(ok ? "result" : "edit");
-      if (ok) refreshQuota();
+      if (ok) {
+        if (!user) incrementGuestUsage();
+        refreshQuota();
+      }
     } finally {
       clearCancelRequest();
     }
