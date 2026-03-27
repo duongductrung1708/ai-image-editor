@@ -180,7 +180,10 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         return;
       }
       setPhase(ok ? "result" : "edit");
-      if (ok) refreshQuota();
+      if (ok) {
+        if (!user) incrementGuestUsage();
+        refreshQuota();
+      }
     } finally {
       clearCancelRequest();
     }
