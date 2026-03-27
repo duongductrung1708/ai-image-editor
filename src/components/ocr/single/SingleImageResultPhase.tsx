@@ -148,47 +148,47 @@ const SingleImageResultPhase = ({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Mobile: giữ layout cũ */}
-      <div className="flex min-h-0 flex-1 flex-col lg:hidden">
-        <div className="flex min-h-[240px] w-full flex-1 border-b border-border">
-          {leftPanel}
-        </div>
-        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col">{rightPanel}</div>
-      </div>
-
-      {/* Desktop: ảnh | editor có kéo resize */}
-      <div className="hidden h-full min-h-0 flex-1 flex-row overflow-hidden lg:flex">
-        <div
-          ref={splitRef}
-          className="grid h-full min-h-0 flex-1 overflow-hidden"
-          style={{ gridTemplateColumns: `${leftPct}% ${HANDLE_PX}px 1fr` }}
-        >
-          <div className="min-h-0 h-full w-full overflow-hidden">{leftPanel}</div>
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize split"
-            aria-valuemin={MIN_LEFT_PCT}
-            aria-valuemax={MAX_LEFT_PCT}
-            aria-valuenow={Math.round(leftPct)}
-            className="relative z-10 flex h-full w-full cursor-col-resize items-center justify-center bg-border/40 hover:bg-border/70 touch-none select-none"
-            onPointerDown={onResizeHandlePointerDown}
-          >
-            <div className="flex h-4 w-3 items-center justify-center rounded-sm border bg-border">
-              <GripVertical className="h-2.5 w-2.5" />
-            </div>
+      {!isLg ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-[240px] w-full flex-1 border-b border-border">
+            {leftPanel}
           </div>
-          <div className="min-h-0 h-full w-full overflow-hidden flex flex-col">{rightPanel}</div>
+          <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col">{rightPanel}</div>
         </div>
+      ) : (
+        <div className="flex h-full min-h-0 flex-1 flex-row overflow-hidden">
+          <div
+            ref={splitRef}
+            className="grid h-full min-h-0 flex-1 overflow-hidden"
+            style={{ gridTemplateColumns: `${leftPct}% ${HANDLE_PX}px 1fr` }}
+          >
+            <div className="min-h-0 h-full w-full overflow-hidden">{leftPanel}</div>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize split"
+              aria-valuemin={MIN_LEFT_PCT}
+              aria-valuemax={MAX_LEFT_PCT}
+              aria-valuenow={Math.round(leftPct)}
+              className="relative z-10 flex h-full w-full cursor-col-resize items-center justify-center bg-border/40 hover:bg-border/70 touch-none select-none"
+              onPointerDown={onResizeHandlePointerDown}
+            >
+              <div className="flex h-4 w-3 items-center justify-center rounded-sm border bg-border">
+                <GripVertical className="h-2.5 w-2.5" />
+              </div>
+            </div>
+            <div className="min-h-0 h-full w-full overflow-hidden flex flex-col">{rightPanel}</div>
+          </div>
 
-        {showHistory && isLg ? (
-          <HistorySidebar
-            isOpen={true}
-            onSelect={onHistorySelect}
-            refreshKey={historyRefresh}
-          />
-        ) : null}
-      </div>
+          {showHistory ? (
+            <HistorySidebar
+              isOpen={true}
+              onSelect={onHistorySelect}
+              refreshKey={historyRefresh}
+            />
+          ) : null}
+        </div>
+      )}
     </div>
   );
 };
