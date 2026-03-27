@@ -38,6 +38,8 @@ const BatchReadyView = ({
   extensionSummary,
   isProcessing,
   onStartBatch,
+  quotaRemaining,
+  quotaUnlimited,
 }: BatchReadyViewProps) => {
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-gradient-to-b from-primary/[0.06] via-background to-background pb-24 sm:pb-6">
