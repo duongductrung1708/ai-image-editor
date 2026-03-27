@@ -94,7 +94,10 @@ const BatchOCRWorkspace = ({
       toast.error(`Bạn đã hết lượt OCR miễn phí hôm nay. Nâng cấp Pro để không giới hạn.`);
       return;
     }
-    void runBatch().then(() => refreshQuota());
+    void runBatch().then(() => {
+      if (!user) incrementGuestUsage(files.length);
+      refreshQuota();
+    });
   }, [quotaCanUse, runBatch, refreshQuota]);
 
   const handleToolbarReprocess = useCallback(() => {
