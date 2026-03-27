@@ -13,6 +13,9 @@ import {
   type OcrBatchPageResult,
 } from "@/types/ocr";
 
+const OCR_FUNCTION_URL =
+  "https://stfjeonxdidrqbrunkss.supabase.co/functions/v1/ocr-vietnamese";
+
 export type BatchPhase = "ready" | "processing" | "result";
 
 export function useBatchOcr(files: File[]) {
@@ -155,7 +158,7 @@ export function useBatchOcr(files: File[]) {
         })),
       );
 
-      const r = await fetch("/api/ocr/batch", {
+      const r = await fetch(`${OCR_FUNCTION_URL}/batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ images }),

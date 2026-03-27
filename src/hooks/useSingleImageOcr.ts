@@ -11,6 +11,9 @@ import {
   type OcrApiResponse,
 } from "@/types/ocr";
 
+const OCR_FUNCTION_URL =
+  "https://stfjeonxdidrqbrunkss.supabase.co/functions/v1/ocr-vietnamese";
+
 /**
  * Gọi API OCR một ảnh, lưu lịch sử, hỗ trợ Abort / hủy.
  */
@@ -58,7 +61,7 @@ export function useSingleImageOcr() {
 
       setLoadingLabel("Đang gửi lên OCR...");
       setLoadingProgress(45);
-      const r = await fetch("/api/ocr", {
+      const r = await fetch(OCR_FUNCTION_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
