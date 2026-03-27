@@ -153,6 +153,8 @@ const BatchOCRWorkspace = ({
           extensionSummary={extensionSummary}
           isProcessing={isProcessing}
           onStartBatch={guardedRunBatch}
+          quotaRemaining={quotaRemaining}
+          quotaUnlimited={!quotaCanUse ? false : quotaRemaining === Infinity}
         />
       )}
 

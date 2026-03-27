@@ -59,15 +59,22 @@ const BatchReadyView = ({
               song từng trang với văn bản.
             </p>
           </div>
-          <Button
-            size="lg"
-            className="shrink-0 gap-2 shadow-md"
-            onClick={onStartBatch}
-            disabled={isProcessing}
-          >
-            <ListOrdered className="h-4 w-4" />
-            Bắt đầu OCR tất cả
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            <Button
+              size="lg"
+              className="shrink-0 gap-2 shadow-md"
+              onClick={onStartBatch}
+              disabled={isProcessing}
+            >
+              <ListOrdered className="h-4 w-4" />
+              Bắt đầu OCR tất cả
+            </Button>
+            {!quotaUnlimited && quotaRemaining !== undefined && (
+              <span className={`text-xs font-medium ${quotaRemaining <= 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                Còn lại: {quotaRemaining} lượt hôm nay
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">

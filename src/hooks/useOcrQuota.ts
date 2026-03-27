@@ -69,7 +69,7 @@ export function useOcrQuota() {
   return {
     todayCount,
     remaining,
-    limit: isUnlimited ? Infinity : FREE_DAILY_LIMIT,
+    limit: isUnlimited ? Infinity : dailyLimit,
     canUse,
     isUnlimited,
     loading,
