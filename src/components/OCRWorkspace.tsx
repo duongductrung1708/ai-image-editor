@@ -8,6 +8,7 @@ import OCRToolbar from "@/components/ocr/OCRToolbar";
 import OcrHistoryMobileDrawer from "@/components/ocr/OcrHistoryMobileDrawer";
 import SingleImageEditPhase from "@/components/ocr/single/SingleImageEditPhase";
 import SingleImageResultPhase from "@/components/ocr/single/SingleImageResultPhase";
+import HistorySidebar from "@/components/HistorySidebar";
 import { useIsLgScreen } from "@/hooks/useMediaQueryMinWidth";
 import { useOcrMarkdownEditor } from "@/hooks/useOcrMarkdownEditor";
 import { useObjectUrl } from "@/hooks/useObjectUrl";
@@ -249,9 +250,8 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   }, [phase, startOcr, setBoundingBoxes, setJsonText, setMarkdownText]);
 
   const toggleHistory = useCallback(() => {
-    if (phase !== "result") return;
     setShowHistory((v) => !v);
-  }, [phase]);
+  }, []);
 
   const handleHistorySelect = useCallback(
     (entry: {
@@ -418,6 +418,29 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
           quotaUnlimited={quotaUnlimited}
         />
       )}
+
+      {showHistory && isLg && phase !== "result" ? (
+        <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setShowHistory(false)}>
+          <div
+            className="absolute right-0 top-0 h-full"
+            onClick={(e) => e.stopPropagation()}
+            role="presentation"
+          >
+            <HistorySidebar
+              isOpen={true}
+              onSelect={handleHistorySelect}
+              refreshKey={historyRefresh}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <OcrHistoryMobileDrawer
+        open={showHistory && !isLg && phase !== "result"}
+        onClose={() => setShowHistory(false)}
+        onSelect={handleHistorySelect}
+        refreshKey={historyRefresh}
+      />
     </div>
   );
 };

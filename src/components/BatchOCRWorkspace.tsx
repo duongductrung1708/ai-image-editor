@@ -4,6 +4,7 @@ import OcrHistoryMobileDrawer from "@/components/ocr/OcrHistoryMobileDrawer";
 import BatchProcessingView from "@/components/batch/BatchProcessingView";
 import BatchReadyView from "@/components/batch/BatchReadyView";
 import BatchResultView from "@/components/batch/BatchResultView";
+import HistorySidebar from "@/components/HistorySidebar";
 import { useIsLgScreen } from "@/hooks/useMediaQueryMinWidth";
 import { useOcrMarkdownEditor } from "@/hooks/useOcrMarkdownEditor";
 import { useBatchOcr } from "@/hooks/useBatchOcr";
@@ -72,9 +73,8 @@ const BatchOCRWorkspace = ({
   });
 
   const toggleHistory = useCallback(() => {
-    if (phase !== "result" && phase !== "processing") return;
     setShowHistory((v) => !v);
-  }, [phase]);
+  }, []);
 
   const handleBatchMarkdownHighlightChange = useCallback(
     (payload: { pageIndex: number; indices: number[] } | null) => {
@@ -197,12 +197,30 @@ const BatchOCRWorkspace = ({
 
       <OcrHistoryMobileDrawer
         open={
-          showHistory && !isLg && (phase === "processing" || phase === "result")
+          showHistory &&
+          !isLg &&
+          (phase === "ready" || phase === "processing" || phase === "result")
         }
         onClose={() => setShowHistory(false)}
         onSelect={applyHistoryEntry}
         refreshKey={historyRefresh}
       />
+
+      {showHistory && isLg && phase === "ready" ? (
+        <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setShowHistory(false)}>
+          <div
+            className="absolute right-0 top-0 h-full"
+            onClick={(e) => e.stopPropagation()}
+            role="presentation"
+          >
+            <HistorySidebar
+              isOpen={true}
+              onSelect={applyHistoryEntry}
+              refreshKey={historyRefresh}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
