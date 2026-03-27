@@ -195,24 +195,48 @@ function parseQwenBoundingBoxes(text: string): ParsedOcr | null {
   return { markdown: cleaned, full_text: cleaned, blocks };
 }
 
+function buildMarkdownFromBlocks(
+  blocks: Array<{ text?: string }>,
+): string {
+  return blocks
+    .filter((b) => typeof b?.text === "string" && b.text.trim())
+    .map((b) => b.text!.trim())
+    .join("\n");
+}
+
 function parseOcrPayload(content: string, markdownStyle: string): ParsedOcr {
   try {
     const parsed = parseJsonFromText(content);
-    const markdownRaw = typeof parsed?.markdown === "string" ? parsed.markdown : "";
+    const markdownRaw = typeof parsed?.markdown === "string" ? parsed.markdown.trim() : "";
     const fullTextRaw = typeof parsed?.full_text === "string"
-      ? parsed.full_text
-      : markdownRaw;
-    const markdown = postProcessMarkdown(markdownRaw || fullTextRaw, markdownStyle);
-    const fullText = typeof parsed?.full_text === "string"
-      ? parsed.full_text
-      : markdown;
+      ? parsed.full_text.trim()
+      : "";
+    const blocks = Array.isArray(parsed?.blocks) ? parsed.blocks : [];
+
+    // Fallback chain: markdown -> full_text -> joined blocks text
+    let bestText = markdownRaw;
+    if (!bestText && fullTextRaw) bestText = fullTextRaw;
+    if (!bestText && blocks.length > 0) {
+      bestText = buildMarkdownFromBlocks(
+        blocks as Array<{ text?: string }>,
+      );
+    }
+
+    const markdown = postProcessMarkdown(bestText, markdownStyle);
+    const fullText = fullTextRaw || markdown;
+
+    console.log(
+      `[ocr-parse] markdownRaw.len=${markdownRaw.length} fullTextRaw.len=${fullTextRaw.length} blocks=${blocks.length} final.len=${markdown.length}`,
+    );
+
     return {
       markdown,
       full_text: fullText,
-      blocks: Array.isArray(parsed?.blocks) ? parsed.blocks : [],
+      blocks,
       ...(typeof parsed?.warning === "string" ? { warning: parsed.warning } : {}),
     };
-  } catch {
+  } catch (e) {
+    console.error("[ocr-parse] JSON parse failed, using raw text:", e);
     const cleaned = postProcessMarkdown(content, markdownStyle);
     return {
       markdown: cleaned,
