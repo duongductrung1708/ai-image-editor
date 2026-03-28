@@ -102,7 +102,7 @@ const AppPage = () => {
       >
         <h1 className="mb-2 flex items-center gap-2 text-3xl font-bold tracking-tight text-primary font-display">
           <Sparkles className="h-6 w-6" />
-          OCR Tiếng Việt
+          OCR Ảnh Văn Bản
         </h1>
         <p className="mb-8 text-center text-muted-foreground">
           Kéo thả một hoặc nhiều ảnh — OCR từng trang và gộp Markdown / Word
