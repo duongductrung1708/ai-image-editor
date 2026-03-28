@@ -14,7 +14,7 @@ import { useOcrMarkdownEditor } from "@/hooks/useOcrMarkdownEditor";
 import { useObjectUrl } from "@/hooks/useObjectUrl";
 import { useSingleImageOcr } from "@/hooks/useSingleImageOcr";
 import { useSingleImageExportActions } from "@/hooks/useSingleImageExportActions";
-import { useOcrQuota, incrementGuestUsage } from "@/hooks/useOcrQuota";
+import { useOcrQuota } from "@/hooks/useOcrQuota";
 import { useAuth } from "@/hooks/useAuth";
 import { enhanceFile } from "@/lib/imageProcessing";
 
@@ -128,8 +128,8 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     if (!editFile) return;
     if (!quotaCanUse) {
       if (!user) {
-        toast.error("Bạn đã hết lượt dùng thử hôm nay. Đăng ký tài khoản miễn phí để có thêm lượt!", {
-          action: { label: "Đăng ký", onClick: () => window.location.href = "/auth" },
+        toast.error("Vui lòng đăng nhập để sử dụng OCR.", {
+          action: { label: "Đăng nhập", onClick: () => { window.location.href = "/auth"; } },
           duration: 8000,
         });
       } else {
@@ -192,10 +192,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         return;
       }
       setPhase(ok ? "result" : "edit");
-      if (ok) {
-        if (!user) incrementGuestUsage();
-        refreshQuota();
-      }
+      if (ok) refreshQuota();
     } finally {
       clearCancelRequest();
     }
@@ -207,9 +204,9 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     isCancelRequested,
     phase,
     quotaCanUse,
-    quotaRemaining,
     refreshQuota,
     runOcrOnFile,
+    user,
     setOcrImageFromFile,
     setOcrLoadingUi,
   ]);

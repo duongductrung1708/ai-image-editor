@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ScanText,
   Zap,
@@ -17,6 +17,8 @@ import Navbar from "@/components/Navbar";
 import DropZone from "@/components/DropZone";
 import OCRWorkspace from "@/components/OCRWorkspace";
 import BatchOCRWorkspace from "@/components/BatchOCRWorkspace";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 const features = [
   {
@@ -78,14 +80,25 @@ const audiences = [
 
 const LandingPage = () => {
   const [files, setFiles] = useState<File[] | null>(null);
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
 
-  const handleFilesSelect = useCallback((picked: File[]) => {
-    if (!picked.length) return;
-    const sorted = [...picked].sort((a, b) =>
-      a.name.localeCompare(b.name, "vi", { numeric: true }),
-    );
-    setFiles(sorted);
-  }, []);
+  const handleFilesSelect = useCallback(
+    (picked: File[]) => {
+      if (!picked.length) return;
+      if (authLoading) return;
+      if (!user) {
+        toast.info("Đăng nhập để sử dụng OCR.");
+        navigate(`/auth?redirect=${encodeURIComponent("/")}`);
+        return;
+      }
+      const sorted = [...picked].sort((a, b) =>
+        a.name.localeCompare(b.name, "vi", { numeric: true }),
+      );
+      setFiles(sorted);
+    },
+    [authLoading, user, navigate],
+  );
 
   if (files && files.length > 1) {
     const clear = () => setFiles(null);

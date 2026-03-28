@@ -9,7 +9,7 @@ import { useIsLgScreen } from "@/hooks/useMediaQueryMinWidth";
 import { useOcrMarkdownEditor } from "@/hooks/useOcrMarkdownEditor";
 import { useBatchOcr } from "@/hooks/useBatchOcr";
 import { useOcrBatchExportActions } from "@/hooks/useOcrBatchExportActions";
-import { useOcrQuota, incrementGuestUsage } from "@/hooks/useOcrQuota";
+import { useOcrQuota } from "@/hooks/useOcrQuota";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -92,8 +92,8 @@ const BatchOCRWorkspace = ({
   const guardedRunBatch = useCallback(() => {
     if (!quotaCanUse) {
       if (!user) {
-        toast.error("Bạn đã hết lượt dùng thử hôm nay. Đăng ký tài khoản miễn phí để có thêm lượt!", {
-          action: { label: "Đăng ký", onClick: () => window.location.href = "/auth" },
+        toast.error("Vui lòng đăng nhập để sử dụng OCR.", {
+          action: { label: "Đăng nhập", onClick: () => { window.location.href = "/auth"; } },
           duration: 8000,
         });
       } else {
@@ -105,10 +105,9 @@ const BatchOCRWorkspace = ({
       return;
     }
     void runBatch().then(() => {
-      if (!user) incrementGuestUsage(files.length);
       refreshQuota();
     });
-  }, [quotaCanUse, runBatch, refreshQuota]);
+  }, [quotaCanUse, runBatch, refreshQuota, user]);
 
   const handleToolbarReprocess = useCallback(() => {
     if (phase === "result") guardedRunBatch();

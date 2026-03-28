@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,12 @@ import { Eye, EyeOff, Mail, Lock, ScanText } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect } from "react";
 
+function safeAuthRedirect(raw: string | null): string {
+  if (!raw) return "/app";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/app";
+  return raw;
+}
+
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -24,11 +30,13 @@ const AuthPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTarget = safeAuthRedirect(searchParams.get("redirect"));
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user) navigate("/app", { replace: true });
-  }, [user, navigate]);
+    if (user) navigate(redirectTarget, { replace: true });
+  }, [user, navigate, redirectTarget]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +49,7 @@ const AuthPage = () => {
         });
         if (error) throw error;
         toast.success("Đăng nhập thành công!");
-        navigate("/app");
+        navigate(redirectTarget);
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -59,11 +67,15 @@ const AuthPage = () => {
   };
 
   const handleGoogleLogin = async () => {
+    const r = searchParams.get("redirect");
+    const oauthReturn =
+      r && r.startsWith("/") && !r.startsWith("//")
+        ? `${window.location.origin}/auth?redirect=${encodeURIComponent(r)}`
+        : `${window.location.origin}/auth`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        // OAuth callback sẽ quay lại /auth để AuthPage tự điều hướng sang /app sau khi session được khôi phục.
-        redirectTo: `${window.location.origin}/auth`,
+        redirectTo: oauthReturn,
       },
     });
     if (error) toast.error("Lỗi đăng nhập Google");

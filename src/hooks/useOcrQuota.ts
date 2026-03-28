@@ -4,24 +4,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 
 const FREE_DAILY_LIMIT = 5;
-const GUEST_DAILY_LIMIT = 3;
-const GUEST_STORAGE_KEY = "ocr_guest_usage";
-
-function getGuestUsageToday(): number {
-  try {
-    const raw = localStorage.getItem(GUEST_STORAGE_KEY);
-    if (!raw) return 0;
-    const { date, count } = JSON.parse(raw);
-    if (date === new Date().toISOString().slice(0, 10)) return count;
-    return 0;
-  } catch { return 0; }
-}
-
-export function incrementGuestUsage(pages = 1) {
-  const today = new Date().toISOString().slice(0, 10);
-  const current = getGuestUsageToday();
-  localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify({ date: today, count: current + pages }));
-}
 
 export function useOcrQuota() {
   const { user } = useAuth();
@@ -31,7 +13,7 @@ export function useOcrQuota() {
 
   const fetchCount = useCallback(async () => {
     if (!user) {
-      setTodayCount(getGuestUsageToday());
+      setTodayCount(0);
       setLoading(false);
       return;
     }
@@ -59,12 +41,15 @@ export function useOcrQuota() {
     setLoading(false);
   }, [user]);
 
-  useEffect(() => { fetchCount(); }, [fetchCount]);
+  useEffect(() => {
+    fetchCount();
+  }, [fetchCount]);
 
   const isUnlimited = tier === "pro" || tier === "business";
-  const dailyLimit = user ? FREE_DAILY_LIMIT : GUEST_DAILY_LIMIT;
-  const remaining = isUnlimited ? Infinity : Math.max(0, dailyLimit - todayCount);
-  const canUse = isUnlimited || remaining > 0;
+  const dailyLimit = FREE_DAILY_LIMIT;
+  const remaining =
+    !user ? 0 : isUnlimited ? Infinity : Math.max(0, dailyLimit - todayCount);
+  const canUse = Boolean(user) && (isUnlimited || remaining > 0);
 
   return {
     todayCount,
