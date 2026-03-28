@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ScanText,
@@ -13,6 +14,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
+import DropZone from "@/components/DropZone";
+import OCRWorkspace from "@/components/OCRWorkspace";
+import BatchOCRWorkspace from "@/components/BatchOCRWorkspace";
 
 const features = [
   {
@@ -73,6 +77,41 @@ const audiences = [
 ];
 
 const LandingPage = () => {
+  const [files, setFiles] = useState<File[] | null>(null);
+
+  const handleFilesSelect = useCallback((picked: File[]) => {
+    if (!picked.length) return;
+    const sorted = [...picked].sort((a, b) =>
+      a.name.localeCompare(b.name, "vi", { numeric: true }),
+    );
+    setFiles(sorted);
+  }, []);
+
+  if (files && files.length > 1) {
+    const clear = () => setFiles(null);
+    return (
+      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <BatchOCRWorkspace
+            files={files}
+            onBack={clear}
+            onPickAnother={clear}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (files?.length === 1) {
+    return (
+      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <OCRWorkspace imageFile={files[0]} onBack={() => setFiles(null)} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -105,6 +144,13 @@ const LandingPage = () => {
               <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
+
+          <p className="mx-auto mt-10 max-w-md text-sm text-muted-foreground">
+            Kéo thả một hoặc nhiều ảnh — OCR từng trang
+          </p>
+          <div className="mx-auto mt-4 flex w-full max-w-2xl justify-center">
+            <DropZone onFilesSelect={handleFilesSelect} />
+          </div>
         </motion.div>
       </section>
 
