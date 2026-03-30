@@ -41,6 +41,41 @@ import {
   Trash2,
 } from "lucide-react";
 
+function toHistoryTextPreview(input: string): string {
+  const raw = (input ?? "").trim();
+  if (!raw) return "";
+
+  // OCR editor sometimes stores HTML with embedded base64 images -> extremely long lines.
+  // For profile history view, show a safe text-only preview.
+  if (!raw.startsWith("<")) return raw;
+
+  try {
+    const doc = new DOMParser().parseFromString(raw, "text/html");
+    const out: string[] = [];
+    const blocks = Array.from(doc.querySelectorAll("p"));
+    for (const p of blocks) {
+      const kind = (p.getAttribute("data-bbox-kind") || "").toLowerCase();
+      const hasImg = Boolean(p.querySelector("img"));
+      const t = (p.textContent ?? "").trim();
+
+      if (hasImg) {
+        if (kind === "stamp") out.push("[CON DẤU]");
+        else if (kind === "signature") out.push("[CHỮ KÝ]");
+        else out.push("[HÌNH]");
+        continue;
+      }
+      if (t) out.push(t);
+    }
+    const joined = out.join("\n").trim();
+    return joined || doc.body.textContent?.trim() || "";
+  } catch {
+    return raw
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+}
+
 const plans = [
   {
     key: "free" as const,
@@ -825,9 +860,10 @@ const ProfilePage = () => {
                           ) : null}
 
                           <div className="max-h-48 overflow-y-auto rounded border border-border bg-background p-2">
-                            <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">
-                              {selectedHistory.extracted_text ||
-                                "(Không có nội dung)"}
+                            <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
+                              {toHistoryTextPreview(
+                                selectedHistory.extracted_text,
+                              ) || "(Không có nội dung)"}
                             </p>
                           </div>
                         </div>
