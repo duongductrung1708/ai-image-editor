@@ -89,6 +89,15 @@ const BatchOCRWorkspace = ({
     setLinkedBatchHighlight(null);
   }, [markdownText, batchPages]);
 
+  useEffect(() => {
+    document.documentElement.classList.add("ocr-workspace");
+    document.body.classList.add("ocr-workspace");
+    return () => {
+      document.documentElement.classList.remove("ocr-workspace");
+      document.body.classList.remove("ocr-workspace");
+    };
+  }, []);
+
   const guardedRunBatch = useCallback(() => {
     if (!quotaCanUse) {
       if (!user) {
@@ -127,7 +136,7 @@ const BatchOCRWorkspace = ({
       : `Hàng loạt · ${files.length} ảnh`;
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-background">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-background overflow-hidden">
       <OCRToolbar
         fileName={toolbarTitle}
         isProcessing={phase === "processing"}

@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { mergeBoxRectsPercent } from "@/lib/bboxTextMatch";
 
 export interface BoundingBox {
@@ -33,6 +33,67 @@ const ImageViewer = ({
 }: ImageViewerProps) => {
   const [hoveredBox, setHoveredBox] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  const [imgMetrics, setImgMetrics] = useState<null | {
+    offsetX: number;
+    offsetY: number;
+    width: number;
+    height: number;
+  }>(null);
+
+  const measureImgMetrics = () => {
+    const inner = innerRef.current;
+    const img = imgRef.current;
+    if (!inner || !img) return;
+
+    const innerRect = inner.getBoundingClientRect();
+    const imgRect = img.getBoundingClientRect();
+
+    // Offset của ảnh bên trong wrapper: xử lý trường hợp object-fit / scale / centering tạo khoảng trống.
+    const offsetX = imgRect.left - innerRect.left;
+    const offsetY = imgRect.top - innerRect.top;
+
+    const width = imgRect.width;
+    const height = imgRect.height;
+
+    if (width <= 0 || height <= 0) return;
+
+    setImgMetrics({
+      offsetX,
+      offsetY,
+      width,
+      height,
+    });
+  };
+
+  useEffect(() => {
+    // Khi image vừa mount hoặc URL đổi, đo lại sau frame để layout ổn định.
+    const t = window.setTimeout(() => {
+      measureImgMetrics();
+    }, 0);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageUrl]);
+
+  useEffect(() => {
+    const inner = innerRef.current;
+    if (!inner) return;
+
+    const ro = new ResizeObserver(() => {
+      // Dùng rAF để tránh đo khi layout đang “đang nhảy” liên tục.
+      requestAnimationFrame(() => measureImgMetrics());
+    });
+    ro.observe(inner);
+
+    if (imgRef.current) {
+      ro.observe(imgRef.current);
+    }
+
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const boxFrameClass = (kind: BoundingBox["kind"] | undefined) => {
     switch (kind) {
@@ -76,11 +137,16 @@ const ImageViewer = ({
       ref={containerRef}
       className="relative flex h-full w-full items-center justify-center overflow-auto bg-secondary/30 p-4"
     >
-      <div className="relative inline-block max-h-full max-w-full">
+      <div ref={innerRef} className="relative inline-block max-h-full max-w-full">
         <img
           src={imageUrl}
           alt="Uploaded"
           className="block max-h-full max-w-full rounded-md object-contain"
+          ref={imgRef}
+          onLoad={() => {
+            // Đảm bảo đo sau khi ảnh có kích thước thật.
+            requestAnimationFrame(() => measureImgMetrics());
+          }}
         />
 
         {/* Bounding boxes overlay */}
@@ -104,10 +170,19 @@ const ImageViewer = ({
             onMouseLeave={() => setHoveredBox(null)}
             className={`absolute z-10 border-2 transition-all duration-150 cursor-pointer ${boxFrameClass(box.kind)}`}
             style={{
-              left: `${box.x}%`,
-              top: `${box.y}%`,
-              width: `${box.width}%`,
-              height: `${box.height}%`,
+              boxSizing: "border-box",
+              left: imgMetrics
+                ? `${imgMetrics.offsetX + (box.x / 100) * imgMetrics.width}px`
+                : `${box.x}%`,
+              top: imgMetrics
+                ? `${imgMetrics.offsetY + (box.y / 100) * imgMetrics.height}px`
+                : `${box.y}%`,
+              width: imgMetrics
+                ? `${(box.width / 100) * imgMetrics.width}px`
+                : `${box.width}%`,
+              height: imgMetrics
+                ? `${(box.height / 100) * imgMetrics.height}px`
+                : `${box.height}%`,
             }}
           >
             {hoveredBox === i && (
@@ -126,10 +201,19 @@ const ImageViewer = ({
           <div
             className="pointer-events-none absolute z-20 rounded-sm border-2 border-yellow-400 bg-yellow-300/25 shadow-[0_0_0_1px_rgba(250,204,21,0.4)]"
             style={{
-              left: `${linkedRect.x}%`,
-              top: `${linkedRect.y}%`,
-              width: `${linkedRect.width}%`,
-              height: `${linkedRect.height}%`,
+              boxSizing: "border-box",
+              left: imgMetrics
+                ? `${imgMetrics.offsetX + (linkedRect.x / 100) * imgMetrics.width}px`
+                : `${linkedRect.x}%`,
+              top: imgMetrics
+                ? `${imgMetrics.offsetY + (linkedRect.y / 100) * imgMetrics.height}px`
+                : `${linkedRect.y}%`,
+              width: imgMetrics
+                ? `${(linkedRect.width / 100) * imgMetrics.width}px`
+                : `${linkedRect.width}%`,
+              height: imgMetrics
+                ? `${(linkedRect.height / 100) * imgMetrics.height}px`
+                : `${linkedRect.height}%`,
             }}
             aria-hidden
           />

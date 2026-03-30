@@ -105,6 +105,16 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   }, [imageFile, setBoundingBoxes, setJsonText, setMarkdownText]);
 
   useEffect(() => {
+    // Chỉ trong OCR workspace: chặn scrollbar ở cấp html/body để tránh "scroll ngoài".
+    document.documentElement.classList.add("ocr-workspace");
+    document.body.classList.add("ocr-workspace");
+    return () => {
+      document.documentElement.classList.remove("ocr-workspace");
+      document.body.classList.remove("ocr-workspace");
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (lastOcrBlobUrlRef.current) {
         URL.revokeObjectURL(lastOcrBlobUrlRef.current);
@@ -344,7 +354,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <OCRToolbar
         fileName={imageFile.name}
         isProcessing={ocrPipelineBusy}
