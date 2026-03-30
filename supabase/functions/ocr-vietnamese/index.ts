@@ -489,15 +489,29 @@ async function fetchProviderContent(
 
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
 
+    // BÍ KÍP Ở ĐÂY: Tách luật lệ ra khỏi lời nói của User
+    // 1. Nhốt toàn bộ hàm buildPrompt (chứa rule JSON, tọa độ, con dấu) vào Não hệ thống
+    const systemInstruction = prompt;
+
+    // 2. User chỉ cần đưa ảnh và ra một lệnh ngắn gọn
+    const userPrompt =
+      cfg.mode === "markdown"
+        ? "Trích xuất nội dung ảnh này ra Markdown."
+        : "Trích xuất văn bản, con dấu và chữ ký từ ảnh này, TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC ĐÃ YÊU CẦU.";
+
     response = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        // THÊM CHỈ THỊ HỆ THỐNG VÀO ĐÂY
+        systemInstruction: {
+          parts: [{ text: systemInstruction }],
+        },
         contents: [
           {
             role: "user",
             parts: [
-              { text: prompt },
+              { text: userPrompt },
               {
                 inline_data: {
                   mime_type: normalized.mimeType,
