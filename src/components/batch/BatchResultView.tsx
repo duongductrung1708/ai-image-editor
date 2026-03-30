@@ -1,7 +1,10 @@
 import type { Editor } from "@tiptap/react";
+import { useCallback, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import MarkdownEditor from "@/components/ocr/MarkdownEditor";
+import MarkdownEditor, {
+  type JumpToBoxRequest,
+} from "@/components/ocr/MarkdownEditor";
 import JsonViewer from "@/components/ocr/JsonViewer";
 import HistorySidebar from "@/components/HistorySidebar";
 import ImageViewer, { type BoundingBox } from "@/components/ImageViewer";
@@ -55,6 +58,24 @@ const BatchResultView = ({
   onHistorySelect,
   historyRefresh,
 }: BatchResultViewProps) => {
+  const [jumpToBox, setJumpToBox] = useState<JumpToBoxRequest | null>(null);
+  const jumpNonceRef = useRef(0);
+
+  const handleBatchImageBoxClick = useCallback(
+    (pageIndex: number, boxIndex: number) => {
+      onActiveTabChange("markdown");
+      onBatchMarkdownHighlightChange({ pageIndex, indices: [boxIndex] });
+      jumpNonceRef.current += 1;
+      setJumpToBox({
+        kind: "batch",
+        pageIndex,
+        boxIndex,
+        nonce: jumpNonceRef.current,
+      });
+    },
+    [onActiveTabChange, onBatchMarkdownHighlightChange],
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
@@ -105,6 +126,9 @@ const BatchResultView = ({
                           linkedBatchHighlight?.pageIndex === i
                             ? linkedBatchHighlight.indices
                             : null
+                        }
+                        onBoxClick={(boxIdx) =>
+                          handleBatchImageBoxClick(i, boxIdx)
                         }
                       />
                     </div>
@@ -159,6 +183,8 @@ const BatchResultView = ({
                     : []
                 }
                 onBatchMarkdownHighlightChange={onBatchMarkdownHighlightChange}
+                jumpToBox={jumpToBox}
+                onJumpToBoxHandled={() => setJumpToBox(null)}
               />
             </TabsContent>
             <TabsContent

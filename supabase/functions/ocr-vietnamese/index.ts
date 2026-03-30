@@ -20,9 +20,10 @@ function normalizeImageAndMimeType(
   mimeTypeInput: unknown,
 ): { image: string; mimeType: string } {
   let image = typeof imageInput === "string" ? imageInput.trim() : "";
-  let mimeType = typeof mimeTypeInput === "string" && mimeTypeInput.trim()
-    ? mimeTypeInput.trim()
-    : "image/png";
+  let mimeType =
+    typeof mimeTypeInput === "string" && mimeTypeInput.trim()
+      ? mimeTypeInput.trim()
+      : "image/png";
 
   const dataUrlMatch = /^data:([^;]+);base64,(.*)$/i.exec(image);
   if (dataUrlMatch) {
@@ -38,7 +39,7 @@ function tryParseJsonObject(candidate: string | undefined): ParsedOcr | null {
   if (!candidate || typeof candidate !== "string") return null;
   try {
     const parsed = JSON.parse(candidate);
-    return parsed && typeof parsed === "object" ? parsed as ParsedOcr : null;
+    return parsed && typeof parsed === "object" ? (parsed as ParsedOcr) : null;
   } catch {
     return null;
   }
@@ -82,17 +83,170 @@ function postProcessMarkdown(markdown: string, style: string): string {
       return true;
     });
   }
-  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return lines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
-function buildPrompt(mode: string, markdownStyle: string, provider: string): string {
+type OcrBlockKind = "text" | "figure" | "stamp" | "signature";
+
+function parseOcrBlockKind(rawKind: unknown, text: string): OcrBlockKind {
+  const t = typeof rawKind === "string" ? rawKind.toLowerCase().trim() : "";
+  if (t === "stamp" || t === "seal") return "stamp";
+  if (t === "signature" || t === "sign") return "signature";
+  if (t === "figure") return "figure";
+  const hint = text.trim();
+  if (/\[CON\s*DẤU\]/i.test(hint) || /^\[?\s*CON\s*DẤU\s*\]?$/i.test(hint)) {
+    return "stamp";
+  }
+  if (/\[CHỮ\s*KÝ\]/i.test(hint) || /^\[?\s*CHỮ\s*KÝ\s*\]?$/i.test(hint)) {
+    return "signature";
+  }
+  return "text";
+}
+
+type OcrBlockNorm = {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  kind: OcrBlockKind;
+};
+
+/** Padding + clamp; đồng bộ logic với `src/lib/bboxRefine.ts`. */
+function refineBBoxGeometry(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): { x: number; y: number; width: number; height: number } {
+  const rawPad = Deno.env.get("OCR_BBOX_PADDING_PCT");
+  const pad = Math.min(
+    0.5,
+    Math.max(0, rawPad !== undefined ? Number(rawPad) || 0.2 : 0.2),
+  );
+
+  let nx = x;
+  let ny = y;
+  let nw = width;
+  let nh = height;
+
+  if (nw < 0) {
+    nx += nw;
+    nw = -nw;
+  }
+  if (nh < 0) {
+    ny += nh;
+    nh = -nh;
+  }
+
+  nx = Math.max(0, nx - pad);
+  ny = Math.max(0, ny - pad);
+  nw = nw + 2 * pad;
+  nh = nh + 2 * pad;
+
+  if (nx + nw > 100) nw = Math.max(0, 100 - nx);
+  if (ny + nh > 100) nh = Math.max(0, 100 - ny);
+
+  nx = Math.max(0, Math.min(100, nx));
+  ny = Math.max(0, Math.min(100, ny));
+  nw = Math.max(0, Math.min(100 - nx, nw));
+  nh = Math.max(0, Math.min(100 - ny, nh));
+
+  const MIN_W = 0.35;
+  const MIN_H = 0.35;
+  if (nw > 0 && nw < MIN_W) {
+    const cx = nx + nw / 2;
+    nx = Math.max(0, cx - MIN_W / 2);
+    nw = Math.min(MIN_W, 100 - nx);
+  }
+  if (nh > 0 && nh < MIN_H) {
+    const cy = ny + nh / 2;
+    ny = Math.max(0, cy - MIN_H / 2);
+    nh = Math.min(MIN_H, 100 - ny);
+  }
+
+  return { x: nx, y: ny, width: nw, height: nh };
+}
+
+type OcrBlockRow = {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  kind: OcrBlockKind;
+  origId: string | null;
+};
+
+/** Chuẩn hóa blocks: tinh chỉnh tọa độ, id, kind; tùy chọn sort theo đọc trang. */
+function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
+  if (!Array.isArray(raw)) return [];
+  const rows: OcrBlockRow[] = raw.map((item) => {
+    const b =
+      item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+    const text = typeof b.text === "string" ? b.text : "";
+
+    let x = Number(b.x) || 0;
+    let y = Number(b.y) || 0;
+    let width = Number(b.width) || 0;
+    let height = Number(b.height) || 0;
+
+    // HACK CHO GEMINI: Nếu nó trả về mảng box_2d gốc [ymin, xmin, ymax, xmax] hệ 1000
+    if (Array.isArray(b.box_2d) && b.box_2d.length === 4) {
+      const ymin = Number(b.box_2d[0]) / 10;
+      const xmin = Number(b.box_2d[1]) / 10;
+      const ymax = Number(b.box_2d[2]) / 10;
+      const xmax = Number(b.box_2d[3]) / 10;
+      x = Math.min(xmin, xmax);
+      y = Math.min(ymin, ymax);
+      width = Math.max(xmin, xmax) - x;
+      height = Math.max(ymin, ymax) - y;
+    }
+
+    const refined = refineBBoxGeometry(x, y, width, height);
+    const kind = parseOcrBlockKind(b.kind, text);
+    const origId = typeof b.id === "string" && b.id.trim() ? b.id.trim() : null;
+    return {
+      text,
+      ...refined,
+      kind,
+      origId,
+    };
+  });
+
+  if (Deno.env.get("OCR_BBOX_SORT_READING_ORDER") === "1") {
+    rows.sort((a, b) => a.y - b.y || a.x - b.x);
+  }
+
+  return rows.map((row, i) => ({
+    id: row.origId ?? `bbox-${i}`,
+    text: row.text,
+    x: row.x,
+    y: row.y,
+    width: row.width,
+    height: row.height,
+    kind: row.kind,
+  }));
+}
+
+function buildPrompt(
+  mode: string,
+  markdownStyle: string,
+  provider: string,
+): string {
   if (provider === "lmstudio") {
     if (mode === "json" || mode === "both") {
       return (
         "Trich xuat toan bo van ban trong anh. BAT BUOC dinh vi vi tri cua tung doan van ban.\n" +
         "Hay tra ve ket qua tuan thu CHINH XAC dinh dang sau cho moi doan van ban:\n" +
         "[Noi dung van ban] <box>(ymin, xmin), (ymax, xmax)</box>\n" +
-        "Luu y: Toa do nam trong khoang tu 0 den 1000."
+        "Trong do: ymin/ymax la toa do DOC theo truc dung (0= tren, 1000= duoi); xmin/xmax la toa do NGANG (0= trai, 1000= phai).\n" +
+        "Goc (ymin,xmin) la goc tren-trai cua vung; (ymax,xmax) la goc duoi-phai. Bao sat vung chu/khoi, tranh bao ca trang neu khong can.\n" +
+        "Toa do nguyen tu 0 den 1000 (chia 10 de co phan tram)."
       );
     }
     return (
@@ -125,6 +279,26 @@ function buildPrompt(mode: string, markdownStyle: string, provider: string): str
       "Return ONLY Markdown/plain text (no code fences, no extra explanations).\n"
     );
   }
+
+  // --- HACK RIÊNG CHO GEMINI (CÓ BẮT CON DẤU & CHỮ KÝ) ---
+  if (provider === "gemini") {
+    return (
+      base +
+      "Return ONLY a single valid JSON object. No Markdown code fences.\n" +
+      "JSON must match fields exactly:\n" +
+      "- markdown: string\n" +
+      "- full_text: string\n" +
+      '- blocks: array of { text: string, box_2d: [number, number, number, number], kind: "text"|"figure"|"stamp"|"signature" }.\n' +
+      "BOUNDING BOX & STAMP RULES (critical):\n" +
+      "- You MUST use the native 1000x1000 spatial coordinate system.\n" +
+      "- 'box_2d' must be an array of exactly 4 integers: [ymin, xmin, ymax, xmax] (between 0 and 1000).\n" +
+      "- Draw TIGHT boxes around text.\n" +
+      "- SEALS & SIGNATURES: If you detect a red stamp/seal (con dấu đỏ) or a hand-written signature (chữ ký), you MUST create a separate block for it.\n" +
+      '  Set kind to "stamp" for seals/stamps, "signature" for hand-written signatures; use text "[CON DẤU]" or "[CHỮ KÝ]" as placeholder if no readable text, and provide tight box_2d.\n' +
+      '- Use kind "figure" for photos, charts, diagrams (not stamps/signatures).\n'
+    );
+  }
+
   return (
     base +
     "Return ONLY a single valid JSON object.\n" +
@@ -133,8 +307,15 @@ function buildPrompt(mode: string, markdownStyle: string, provider: string): str
     "JSON must match fields exactly:\n" +
     "- markdown: string\n" +
     "- full_text: string\n" +
-    "- blocks: array of {text, x, y, width, height} (each 0-100; can be approximate)\n" +
-    "If bounding boxes are uncertain, still return approximate values (do not omit 'blocks').\n"
+    '- blocks: array of { id?: string, text, x, y, width, height, kind?: "text"|"figure"|"stamp"|"signature" }.\n' +
+    "BOUNDING BOX RULES (critical):\n" +
+    "- Coordinate system: origin TOP-LEFT of the image. x increases to the RIGHT, y increases DOWNWARD.\n" +
+    "- x and y are the TOP-LEFT corner of the rectangle, in PERCENT of image width and height (0–100, decimals allowed).\n" +
+    "- width and height are the rectangle size in PERCENT of image width and height (not pixels).\n" +
+    "- Draw TIGHT boxes: edges should touch the outermost pixels of that text/figure region — avoid whole-page boxes unless the content truly spans the page.\n" +
+    "- One block per distinct paragraph, line group, table region, stamp, signature, or figure; follow natural reading order when listing blocks.\n" +
+    '- Use kind "stamp" for seals/stamps, "signature" for hand-written signatures, "figure" for photos/charts/diagrams — NOT for plain text blocks.\n' +
+    "If bounding boxes are uncertain, still return best-effort values (do not omit 'blocks').\n"
   );
 }
 
@@ -170,16 +351,22 @@ function parseQwenBoundingBoxes(text: string): ParsedOcr | null {
       returnText = "";
     }
 
-    const px1 = toPercent(x1);
-    const py1 = toPercent(y1);
-    const px2 = toPercent(x2);
-    const py2 = toPercent(y2);
+    // Prompt: <box>(ymin, xmin), (ymax, xmax)</box> — scale 0–1000 → % (÷10).
+    // ImageViewer: x = trái, y = trên (CSS left/top %).
+    const ymin = toPercent(x1);
+    const xmin = toPercent(y1);
+    const ymax = toPercent(x2);
+    const xmax = toPercent(y2);
+    const left = Math.min(xmin, xmax);
+    const right = Math.max(xmin, xmax);
+    const top = Math.min(ymin, ymax);
+    const bottom = Math.max(ymin, ymax);
     blocks.push({
       text: inferredText,
-      x: px1,
-      y: py1,
-      width: px2 - px1,
-      height: py2 - py1,
+      x: left,
+      y: top,
+      width: right - left,
+      height: bottom - top,
     });
     return returnText;
   };
@@ -192,12 +379,14 @@ function parseQwenBoundingBoxes(text: string): ParsedOcr | null {
 
   if (blocks.length === 0) return null;
   const cleaned = markdown.trim();
-  return { markdown: cleaned, full_text: cleaned, blocks };
+  return {
+    markdown: cleaned,
+    full_text: cleaned,
+    blocks: normalizeOcrBlocks(blocks),
+  };
 }
 
-function buildMarkdownFromBlocks(
-  blocks: Array<{ text?: string }>,
-): string {
+function buildMarkdownFromBlocks(blocks: Array<{ text?: string }>): string {
   return blocks
     .filter((b) => typeof b?.text === "string" && b.text.trim())
     .map((b) => b.text!.trim())
@@ -207,19 +396,17 @@ function buildMarkdownFromBlocks(
 function parseOcrPayload(content: string, markdownStyle: string): ParsedOcr {
   try {
     const parsed = parseJsonFromText(content);
-    const markdownRaw = typeof parsed?.markdown === "string" ? parsed.markdown.trim() : "";
-    const fullTextRaw = typeof parsed?.full_text === "string"
-      ? parsed.full_text.trim()
-      : "";
+    const markdownRaw =
+      typeof parsed?.markdown === "string" ? parsed.markdown.trim() : "";
+    const fullTextRaw =
+      typeof parsed?.full_text === "string" ? parsed.full_text.trim() : "";
     const blocks = Array.isArray(parsed?.blocks) ? parsed.blocks : [];
 
     // Fallback chain: markdown -> full_text -> joined blocks text
     let bestText = markdownRaw;
     if (!bestText && fullTextRaw) bestText = fullTextRaw;
     if (!bestText && blocks.length > 0) {
-      bestText = buildMarkdownFromBlocks(
-        blocks as Array<{ text?: string }>,
-      );
+      bestText = buildMarkdownFromBlocks(blocks as Array<{ text?: string }>);
     }
 
     const markdown = postProcessMarkdown(bestText, markdownStyle);
@@ -232,8 +419,10 @@ function parseOcrPayload(content: string, markdownStyle: string): ParsedOcr {
     return {
       markdown,
       full_text: fullText,
-      blocks,
-      ...(typeof parsed?.warning === "string" ? { warning: parsed.warning } : {}),
+      blocks: normalizeOcrBlocks(blocks),
+      ...(typeof parsed?.warning === "string"
+        ? { warning: parsed.warning }
+        : {}),
     };
   } catch (e) {
     console.error("[ocr-parse] JSON parse failed, using raw text:", e);
@@ -242,7 +431,8 @@ function parseOcrPayload(content: string, markdownStyle: string): ParsedOcr {
       markdown: cleaned,
       full_text: cleaned,
       blocks: [],
-      warning: "Model did not return JSON; returned plain text/markdown instead.",
+      warning:
+        "Model did not return JSON; returned plain text/markdown instead.",
     };
   }
 }
@@ -297,8 +487,7 @@ async function fetchProviderContent(
     const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
 
-    const geminiUrl =
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
 
     response = await fetch(geminiUrl, {
       method: "POST",
@@ -320,9 +509,8 @@ async function fetchProviderContent(
         ],
         generationConfig: {
           temperature: 0,
-          responseMimeType: cfg.mode === "markdown"
-            ? "text/plain"
-            : "application/json",
+          responseMimeType:
+            cfg.mode === "markdown" ? "text/plain" : "application/json",
         },
       }),
     });
@@ -342,7 +530,7 @@ async function fetchProviderContent(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer ollama",
+          Authorization: "Bearer ollama",
         },
         body: JSON.stringify({
           model: OLLAMA_MODEL,
@@ -378,7 +566,9 @@ async function fetchProviderContent(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: OLLAMA_MODEL,
-          messages: [{ role: "user", content: prompt, images: [normalized.image] }],
+          messages: [
+            { role: "user", content: prompt, images: [normalized.image] },
+          ],
           stream: false,
           options: { temperature: 0 },
         }),
@@ -387,24 +577,28 @@ async function fetchProviderContent(
   } else if (cfg.provider === "openai" || cfg.provider === "lmstudio") {
     const isLmStudio = cfg.provider === "lmstudio";
     const model = isLmStudio
-      ? (Deno.env.get("LMSTUDIO_MODEL") || "")
-      : (Deno.env.get("OPENAI_MODEL") || "gpt-4o");
+      ? Deno.env.get("LMSTUDIO_MODEL") || ""
+      : Deno.env.get("OPENAI_MODEL") || "gpt-4o";
     const baseUrl = (
       isLmStudio
-        ? (Deno.env.get("LMSTUDIO_BASE_URL") || "http://127.0.0.1:1234/v1")
-        : (Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1")
+        ? Deno.env.get("LMSTUDIO_BASE_URL") || "http://127.0.0.1:1234/v1"
+        : Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1"
     ).replace(/\/+$/, "");
-    const apiKey = isLmStudio ? "" : (Deno.env.get("OPENAI_API_KEY") || "");
+    const apiKey = isLmStudio ? "" : Deno.env.get("OPENAI_API_KEY") || "";
 
-    if (!model) throw new Error(`${isLmStudio ? "LMSTUDIO_MODEL" : "OPENAI_MODEL"} is not configured`);
-    if (!isLmStudio && !apiKey) throw new Error("OPENAI_API_KEY is not configured");
+    if (!model)
+      throw new Error(
+        `${isLmStudio ? "LMSTUDIO_MODEL" : "OPENAI_MODEL"} is not configured`,
+      );
+    if (!isLmStudio && !apiKey)
+      throw new Error("OPENAI_API_KEY is not configured");
     if (isLmStudio) getSafeBaseUrlFromEnv("LMSTUDIO_BASE_URL", baseUrl);
 
     response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(isLmStudio ? {} : { "Authorization": `Bearer ${apiKey}` }),
+        ...(isLmStudio ? {} : { Authorization: `Bearer ${apiKey}` }),
       },
       body: JSON.stringify({
         model,
@@ -451,11 +645,17 @@ async function fetchProviderContent(
 
   const data = await response.json();
   if (cfg.provider === "gemini") {
-    return data?.candidates?.[0]?.content?.parts?.find((p: { text?: unknown }) =>
-      typeof p?.text === "string"
-    )?.text || "";
+    return (
+      data?.candidates?.[0]?.content?.parts?.find(
+        (p: { text?: unknown }) => typeof p?.text === "string",
+      )?.text || ""
+    );
   }
-  if (cfg.provider === "openai" || cfg.provider === "lmstudio" || cfg.ollamaApi === "openai") {
+  if (
+    cfg.provider === "openai" ||
+    cfg.provider === "lmstudio" ||
+    cfg.ollamaApi === "openai"
+  ) {
     return typeof data?.choices?.[0]?.message?.content === "string"
       ? data.choices[0].message.content
       : "";
@@ -475,13 +675,22 @@ async function runSingleOcr(
   const textOut = await fetchProviderContent(normalized, cfg, prompt);
   if (!textOut) throw new Error("OCR provider returned empty response");
 
-  if (cfg.provider === "lmstudio" && (cfg.mode === "json" || cfg.mode === "both")) {
+  if (
+    cfg.provider === "lmstudio" &&
+    (cfg.mode === "json" || cfg.mode === "both")
+  ) {
     const qwenData = parseQwenBoundingBoxes(textOut);
     if (qwenData) {
       return {
-        markdown: postProcessMarkdown(qwenData.markdown || "", cfg.markdownStyle),
-        full_text: typeof qwenData.full_text === "string" ? qwenData.full_text : "",
-        blocks: Array.isArray(qwenData.blocks) ? qwenData.blocks : [],
+        markdown: postProcessMarkdown(
+          qwenData.markdown || "",
+          cfg.markdownStyle,
+        ),
+        full_text:
+          typeof qwenData.full_text === "string" ? qwenData.full_text : "",
+        blocks: normalizeOcrBlocks(
+          Array.isArray(qwenData.blocks) ? qwenData.blocks : [],
+        ),
       };
     }
   }
@@ -515,12 +724,20 @@ async function runPool<T, R>(
 }
 
 function mergeBatchMarkdown(
-  pages: Array<{ ok: boolean; name: string; markdown: string; full_text: string; error?: string }>,
+  pages: Array<{
+    ok: boolean;
+    name: string;
+    markdown: string;
+    full_text: string;
+    error?: string;
+  }>,
 ): string {
   const parts: string[] = [];
   for (let i = 0; i < pages.length; i++) {
     const p = pages[i];
-    const safeLabel = String(p.name || `Trang ${i + 1}`).replace(/\r?\n/g, " ").trim();
+    const safeLabel = String(p.name || `Trang ${i + 1}`)
+      .replace(/\r?\n/g, " ")
+      .trim();
     if (i > 0) parts.push("\n\n---\n\n");
     if (p.ok) {
       const body = (p.markdown || p.full_text || "").trim();
@@ -543,9 +760,11 @@ serve(async (req) => {
     const url = new URL(req.url);
     const body = await req.json();
 
-    const isBatchPath = url.pathname.endsWith("/ocr-vietnamese/batch") ||
+    const isBatchPath =
+      url.pathname.endsWith("/ocr-vietnamese/batch") ||
       url.pathname.endsWith("/api/ocr/batch");
-    const isSinglePath = url.pathname.endsWith("/ocr-vietnamese") ||
+    const isSinglePath =
+      url.pathname.endsWith("/ocr-vietnamese") ||
       url.pathname.endsWith("/api/ocr");
     const isBatchRequest = isBatchPath || Array.isArray(body?.images);
 
@@ -583,18 +802,22 @@ serve(async (req) => {
         Math.min(8, Number(Deno.env.get("OCR_BATCH_CONCURRENCY") || "2")),
       );
       const requested = Number(body?.concurrency);
-      const concurrency = Number.isFinite(requested) && requested > 0
-        ? Math.min(maxConcurrency, Math.floor(requested))
-        : maxConcurrency;
+      const concurrency =
+        Number.isFinite(requested) && requested > 0
+          ? Math.min(maxConcurrency, Math.floor(requested))
+          : maxConcurrency;
 
-      const tasks = images.map((entry: Record<string, unknown>, index: number) => ({
-        index,
-        name: typeof entry?.name === "string" && entry.name
-          ? entry.name
-          : `Trang ${index + 1}`,
-        image: entry?.image ?? entry?.imageBase64,
-        mimeType: entry?.mimeType,
-      }));
+      const tasks = images.map(
+        (entry: Record<string, unknown>, index: number) => ({
+          index,
+          name:
+            typeof entry?.name === "string" && entry.name
+              ? entry.name
+              : `Trang ${index + 1}`,
+          image: entry?.image ?? entry?.imageBase64,
+          mimeType: entry?.mimeType,
+        }),
+      );
 
       const pages = await runPool(tasks, concurrency, async (task) => {
         try {
@@ -617,7 +840,9 @@ serve(async (req) => {
             markdown: out.markdown || out.full_text || "",
             full_text: out.full_text || out.markdown || "",
             blocks: Array.isArray(out.blocks) ? out.blocks : [],
-            ...(typeof out.warning === "string" ? { warning: out.warning } : {}),
+            ...(typeof out.warning === "string"
+              ? { warning: out.warning }
+              : {}),
           };
         } catch (err) {
           return {
@@ -654,13 +879,10 @@ serve(async (req) => {
     }
 
     if (!isSinglePath) {
-      return new Response(
-        JSON.stringify({ error: "Not found" }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "Not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const singleImage = body?.image ?? body?.imageBase64;
@@ -669,8 +891,10 @@ serve(async (req) => {
       JSON.stringify({
         markdown: payload.markdown || payload.full_text || "",
         full_text: payload.full_text || "",
-        blocks: Array.isArray(payload.blocks) ? payload.blocks : [],
-        ...(typeof payload.warning === "string" ? { warning: payload.warning } : {}),
+        blocks: normalizeOcrBlocks(payload.blocks),
+        ...(typeof payload.warning === "string"
+          ? { warning: payload.warning }
+          : {}),
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -680,13 +904,10 @@ serve(async (req) => {
     console.error("OCR error:", e);
     const message = e instanceof Error ? e.message : "Unknown error";
     if (message.toLowerCase().includes("too large")) {
-      return new Response(
-        JSON.stringify({ error: "Request body too large" }),
-        {
-          status: 413,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "Request body too large" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
     const status = message.toLowerCase().includes("rate limit") ? 429 : 500;
     return new Response(

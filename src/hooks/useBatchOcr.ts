@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { OcrHistoryEntry } from "@/components/ocr/OcrHistoryMobileDrawer";
 import type { BoundingBox } from "@/components/ImageViewer";
+import { normalizeBoundingBoxes } from "@/lib/bboxBlockHtml";
 import { fileToBase64 } from "@/lib/fileToBase64";
 import { svgPlaceholderPage } from "@/lib/batchWorkspaceUtils";
 import {
@@ -192,10 +193,13 @@ export function useBatchOcr(files: File[]) {
         throw new Error("Unexpected batch response");
       }
 
-      const normalizedPages = data.pages.map((p) => ({
+      const normalizedPages = data.pages.map((p, idx) => ({
         ...p,
         markdown: normalizeOcrText(p.markdown),
         full_text: normalizeOcrText(p.full_text),
+        blocks: Array.isArray(p.blocks)
+          ? normalizeBoundingBoxes(p.blocks as BoundingBox[], idx)
+          : [],
       }));
       const normalizedData = {
         ...data,

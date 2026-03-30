@@ -27,7 +27,7 @@ function bigrams(s: string): Map<string, number> {
 }
 
 /** Dice coefficient on character bigrams – good for fuzzy Vietnamese matching. */
-function diceCoefficient(a: string, b: string): number {
+export function diceCoefficient(a: string, b: string): number {
   if (a.length < 2 || b.length < 2) {
     return a === b ? 1 : 0;
   }
@@ -138,4 +138,12 @@ export function mergeBoxRectsPercent(
     width: Math.max(0, maxR - minX),
     height: Math.max(0, maxB - minY),
   };
+}
+
+/** Fuzzy similarity after the same normalization as bbox matching (0–1). */
+export function textSimilarityNormalized(a: string, b: string): number {
+  const na = normalizeForMatch(a);
+  const nb = normalizeForMatch(b);
+  if (!na.length || !nb.length) return 0;
+  return diceCoefficient(na, nb);
 }

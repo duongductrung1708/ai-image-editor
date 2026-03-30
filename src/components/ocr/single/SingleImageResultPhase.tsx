@@ -1,9 +1,16 @@
 import type { Editor } from "@tiptap/react";
-import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useCallback,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ImageViewer, { type BoundingBox } from "@/components/ImageViewer";
 import HistorySidebar from "@/components/HistorySidebar";
-import MarkdownEditor from "@/components/ocr/MarkdownEditor";
+import MarkdownEditor, {
+  type JumpToBoxRequest,
+} from "@/components/ocr/MarkdownEditor";
 import JsonViewer from "@/components/ocr/JsonViewer";
 import type { OcrHistoryEntry } from "@/components/ocr/OcrHistoryMobileDrawer";
 import { GripVertical } from "lucide-react";
@@ -50,6 +57,22 @@ const SingleImageResultPhase = ({
 
   const [leftPct, setLeftPct] = useState(50);
   const splitRef = useRef<HTMLDivElement | null>(null);
+  const [jumpToBox, setJumpToBox] = useState<JumpToBoxRequest | null>(null);
+  const jumpNonceRef = useRef(0);
+
+  const handleImageBoxClick = useCallback(
+    (boxIndex: number) => {
+      onActiveTabChange("markdown");
+      onMarkdownHighlightChange([boxIndex]);
+      jumpNonceRef.current += 1;
+      setJumpToBox({
+        kind: "single",
+        boxIndex,
+        nonce: jumpNonceRef.current,
+      });
+    },
+    [onActiveTabChange, onMarkdownHighlightChange],
+  );
 
   const onResizeHandlePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -89,6 +112,7 @@ const SingleImageResultPhase = ({
       boxes={boundingBoxes}
       isProcessing={isProcessing}
       linkedHighlightIndices={markdownLinkedBoxIndices}
+      onBoxClick={handleImageBoxClick}
     />
   );
 
@@ -132,6 +156,8 @@ const SingleImageResultPhase = ({
               isProcessing={isProcessing}
               boundingBoxes={boundingBoxes}
               onMarkdownHighlightChange={onMarkdownHighlightChange}
+              jumpToBox={jumpToBox}
+              onJumpToBoxHandled={() => setJumpToBox(null)}
             />
           </TabsContent>
           <TabsContent value="json" className="m-0 h-full">

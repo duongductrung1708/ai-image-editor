@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import Image from "@tiptap/extension-image";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
@@ -15,6 +16,8 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 import { OcrTable } from "@/lib/tiptapOcrTable";
 import { FontSize } from "@/lib/tiptapFontSize";
+import { BboxParagraph } from "@/lib/tiptapBboxParagraph";
+import DOMPurify from "dompurify";
 
 marked.setOptions({ gfm: true, breaks: true });
 
@@ -38,6 +41,13 @@ function toEditorHtml(markdownText: string): string {
   const normalized = trimmed.includes("\\n")
     ? trimmed.replace(/\\n/g, "\n")
     : trimmed;
+
+  if (normalized.startsWith("<")) {
+    return DOMPurify.sanitize(normalized, {
+      ADD_ATTR: ["data-bbox-id", "data-bbox-kind", "class", "src", "alt"],
+      ADD_TAGS: ["img", "p", "br", "span", "figure"],
+    });
+  }
 
   try {
     const html = marked.parse(normalized);
@@ -68,8 +78,15 @@ export function useOcrMarkdownEditor(markdownText: string) {
   const extensions = useMemo(
     () => [
       StarterKit.configure({
+        paragraph: false,
         bulletList: { keepMarks: true },
         orderedList: { keepMarks: true },
+      }),
+      BboxParagraph,
+      Image.configure({
+        inline: true,
+        allowBase64: true,
+        HTMLAttributes: { class: "max-w-full rounded-md" },
       }),
       TextStyle,
       Color,

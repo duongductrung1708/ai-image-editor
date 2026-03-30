@@ -25,6 +25,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import type { BoundingBox } from "@/components/ImageViewer";
 import { findMatchingBoxIndices } from "@/lib/bboxTextMatch";
+import {
+  findFirstDocPosForBatchBox,
+  findFirstDocPosForBoxIndex,
+} from "@/lib/ocrEditorScrollToBox";
+
+export type JumpToBoxRequest =
+  | { kind: "single"; boxIndex: number; nonce: number }
+  | { kind: "batch"; pageIndex: number; boxIndex: number; nonce: number };
 
 export type BatchMarkdownHighlight = {
   pageIndex: number;
@@ -41,6 +49,9 @@ interface MarkdownEditorProps {
   onBatchMarkdownHighlightChange?: (
     payload: BatchMarkdownHighlight | null,
   ) => void;
+  /** Bấm bbox trên ảnh → cuộn tới đoạn tương ứng trong editor. */
+  jumpToBox?: JumpToBoxRequest | null;
+  onJumpToBoxHandled?: () => void;
 }
 
 /** Nearest block node text at doc position (paragraph, heading, list item, cell…). */
@@ -79,6 +90,8 @@ const MarkdownEditor = ({
   onMarkdownHighlightChange,
   batchBoxPages,
   onBatchMarkdownHighlightChange,
+  jumpToBox = null,
+  onJumpToBoxHandled,
 }: MarkdownEditorProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [fontColor, setFontColor] = useState("#000000");
@@ -213,6 +226,55 @@ const MarkdownEditor = ({
     batchBoxPages,
     onBatchMarkdownHighlightChange,
     clearBatchHighlight,
+  ]);
+
+  useEffect(() => {
+    if (!editor || !jumpToBox || isProcessing) return;
+
+    let pos: number | null = null;
+    if (jumpToBox.kind === "single") {
+      if (boundingBoxes.length === 0) {
+        onJumpToBoxHandled?.();
+        return;
+      }
+      pos = findFirstDocPosForBoxIndex(editor, jumpToBox.boxIndex, boundingBoxes);
+    } else {
+      if (!batchBoxPages?.length) {
+        onJumpToBoxHandled?.();
+        return;
+      }
+      pos = findFirstDocPosForBatchBox(
+        editor,
+        jumpToBox.pageIndex,
+        jumpToBox.boxIndex,
+        batchBoxPages,
+      );
+    }
+
+    if (pos == null) {
+      onJumpToBoxHandled?.();
+      return;
+    }
+
+    editor.chain().focus().setTextSelection(pos).run();
+
+    requestAnimationFrame(() => {
+      const view = editor.view;
+      const dom = view.domAtPos(pos);
+      const el =
+        dom.node.nodeType === Node.ELEMENT_NODE
+          ? (dom.node as HTMLElement)
+          : (dom.node.parentElement as HTMLElement | null);
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      onJumpToBoxHandled?.();
+    });
+  }, [
+    jumpToBox,
+    editor,
+    isProcessing,
+    boundingBoxes,
+    batchBoxPages,
+    onJumpToBoxHandled,
   ]);
 
   useEffect(() => {

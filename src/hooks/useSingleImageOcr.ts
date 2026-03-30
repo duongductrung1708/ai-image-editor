@@ -4,6 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Json } from "@/integrations/supabase/types";
 import type { BoundingBox } from "@/components/ImageViewer";
+import {
+  buildOcrHtmlFromBlocks,
+  normalizeBoundingBoxes,
+} from "@/lib/bboxBlockHtml";
+import { isVisualBboxKind } from "@/lib/bboxKinds";
+import { cropBoundingBoxToDataUrl } from "@/lib/cropBoundingBox";
 import { fileToBase64 } from "@/lib/fileToBase64";
 import {
   isOcrErrorResponse,
@@ -111,23 +117,53 @@ export function useSingleImageOcr() {
       const fullText = data.full_text.length > 0
         ? normalizeOcrText(data.full_text)
         : "";
-      const blocks: BoundingBox[] = Array.isArray(data.blocks)
+      const rawBlocks: BoundingBox[] = Array.isArray(data.blocks)
         ? (data.blocks as unknown as BoundingBox[])
         : [];
+      const normalizedBlocks = normalizeBoundingBoxes(rawBlocks);
 
-      const mdOut =
+      let mdOut =
         md.length > 0
           ? md
           : fullText.length > 0
             ? fullText
             : "Không phát hiện văn bản.";
+
+      if (normalizedBlocks.length > 0) {
+        const objectUrl = URL.createObjectURL(file);
+        try {
+          const cropUrls: Record<string, string> = {};
+          await Promise.all(
+            normalizedBlocks
+              .filter((b) => isVisualBboxKind(b.kind))
+              .map(async (b) => {
+                const id = b.id;
+                if (!id) return;
+                try {
+                  cropUrls[id] = await cropBoundingBoxToDataUrl(objectUrl, b);
+                } catch {
+                  /* crop thất bại — vẫn hiển thị placeholder trong HTML */
+                }
+              }),
+          );
+          const html = buildOcrHtmlFromBlocks(normalizedBlocks, {
+            cropUrls,
+          });
+          if (html.length > 0) {
+            mdOut = html;
+          }
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      }
+
       setMarkdownText(mdOut);
       setJsonText(
         JSON.stringify(
           {
             markdown: mdOut,
             full_text: fullText,
-            blocks,
+            blocks: normalizedBlocks,
             ...(typeof data.warning === "string"
               ? { warning: data.warning }
               : null),
@@ -137,7 +173,7 @@ export function useSingleImageOcr() {
         ),
       );
 
-      setBoundingBoxes(blocks);
+      setBoundingBoxes(normalizedBlocks);
 
       setLoadingLabel("Đang lưu lịch sử...");
       setLoadingProgress(92);
@@ -147,7 +183,7 @@ export function useSingleImageOcr() {
       await supabase.from("ocr_history").insert({
         image_name: file.name,
         extracted_text: mdOut,
-        bounding_boxes: blocks as unknown as Json,
+        bounding_boxes: normalizedBlocks as unknown as Json,
         image_data: `data:${file.type};base64,${base64}`,
         user_id: user?.id,
       });
@@ -173,7 +209,7 @@ export function useSingleImageOcr() {
     }
 
     return ok;
-  }, []);
+  }, [user]);
 
   const cancelProcessing = useCallback(() => {
     ocrCancelRequestedRef.current = true;

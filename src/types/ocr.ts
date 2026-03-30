@@ -1,9 +1,11 @@
 export type OcrBlock = {
+  id?: string;
   text: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  kind?: "text" | "figure" | "stamp" | "signature";
 };
 
 export type OcrSuccessResponse = {
