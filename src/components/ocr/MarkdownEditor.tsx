@@ -259,13 +259,28 @@ const MarkdownEditor = ({
     editor.chain().focus().setTextSelection(pos).run();
 
     requestAnimationFrame(() => {
+      const container = scrollRef.current;
       const view = editor.view;
       const dom = view.domAtPos(pos);
       const el =
         dom.node.nodeType === Node.ELEMENT_NODE
           ? (dom.node as HTMLElement)
           : (dom.node.parentElement as HTMLElement | null);
-      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+
+      // IMPORTANT: Do not use `el.scrollIntoView()` here.
+      // It may scroll the whole window instead of the editor container.
+      if (container && el) {
+        const contRect = container.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const currentTop = container.scrollTop;
+        const delta = elRect.top - contRect.top;
+        const targetTop =
+          currentTop + delta - contRect.height / 2 + elRect.height / 2;
+        container.scrollTo({
+          top: Math.max(0, targetTop),
+          behavior: "smooth",
+        });
+      }
       onJumpToBoxHandled?.();
     });
   }, [
