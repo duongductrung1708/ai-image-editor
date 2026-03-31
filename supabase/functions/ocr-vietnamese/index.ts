@@ -222,7 +222,91 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
     rows.sort((a, b) => a.y - b.y || a.x - b.x);
   }
 
-  return rows.map((row, i) => ({
+  const overlapOrAdjacent = (a: OcrBlockRow, b: OcrBlockRow): boolean => {
+    const ax1 = a.x;
+    const ay1 = a.y;
+    const ax2 = a.x + a.width;
+    const ay2 = a.y + a.height;
+    const bx1 = b.x;
+    const by1 = b.y;
+    const bx2 = b.x + b.width;
+    const by2 = b.y + b.height;
+
+    const ix1 = Math.max(ax1, bx1);
+    const iy1 = Math.max(ay1, by1);
+    const ix2 = Math.min(ax2, bx2);
+    const iy2 = Math.min(ay2, by2);
+    const iw = Math.max(0, ix2 - ix1);
+    const ih = Math.max(0, iy2 - iy1);
+    const inter = iw * ih;
+
+    if (inter > 0) return true;
+
+    // Adjacent: khoảng cách giữa 2 bbox nhỏ (theo % ảnh)
+    const acx = ax1 + (ax2 - ax1) / 2;
+    const acy = ay1 + (ay2 - ay1) / 2;
+    const bcx = bx1 + (bx2 - bx1) / 2;
+    const bcy = by1 + (by2 - by1) / 2;
+    const dx = acx - bcx;
+    const dy = acy - bcy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    return dist <= 3.5;
+  };
+
+  const mergedRows: OcrBlockRow[] = [];
+  const used = new Array(rows.length).fill(false);
+
+  for (let i = 0; i < rows.length; i += 1) {
+    if (used[i]) continue;
+    const r = rows[i];
+
+    if (r.kind === "stamp") {
+      // Merge with nearest signature if overlapping/adjacent
+      let sigIdx = -1;
+      for (let j = 0; j < rows.length; j += 1) {
+        if (i === j || used[j]) continue;
+        if (rows[j].kind !== "signature") continue;
+        if (!overlapOrAdjacent(r, rows[j])) continue;
+        sigIdx = j;
+        break;
+      }
+
+      if (sigIdx !== -1) {
+        const s = rows[sigIdx];
+        used[i] = true;
+        used[sigIdx] = true;
+        const x1 = Math.min(r.x, s.x);
+        const y1 = Math.min(r.y, s.y);
+        const x2 = Math.max(r.x + r.width, s.x + s.width);
+        const y2 = Math.max(r.y + r.height, s.y + s.height);
+        mergedRows.push({
+          kind: "stamp",
+          text: "[CON DẤU + CHỮ KÝ]",
+          x: x1,
+          y: y1,
+          width: Math.max(0, x2 - x1),
+          height: Math.max(0, y2 - y1),
+          origId:
+            r.origId && s.origId
+              ? `${r.origId}-${s.origId}`
+              : r.origId ?? s.origId,
+        });
+        continue;
+      }
+    }
+
+    if (r.kind === "signature") {
+      // If there's a stamp already handled nearby, skip merging here.
+      mergedRows.push(r);
+      used[i] = true;
+      continue;
+    }
+
+    mergedRows.push(r);
+    used[i] = true;
+  }
+
+  return mergedRows.map((row, i) => ({
     id: row.origId ?? `bbox-${i}`,
     text: row.text,
     x: row.x,
@@ -295,6 +379,7 @@ function buildPrompt(
       "- Draw TIGHT boxes around text.\n" +
       "- SEALS & SIGNATURES: If you detect a red stamp/seal (con dấu đỏ) or a hand-written signature (chữ ký), you MUST create a separate block for it.\n" +
       '  Set kind to "stamp" for seals/stamps, "signature" for hand-written signatures; use text "[CON DẤU]" or "[CHỮ KÝ]" as placeholder if no readable text, and provide tight box_2d.\n' +
+      '- If stamp and signature overlap or are immediately adjacent, you MAY merge them into ONE block: kind "stamp", text "[CON DẤU + CHỮ KÝ]", and a tight box that covers both.\n' +
       '- Use kind "figure" for photos, charts, diagrams (not stamps/signatures).\n'
     );
   }
