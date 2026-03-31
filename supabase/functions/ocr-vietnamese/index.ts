@@ -374,8 +374,14 @@ function buildPrompt(
     );
   }
 
+  // SỬA Ở ĐÂY: Nhận diện Gemini gọi qua OpenRouter (provider=openai)
+  const isGeminiViaOpenRouter =
+    provider === "openai" &&
+    (Deno.env.get("OPENAI_MODEL") || "").toLowerCase().includes("gemini");
+
   // --- HACK RIÊNG CHO GEMINI (CÓ BẮT CON DẤU & CHỮ KÝ) ---
-  if (provider === "gemini") {
+  // Gộp chung cả gọi trực tiếp (gemini) và gọi qua OpenRouter (isGeminiViaOpenRouter)
+  if (provider === "gemini" || isGeminiViaOpenRouter) {
     return (
       base +
       "Return ONLY a single valid JSON object. No Markdown code fences.\n" +
