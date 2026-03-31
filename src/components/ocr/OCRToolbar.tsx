@@ -96,16 +96,18 @@ const OCRToolbar = ({
       )}
 
       <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onReprocess}
-          disabled={isProcessing}
-          className="gap-1.5"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Nhận diện lại
-        </Button>
+        {showReprocess ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onReprocess}
+            disabled={isProcessing}
+            className="gap-1.5"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Nhận diện lại
+          </Button>
+        ) : null}
         <Button
           variant="outline"
           size="sm"

@@ -570,9 +570,9 @@ async function fetchProviderContent(
   if (cfg.provider === "gemini") {
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+    const GEMINI_MODEL_FALLBACK =
+      Deno.env.get("GEMINI_MODEL_FALLBACK") || "gemini-2.0-flash";
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
-
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
 
     // BÍ KÍP Ở ĐÂY: Tách luật lệ ra khỏi lời nói của User
     // 1. Nhốt toàn bộ hàm buildPrompt (chứa rule JSON, tọa độ, con dấu) vào Não hệ thống
@@ -584,35 +584,83 @@ async function fetchProviderContent(
         ? "Trích xuất nội dung ảnh này ra Markdown."
         : "Trích xuất văn bản, con dấu và chữ ký từ ảnh này, TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC ĐÃ YÊU CẦU.";
 
-    response = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        // THÊM CHỈ THỊ HỆ THỐNG VÀO ĐÂY
-        systemInstruction: {
-          parts: [{ text: systemInstruction }],
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: userPrompt },
-              {
-                inline_data: {
-                  mime_type: normalized.mimeType,
-                  data: normalized.image,
-                },
+    const requestBody = {
+      systemInstruction: {
+        parts: [{ text: systemInstruction }],
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: userPrompt },
+            {
+              inline_data: {
+                mime_type: normalized.mimeType,
+                data: normalized.image,
               },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0,
-          responseMimeType:
-            cfg.mode === "markdown" ? "text/plain" : "application/json",
+            },
+          ],
         },
-      }),
-    });
+      ],
+      generationConfig: {
+        temperature: 0,
+        responseMimeType:
+          cfg.mode === "markdown" ? "text/plain" : "application/json",
+      },
+    };
+
+    const doGeminiFetch = async (model: string): Promise<Response> => {
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+      return await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+    };
+
+    response = await doGeminiFetch(GEMINI_MODEL);
+
+    if (response.ok) {
+      // Handle special Gemini behavior: ok=true but empty due to finishReason=RECITATION.
+      const data = await response.json().catch(() => null);
+      const text =
+        data?.candidates?.[0]?.content?.parts?.find(
+          (p: { text?: unknown }) => typeof p?.text === "string",
+        )?.text || "";
+      const finishReason = data?.candidates?.[0]?.finishReason;
+
+      if (!text && finishReason === "RECITATION" && GEMINI_MODEL_FALLBACK) {
+        console.warn(
+          `[ocr-gemini] finishReason=RECITATION on ${GEMINI_MODEL}; retry with ${GEMINI_MODEL_FALLBACK}`,
+        );
+        response = await doGeminiFetch(GEMINI_MODEL_FALLBACK);
+      } else {
+        // Recreate a Response-like flow for downstream parsing by stashing JSON.
+        // We can't "un-read" response body; easiest is to return text here if present,
+        // otherwise throw with diagnostics below.
+        if (text) return text;
+
+        const promptFeedback = data?.promptFeedback;
+        const blockReason = promptFeedback?.blockReason;
+        const safety = data?.candidates?.[0]?.safetyRatings;
+        console.error("[ocr-gemini] Empty text response", {
+          finishReason,
+          blockReason,
+          promptFeedback,
+          safetyRatings: safety,
+          hasCandidates: Array.isArray(data?.candidates),
+        });
+        const details = [
+          blockReason ? `blockReason=${String(blockReason)}` : null,
+          finishReason ? `finishReason=${String(finishReason)}` : null,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        throw new Error(
+          `OCR provider returned empty response${details ? ` (${details})` : ""}`,
+        );
+      }
+    }
   } else if (cfg.provider === "ollama") {
     const OLLAMA_BASE_URL = getSafeBaseUrlFromEnv(
       "OLLAMA_BASE_URL",
@@ -743,13 +791,6 @@ async function fetchProviderContent(
   }
 
   const data = await response.json();
-  if (cfg.provider === "gemini") {
-    return (
-      data?.candidates?.[0]?.content?.parts?.find(
-        (p: { text?: unknown }) => typeof p?.text === "string",
-      )?.text || ""
-    );
-  }
   if (
     cfg.provider === "openai" ||
     cfg.provider === "lmstudio" ||

@@ -370,6 +370,7 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
         onDownloadJson={() => download("json")}
         onExportPdf={exportPdf}
         onDownloadDocx={downloadDocx}
+        showReprocess={phase === "result"}
         onCancelProcessing={ocrPipelineBusy ? cancelProcessing : undefined}
       />
       {ocrPipelineBusy && (
