@@ -195,6 +195,16 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
     let width = Number(b.width) || 0;
     let height = Number(b.height) || 0;
 
+    // Some models (incl. Qwen-style prompts) may output coordinates in 0..1000.
+    // Our UI expects 0..100 (%). If it looks like 0..1000, convert.
+    const maxCoord = Math.max(x, y, width, height);
+    if (maxCoord > 100 && maxCoord <= 1000) {
+      x /= 10;
+      y /= 10;
+      width /= 10;
+      height /= 10;
+    }
+
     // HACK CHO GEMINI: Nếu nó trả về mảng box_2d gốc [ymin, xmin, ymax, xmax] hệ 1000
     if (Array.isArray(b.box_2d) && b.box_2d.length === 4) {
       const ymin = Number(b.box_2d[0]) / 10;
@@ -392,7 +402,7 @@ function buildPrompt(
     "JSON must match fields exactly:\n" +
     "- markdown: string\n" +
     "- full_text: string\n" +
-    '- blocks: array of { id?: string, text, x, y, width, height, kind?: "text"|"figure"|"stamp"|"signature" }.\n' +
+    '- blocks: array of { id?: string, text, x, y, width, height, kind: "text"|"figure"|"stamp"|"signature" }.\n' +
     "BOUNDING BOX RULES (critical):\n" +
     "- Coordinate system: origin TOP-LEFT of the image. x increases to the RIGHT, y increases DOWNWARD.\n" +
     "- x and y are the TOP-LEFT corner of the rectangle, in PERCENT of image width and height (0–100, decimals allowed).\n" +
@@ -400,6 +410,12 @@ function buildPrompt(
     "- Draw TIGHT boxes: edges should touch the outermost pixels of that text/figure region — avoid whole-page boxes unless the content truly spans the page.\n" +
     "- One block per distinct paragraph, line group, table region, stamp, signature, or figure; follow natural reading order when listing blocks.\n" +
     '- Use kind "stamp" for seals/stamps, "signature" for hand-written signatures, "figure" for photos/charts/diagrams — NOT for plain text blocks.\n' +
+    "STAMP & SIGNATURE RULES (critical):\n" +
+    "- If you detect a red stamp/seal (con dau do), you MUST create a separate block with kind = \"stamp\".\n" +
+    '- For stamp blocks, set text to the readable content if any; otherwise use placeholder "[CON DẤU]".\n' +
+    "- If you detect a hand-written signature (chu ky), you MUST create a separate block with kind = \"signature\".\n" +
+    '- For signature blocks, set text to the readable content if any; otherwise use placeholder "[CHỮ KÝ]".\n' +
+    "- If stamp and signature overlap or are immediately adjacent, you MAY merge them into ONE block: kind = \"stamp\" and text = \"[CON DẤU + CHỮ KÝ]\".\n" +
     "If bounding boxes are uncertain, still return best-effort values (do not omit 'blocks').\n"
   );
 }
@@ -511,6 +527,22 @@ function parseOcrPayload(content: string, markdownStyle: string): ParsedOcr {
     };
   } catch (e) {
     console.error("[ocr-parse] JSON parse failed, using raw text:", e);
+    // Qwen-style fallback: some deployments return <box>(ymin,xmin),(ymax,xmax)</box> blocks
+    // instead of a strict JSON object.
+    const qwenData = parseQwenBoundingBoxes(content);
+    if (qwenData) {
+      const markdown = postProcessMarkdown(qwenData.markdown || "", markdownStyle);
+      return {
+        markdown,
+        full_text: typeof qwenData.full_text === "string"
+          ? qwenData.full_text
+          : markdown,
+        blocks: Array.isArray(qwenData.blocks) ? qwenData.blocks : [],
+        warning:
+          "Model did not return JSON; parsed <box> tags instead.",
+      };
+    }
+
     const cleaned = postProcessMarkdown(content, markdownStyle);
     return {
       markdown: cleaned,
@@ -752,13 +784,16 @@ async function fetchProviderContent(
         messages: [
           {
             role: "system",
-            content:
-              "You are an expert OCR assistant. Extract text exactly as seen in the image.",
+            content: prompt,
           },
           {
             role: "user",
             content: [
-              { type: "text", text: prompt },
+              {
+                type: "text",
+                text:
+                  "Process the image exactly following the system instructions. Return only the requested output.",
+              },
               {
                 type: "image_url",
                 image_url: {
