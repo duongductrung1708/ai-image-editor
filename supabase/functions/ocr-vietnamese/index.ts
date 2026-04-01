@@ -361,7 +361,6 @@ function buildPrompt(
     (Deno.env.get("OPENAI_MODEL") || "").toLowerCase().includes("gemini");
 
   // --- HACK RIÊNG CHO GEMINI (CÓ BẮT CON DẤU & CHỮ KÝ) ---
-  // Gộp chung cả gọi trực tiếp (gemini) và gọi qua OpenRouter (isGeminiViaOpenRouter)
   if (provider === "gemini" || isGeminiViaOpenRouter) {
     return (
       base +
@@ -370,14 +369,25 @@ function buildPrompt(
       "- markdown: string\n" +
       "- full_text: string\n" +
       '- blocks: array of { text: string, box_2d: [number, number, number, number], kind: "text"|"figure"|"stamp"|"signature" }.\n' +
-      "BOUNDING BOX & STAMP RULES (critical):\n" +
+      "\nBOUNDING BOX RULES (critical):\n" +
       "- You MUST use the native 1000x1000 spatial coordinate system.\n" +
       "- 'box_2d' must be an array of exactly 4 integers: [ymin, xmin, ymax, xmax] (between 0 and 1000).\n" +
-      "- Draw TIGHT boxes around text.\n" +
-      "- SEALS & SIGNATURES: If you detect a red stamp/seal (con dấu đỏ) or a hand-written signature (chữ ký), you MUST create a separate block for it.\n" +
-      '  Set kind to "stamp" for seals/stamps, "signature" for hand-written signatures; use text "[CON DẤU]" or "[CHỮ KÝ]" as placeholder if no readable text, and provide tight box_2d.\n' +
-      '- If stamp and signature overlap or are immediately adjacent, you MAY merge them into ONE block: kind "stamp", text "[CON DẤU + CHỮ KÝ]", and a tight box that covers both.\n' +
-      '- Use kind "figure" for photos, charts, diagrams (not stamps/signatures).\n'
+      "- Draw TIGHT boxes around each region.\n" +
+      "\nSEAL / STAMP DETECTION (con dấu) — TOP PRIORITY:\n" +
+      "- A seal/stamp (con dấu) is typically a circular or oval shape, often RED or BLUE ink, containing text arranged in a circle/arc.\n" +
+      "- Common patterns: company name around the rim, a star in the center, registration number.\n" +
+      "- Even if the stamp is faded, partially visible, overlapping with text/signature, or rotated — you MUST detect it.\n" +
+      "- Even if the stamp overlaps with printed text, detect the stamp region separately.\n" +
+      '- Create a block with kind="stamp", text set to readable content or "[CON DẤU]" placeholder, and tight box_2d.\n' +
+      "\nSIGNATURE DETECTION (chữ ký) — TOP PRIORITY:\n" +
+      "- A signature is handwritten cursive/scrawled ink, typically blue or black.\n" +
+      "- Signatures often appear near stamps, at the bottom of documents, or in designated signature fields.\n" +
+      "- Even if partially covered by a stamp or faint, you MUST detect it.\n" +
+      '- Create a block with kind="signature", text set to readable name or "[CHỮ KÝ]" placeholder, and tight box_2d.\n' +
+      "\nMERGING RULE:\n" +
+      '- If stamp and signature overlap or are immediately adjacent, you MAY merge them into ONE block: kind="stamp", text="[CON DẤU + CHỮ KÝ]", and a tight box covering both.\n' +
+      "\nOTHER VISUAL ELEMENTS:\n" +
+      '- Use kind="figure" for photos, charts, diagrams (NOT for stamps or signatures).\n'
     );
   }
 
@@ -571,7 +581,7 @@ async function fetchProviderContent(
   cfg: OcrConfig,
   prompt: string,
 ): Promise<string> {
-  let response: Response;
+  let response!: Response;
   if (cfg.provider === "gemini") {
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const rawModel = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
