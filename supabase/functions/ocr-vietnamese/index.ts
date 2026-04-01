@@ -371,9 +371,13 @@ function buildPrompt(
       base +
       "Return ONLY a single valid JSON object. No Markdown code fences.\n" +
       "JSON must match fields exactly:\n" +
-      "- markdown: string\n" +
-      "- full_text: string\n" +
+      "- markdown: string — properly formatted text with paragraphs joined (NOT one line per bbox). Use \\n\\n between paragraphs.\n" +
+      "- full_text: string — same content as markdown\n" +
       '- blocks: array of { text: string, box_2d: [number, number, number, number], kind: "text"|"figure"|"stamp"|"signature" }.\n' +
+      "\nIMPORTANT — 'markdown' field formatting:\n" +
+      "- The 'markdown' field must contain well-formatted text where sentences in the same paragraph are joined on the same line.\n" +
+      "- Do NOT split the markdown at every bounding box. Merge consecutive text blocks that belong to the same paragraph.\n" +
+      "- Use proper indentation: first-line indent with spaces, blockquotes with >, headings with #.\n" +
       "\nBOUNDING BOX RULES (critical):\n" +
       "- You MUST use the native 1000x1000 spatial coordinate system.\n" +
       "- 'box_2d' must be an array of exactly 4 integers: [ymin, xmin, ymax, xmax] (between 0 and 1000).\n" +
