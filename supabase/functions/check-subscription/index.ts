@@ -56,7 +56,7 @@ serve(async (req) => {
     });
 
     const paidStatuses = new Set(["active", "trialing"]);
-    const sub = subscriptions.data.find((s) => paidStatuses.has(s.status));
+    const sub = subscriptions.data.find((s: { status: string }) => paidStatuses.has(s.status));
 
     const hasActiveSub = Boolean(sub);
     let productId: string | null = null;

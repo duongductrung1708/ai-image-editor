@@ -581,7 +581,7 @@ async function fetchProviderContent(
   cfg: OcrConfig,
   prompt: string,
 ): Promise<string> {
-  let response: Response;
+  let response!: Response;
   if (cfg.provider === "gemini") {
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const rawModel = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
