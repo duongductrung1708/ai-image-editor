@@ -336,7 +336,12 @@ function buildPrompt(
     "Extract all Vietnamese text (and other languages if present) from this image.\n" +
     "Do not omit any text.\n" +
     "Do NOT summarize. Do NOT paraphrase.\n" +
-    "Preserve the original reading order, line breaks, and indentation as best as possible.\n";
+    "Preserve the original reading order and indentation as best as possible.\n" +
+    "\nPARAGRAPH & LINE-BREAK RULES (critical):\n" +
+    "- Join words that belong to the SAME logical paragraph/sentence into one continuous line, even if they span multiple visual lines in the image.\n" +
+    "- Only insert a line break (\\n) when the document clearly starts a NEW paragraph, a new list item, a new heading, or a new section.\n" +
+    "- Preserve indentation: if the original document indents a paragraph (e.g. first-line indent), represent it with leading spaces or use Markdown block-quote (>) for quoted sections.\n" +
+    "- Do NOT break lines at every OCR bounding-box boundary.\n";
 
   const baseClean =
     baseRaw +
@@ -366,9 +371,13 @@ function buildPrompt(
       base +
       "Return ONLY a single valid JSON object. No Markdown code fences.\n" +
       "JSON must match fields exactly:\n" +
-      "- markdown: string\n" +
-      "- full_text: string\n" +
+      "- markdown: string — properly formatted text with paragraphs joined (NOT one line per bbox). Use \\n\\n between paragraphs.\n" +
+      "- full_text: string — same content as markdown\n" +
       '- blocks: array of { text: string, box_2d: [number, number, number, number], kind: "text"|"figure"|"stamp"|"signature" }.\n' +
+      "\nIMPORTANT — 'markdown' field formatting:\n" +
+      "- The 'markdown' field must contain well-formatted text where sentences in the same paragraph are joined on the same line.\n" +
+      "- Do NOT split the markdown at every bounding box. Merge consecutive text blocks that belong to the same paragraph.\n" +
+      "- Use proper indentation: first-line indent with spaces, blockquotes with >, headings with #.\n" +
       "\nBOUNDING BOX RULES (critical):\n" +
       "- You MUST use the native 1000x1000 spatial coordinate system.\n" +
       "- 'box_2d' must be an array of exactly 4 integers: [ymin, xmin, ymax, xmax] (between 0 and 1000).\n" +
@@ -484,11 +493,11 @@ function parseQwenBoundingBoxes(text: string): ParsedOcr | null {
   };
 }
 
-function buildMarkdownFromBlocks(blocks: Array<{ text?: string }>): string {
+function buildMarkdownFromBlocks(blocks: Array<{ text?: string; kind?: string }>): string {
   return blocks
     .filter((b) => typeof b?.text === "string" && b.text.trim())
     .map((b) => b.text!.trim())
-    .join("\n");
+    .join("\n\n");
 }
 
 function parseOcrPayload(content: string, markdownStyle: string): ParsedOcr {
