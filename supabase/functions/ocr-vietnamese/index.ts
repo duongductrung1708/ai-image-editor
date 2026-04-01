@@ -489,11 +489,11 @@ function parseQwenBoundingBoxes(text: string): ParsedOcr | null {
   };
 }
 
-function buildMarkdownFromBlocks(blocks: Array<{ text?: string }>): string {
+function buildMarkdownFromBlocks(blocks: Array<{ text?: string; kind?: string }>): string {
   return blocks
     .filter((b) => typeof b?.text === "string" && b.text.trim())
     .map((b) => b.text!.trim())
-    .join("\n");
+    .join("\n\n");
 }
 
 function parseOcrPayload(content: string, markdownStyle: string): ParsedOcr {
