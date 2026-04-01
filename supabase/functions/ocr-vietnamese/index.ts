@@ -332,25 +332,6 @@ function buildPrompt(
   markdownStyle: string,
   provider: string,
 ): string {
-  if (provider === "lmstudio") {
-    if (mode === "json" || mode === "both") {
-      return (
-        "Trich xuat toan bo van ban trong anh. BAT BUOC dinh vi vi tri cua tung doan van ban.\n" +
-        "Hay tra ve ket qua tuan thu CHINH XAC dinh dang sau cho moi doan van ban:\n" +
-        "[Noi dung van ban] <box>(ymin, xmin), (ymax, xmax)</box>\n" +
-        "Trong do: ymin/ymax la toa do DOC theo truc dung (0= tren, 1000= duoi); xmin/xmax la toa do NGANG (0= trai, 1000= phai).\n" +
-        "Goc (ymin,xmin) la goc tren-trai cua vung; (ymax,xmax) la goc duoi-phai. Bao sat vung chu/khoi, tranh bao ca trang neu khong can.\n" +
-        "Toa do nguyen tu 0 den 1000 (chia 10 de co phan tram)."
-      );
-    }
-    return (
-      "Extract ALL text from this image.\n" +
-      "Do not summarize or paraphrase.\n" +
-      "Preserve line breaks as best as possible.\n" +
-      "Return ONLY the extracted text/Markdown (no extra commentary).\n"
-    );
-  }
-
   const baseRaw =
     "Extract all Vietnamese text (and other languages if present) from this image.\n" +
     "Do not omit any text.\n" +
@@ -560,43 +541,29 @@ function parseOcrPayload(content: string, markdownStyle: string): ParsedOcr {
   }
 }
 
-function getSafeBaseUrlFromEnv(name: string, fallback: string): string {
-  const baseUrl = (Deno.env.get(name) || fallback).replace(/\/+$/, "");
-  const lowered = baseUrl.toLowerCase();
-  if (
-    lowered.includes("localhost") ||
-    lowered.includes("127.0.0.1") ||
-    lowered.includes("host.docker.internal")
-  ) {
-    throw new Error(
-      `${name} cannot use localhost/127.0.0.1 on Supabase cloud. Use a public URL.`,
-    );
-  }
-  return baseUrl;
-}
-
 type OcrConfig = {
   provider: string;
   mode: string;
   markdownStyle: string;
-  ollamaApi: string;
 };
 
 function getOcrConfig(): OcrConfig {
+  const provider = (Deno.env.get("OCR_PROVIDER") || "gemini").toLowerCase();
+  if (provider !== "gemini" && provider !== "openai") {
+    throw new Error(
+      `OCR_PROVIDER must be 'gemini' or 'openai', got: ${provider}`,
+    );
+  }
   return {
-    provider: (Deno.env.get("OCR_PROVIDER") || "gemini").toLowerCase(),
+    provider,
     mode: (Deno.env.get("OCR_MODE") || "both").toLowerCase(),
     markdownStyle: (Deno.env.get("OCR_MARKDOWN_STYLE") || "raw").toLowerCase(),
-    ollamaApi: (Deno.env.get("OLLAMA_API") || "native").toLowerCase(),
   };
 }
 
 function buildOcrPrompt(cfg: OcrConfig): string {
   const mode = cfg.mode === "json" || cfg.mode === "both" ? "both" : "markdown";
-  if (["gemini", "lmstudio", "openai"].includes(cfg.provider)) {
-    return buildPrompt(mode, cfg.markdownStyle, cfg.provider);
-  }
-  return buildPrompt(cfg.mode, cfg.markdownStyle, cfg.provider);
+  return buildPrompt(mode, cfg.markdownStyle, cfg.provider);
 }
 
 async function fetchProviderContent(
@@ -674,10 +641,18 @@ async function fetchProviderContent(
           `[ocr-gemini] finishReason=RECITATION on ${GEMINI_MODEL}; retry with ${GEMINI_MODEL_FALLBACK}`,
         );
         response = await doGeminiFetch(GEMINI_MODEL_FALLBACK);
+        if (response.ok) {
+          const data2 = await response.json().catch(() => null);
+          const text2 =
+            data2?.candidates?.[0]?.content?.parts?.find(
+              (p: { text?: unknown }) => typeof p?.text === "string",
+            )?.text || "";
+          if (text2) return text2;
+          throw new Error(
+            "OCR provider returned empty response (fallback model after RECITATION)",
+          );
+        }
       } else {
-        // Recreate a Response-like flow for downstream parsing by stashing JSON.
-        // We can't "un-read" response body; easiest is to return text here if present,
-        // otherwise throw with diagnostics below.
         if (text) return text;
 
         const promptFeedback = data?.promptFeedback;
@@ -701,91 +676,20 @@ async function fetchProviderContent(
         );
       }
     }
-  } else if (cfg.provider === "ollama") {
-    const OLLAMA_BASE_URL = getSafeBaseUrlFromEnv(
-      "OLLAMA_BASE_URL",
-      "https://example-ollama-server.com",
-    );
-    const OLLAMA_MODEL = Deno.env.get("OLLAMA_MODEL");
-    if (!OLLAMA_MODEL) throw new Error("OLLAMA_MODEL is not configured");
+  } else if (cfg.provider === "openai") {
+    const model = Deno.env.get("OPENAI_MODEL") || "gpt-4o";
+    const baseUrl = (Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1")
+      .replace(/\/+$/, "");
+    const apiKey = Deno.env.get("OPENAI_API_KEY") || "";
 
-    if (cfg.ollamaApi === "openai") {
-      const OLLAMA_OPENAI_BASE_URL = (
-        Deno.env.get("OLLAMA_OPENAI_BASE_URL") || `${OLLAMA_BASE_URL}/v1`
-      ).replace(/\/+$/, "");
-      response = await fetch(`${OLLAMA_OPENAI_BASE_URL}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer ollama",
-        },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are an expert OCR assistant. Extract text exactly as seen in the image.",
-            },
-            {
-              role: "user",
-              content: [
-                { type: "text", text: prompt },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: `data:${normalized.mimeType};base64,${normalized.image}`,
-                  },
-                },
-              ],
-            },
-          ],
-          temperature: 0,
-          max_tokens: 4096,
-          ...(cfg.mode !== "markdown"
-            ? { response_format: { type: "json_object" } }
-            : {}),
-        }),
-      });
-    } else {
-      response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          messages: [
-            { role: "user", content: prompt, images: [normalized.image] },
-          ],
-          stream: false,
-          options: { temperature: 0 },
-        }),
-      });
-    }
-  } else if (cfg.provider === "openai" || cfg.provider === "lmstudio") {
-    const isLmStudio = cfg.provider === "lmstudio";
-    const model = isLmStudio
-      ? Deno.env.get("LMSTUDIO_MODEL") || ""
-      : Deno.env.get("OPENAI_MODEL") || "gpt-4o";
-    const baseUrl = (
-      isLmStudio
-        ? Deno.env.get("LMSTUDIO_BASE_URL") || "http://127.0.0.1:1234/v1"
-        : Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1"
-    ).replace(/\/+$/, "");
-    const apiKey = isLmStudio ? "" : Deno.env.get("OPENAI_API_KEY") || "";
-
-    if (!model)
-      throw new Error(
-        `${isLmStudio ? "LMSTUDIO_MODEL" : "OPENAI_MODEL"} is not configured`,
-      );
-    if (!isLmStudio && !apiKey)
-      throw new Error("OPENAI_API_KEY is not configured");
-    if (isLmStudio) getSafeBaseUrlFromEnv("LMSTUDIO_BASE_URL", baseUrl);
+    if (!model) throw new Error("OPENAI_MODEL is not configured");
+    if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
 
     response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(isLmStudio ? {} : { Authorization: `Bearer ${apiKey}` }),
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model,
@@ -818,10 +722,6 @@ async function fetchProviderContent(
           : {}),
       }),
     });
-  } else {
-    throw new Error(
-      "Unsupported OCR_PROVIDER. Use 'gemini', 'openai', 'lmstudio' or 'ollama'.",
-    );
   }
 
   if (!response.ok) {
@@ -841,11 +741,7 @@ async function fetchProviderContent(
   }
 
   const data = await response.json();
-  if (
-    cfg.provider === "openai" ||
-    cfg.provider === "lmstudio" ||
-    cfg.ollamaApi === "openai"
-  ) {
+  if (cfg.provider === "openai") {
     return typeof data?.choices?.[0]?.message?.content === "string"
       ? data.choices[0].message.content
       : "";
@@ -864,26 +760,6 @@ async function runSingleOcr(
   const prompt = buildOcrPrompt(cfg);
   const textOut = await fetchProviderContent(normalized, cfg, prompt);
   if (!textOut) throw new Error("OCR provider returned empty response");
-
-  if (
-    cfg.provider === "lmstudio" &&
-    (cfg.mode === "json" || cfg.mode === "both")
-  ) {
-    const qwenData = parseQwenBoundingBoxes(textOut);
-    if (qwenData) {
-      return {
-        markdown: postProcessMarkdown(
-          qwenData.markdown || "",
-          cfg.markdownStyle,
-        ),
-        full_text:
-          typeof qwenData.full_text === "string" ? qwenData.full_text : "",
-        blocks: normalizeOcrBlocks(
-          Array.isArray(qwenData.blocks) ? qwenData.blocks : [],
-        ),
-      };
-    }
-  }
 
   if (cfg.mode === "markdown") {
     const cleaned = postProcessMarkdown(textOut, cfg.markdownStyle);

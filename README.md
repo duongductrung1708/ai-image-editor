@@ -1,80 +1,38 @@
 # AI Image Editor (OCR)
 
-## Local OCR via Ollama
+## OCR providers (Supabase Edge Function)
 
-This project uses a small local API server that calls **Ollama OpenAI-compatible API**.
+The app calls **`supabase/functions/v1/ocr-vietnamese`**. Supported providers:
 
-- **Provider**: Ollama (local)
-- **Provider (selectable)**: Ollama (local) or Gemini (cloud)
-- **Env required**:
-  - `OCR_PROVIDER` (`ollama` | `gemini`, default: `ollama`)
-  - `OLLAMA_MODEL` (e.g. `deepseek-ocr2` if you have it pulled)
-  - `OLLAMA_BASE_URL` (optional; default: `http://localhost:11434`)
-  - `OCR_API_PORT` (optional; default: `8787`)
-  - `OLLAMA_TIMEOUT_MS` (optional; default: `600000`)
-  - `OCR_MODE` (optional; `both` | `json` | `markdown`, default: `both`)
-  - `OLLAMA_API` (optional; `native` | `openai`, default: `native`)
-  - `GEMINI_API_KEY` (required when `OCR_PROVIDER=gemini`)
-  - `GEMINI_MODEL` (optional; default: `gemini-2.5-flash`)
-  - `GEMINI_TIMEOUT_MS` (optional; default: `60000`, increase for large images)
-  - **Batch OCR** (optional):
-    - `OCR_BATCH_CONCURRENCY` (default: `2`, max `8`) — parallel pages per batch request
-    - `OCR_BATCH_MAX_IMAGES` (default: `30`, max `100`) — max images per `/api/ocr/batch` body
-  - Batch requests accept up to **120MB** JSON body (many base64 images); reduce image size if you hit limits.
+- **`gemini`** — Google Generative Language API (`GEMINI_API_KEY`, `GEMINI_MODEL`, …)
+- **`openai`** — OpenAI-compatible HTTP API (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, e.g. OpenRouter)
 
-### Configure env (local)
+Set secrets on Supabase for the deployed function (or local env when using `supabase functions serve`).
 
-Put these variables in your root `.env`:
+**Env (typical)**:
 
-```bash
-OLLAMA_MODEL="deepseek-ocr2"
-OLLAMA_BASE_URL="http://localhost:11434"
-```
+- `OCR_PROVIDER` — `gemini` | `openai` (default in code: `gemini`)
+- `OCR_MODE` — `both` | `json` | `markdown` (default: `both`)
+- `OCR_MARKDOWN_STYLE` — `raw` | `clean`
+- **Gemini**: `GEMINI_API_KEY`, `GEMINI_MODEL` (e.g. `gemini-2.5-flash`), optional `GEMINI_MODEL_FALLBACK`
+- **OpenAI-compatible**: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`
+- **Batch OCR** (optional): `OCR_BATCH_CONCURRENCY` (default `2`, max `8`), `OCR_BATCH_MAX_IMAGES` (default `30`, max `100`)
 
-### Run locally
-
-Terminal 1:
-
-```bash
-npm run dev:ocr
-```
-
-Terminal 2:
+### Run the frontend locally
 
 ```bash
 npm run dev
 ```
 
-## Troubleshooting
-
-### `model requires more system memory ...`
-
-You are out of RAM for the selected model. Use a smaller model tag (e.g. `qwen2.5vl:3b`) or close heavy apps.
-
-### `fetch failed` / timeouts in `dev:ocr`
-
-- Ensure Ollama is running:
-
-```bash
-ollama serve
-```
-
-- On Windows, prefer:
-  - `OLLAMA_BASE_URL="http://127.0.0.1:11434"` over `localhost`
-- Increase timeout:
-  - `OLLAMA_TIMEOUT_MS=900000`
-
 ### Model doesn’t return JSON (JSON tab empty)
 
-Some models ignore “JSON only” instructions. This app will fall back to using the raw model output as Markdown/plain text and return a warning.
+Some models ignore “JSON only” instructions. The function can fall back to raw text and return a warning.
 
 ## Local OCR via DeepSeek-OCR 2 (GPU, Hugging Face)
 
-If you want to run **DeepSeek-OCR 2** directly on your NVIDIA GPU (instead of Ollama), run the bundled Python service and point `dev:ocr` to it.
+Optional: run **DeepSeek-OCR 2** on an NVIDIA GPU via the bundled Python service (separate from the Edge Function providers above).
 
 ### Configure env (local)
-
-Put these variables in your root `.env`:
 
 ```bash
 OCR_PROVIDER="deepseek-ocr2"
@@ -95,7 +53,7 @@ pip install -r requirements.txt
 uvicorn app:app --host 127.0.0.1 --port 9000
 ```
 
-Terminal 2 (local OCR API used by the frontend):
+Terminal 2 (if your project still exposes `dev:ocr` for this path):
 
 ```bash
 npm run dev:ocr
