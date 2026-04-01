@@ -336,7 +336,12 @@ function buildPrompt(
     "Extract all Vietnamese text (and other languages if present) from this image.\n" +
     "Do not omit any text.\n" +
     "Do NOT summarize. Do NOT paraphrase.\n" +
-    "Preserve the original reading order, line breaks, and indentation as best as possible.\n";
+    "Preserve the original reading order and indentation as best as possible.\n" +
+    "\nPARAGRAPH & LINE-BREAK RULES (critical):\n" +
+    "- Join words that belong to the SAME logical paragraph/sentence into one continuous line, even if they span multiple visual lines in the image.\n" +
+    "- Only insert a line break (\\n) when the document clearly starts a NEW paragraph, a new list item, a new heading, or a new section.\n" +
+    "- Preserve indentation: if the original document indents a paragraph (e.g. first-line indent), represent it with leading spaces or use Markdown block-quote (>) for quoted sections.\n" +
+    "- Do NOT break lines at every OCR bounding-box boundary.\n";
 
   const baseClean =
     baseRaw +
