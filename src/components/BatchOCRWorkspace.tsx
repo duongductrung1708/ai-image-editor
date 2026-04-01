@@ -83,7 +83,13 @@ const BatchOCRWorkspace = ({
     [],
   );
 
-  const { canUse: quotaCanUse, remaining: quotaRemaining, refresh: refreshQuota } = useOcrQuota();
+  const {
+    canUse: quotaCanUse,
+    remaining: quotaRemaining,
+    isUnlimited: quotaUnlimited,
+    loading: quotaLoading,
+    refresh: refreshQuota,
+  } = useOcrQuota();
 
   useEffect(() => {
     setLinkedBatchHighlight(null);
@@ -102,14 +108,25 @@ const BatchOCRWorkspace = ({
     if (!quotaCanUse) {
       if (!user) {
         toast.error("Vui lòng đăng nhập để sử dụng OCR.", {
-          action: { label: "Đăng nhập", onClick: () => { window.location.href = "/auth"; } },
+          action: {
+            label: "Đăng nhập",
+            onClick: () => {
+              window.location.href = "/auth";
+            },
+          },
           duration: 8000,
         });
       } else {
-        toast.error("Bạn đã hết lượt OCR miễn phí hôm nay. Nâng cấp Pro để không giới hạn.", {
-          action: { label: "Nâng cấp", onClick: () => window.location.href = "/profile?tab=pricing" },
-          duration: 8000,
-        });
+        toast.error(
+          "Bạn đã hết lượt OCR miễn phí hôm nay. Nâng cấp Pro để không giới hạn.",
+          {
+            action: {
+              label: "Nâng cấp",
+              onClick: () => (window.location.href = "/profile?tab=pricing"),
+            },
+            duration: 8000,
+          },
+        );
       }
       return;
     }
@@ -169,16 +186,28 @@ const BatchOCRWorkspace = ({
       )}
 
       {phase === "ready" && (
-        <BatchReadyView
-          files={files}
-          sourcePreviewUrls={sourcePreviewUrls}
-          totalBytes={totalBytes}
-          extensionSummary={extensionSummary}
-          isProcessing={isProcessing}
-          onStartBatch={guardedRunBatch}
-          quotaRemaining={quotaRemaining}
-          quotaUnlimited={!quotaCanUse ? false : quotaRemaining === Infinity}
-        />
+        <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+            <BatchReadyView
+              files={files}
+              sourcePreviewUrls={sourcePreviewUrls}
+              totalBytes={totalBytes}
+              extensionSummary={extensionSummary}
+              isProcessing={isProcessing}
+              onStartBatch={guardedRunBatch}
+              quotaRemaining={quotaRemaining}
+              quotaUnlimited={quotaUnlimited}
+            />
+          </div>
+
+          {showHistory && isLg ? (
+            <HistorySidebar
+              isOpen={true}
+              onSelect={applyHistoryEntry}
+              refreshKey={historyRefresh}
+            />
+          ) : null}
+        </div>
       )}
 
       {phase === "result" && (
@@ -214,21 +243,7 @@ const BatchOCRWorkspace = ({
         refreshKey={historyRefresh}
       />
 
-      {showHistory && isLg && phase === "ready" ? (
-        <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setShowHistory(false)}>
-          <div
-            className="absolute right-0 top-0 h-full"
-            onClick={(e) => e.stopPropagation()}
-            role="presentation"
-          >
-            <HistorySidebar
-              isOpen={true}
-              onSelect={applyHistoryEntry}
-              refreshKey={historyRefresh}
-            />
-          </div>
-        </div>
-      ) : null}
+      {/* Desktop (ready): history is rendered inline next to workspace above */}
     </div>
   );
 };

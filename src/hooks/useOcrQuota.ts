@@ -7,7 +7,7 @@ const FREE_DAILY_LIMIT = 5;
 
 export function useOcrQuota() {
   const { user } = useAuth();
-  const { tier } = useSubscription();
+  const { tier, loading: subscriptionLoading } = useSubscription();
   const [todayCount, setTodayCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -47,9 +47,15 @@ export function useOcrQuota() {
 
   const isUnlimited = tier === "pro" || tier === "business";
   const dailyLimit = FREE_DAILY_LIMIT;
-  const remaining =
-    !user ? 0 : isUnlimited ? Infinity : Math.max(0, dailyLimit - todayCount);
-  const canUse = Boolean(user) && (isUnlimited || remaining > 0);
+  const ready = Boolean(user) && !loading && !subscriptionLoading;
+  const remaining = !user
+    ? 0
+    : subscriptionLoading
+      ? undefined
+      : isUnlimited
+        ? Infinity
+        : Math.max(0, dailyLimit - todayCount);
+  const canUse = Boolean(user) && (isUnlimited || (remaining ?? 0) > 0);
 
   return {
     todayCount,
@@ -57,7 +63,8 @@ export function useOcrQuota() {
     limit: isUnlimited ? Infinity : dailyLimit,
     canUse,
     isUnlimited,
-    loading,
+    loading: loading || subscriptionLoading,
+    ready,
     refresh: fetchCount,
   };
 }

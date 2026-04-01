@@ -21,9 +21,21 @@ import { enhanceFile } from "@/lib/imageProcessing";
 interface OCRWorkspaceProps {
   imageFile: File;
   onBack: () => void;
+  initialHistoryEntry?: {
+    id: string;
+    image_name: string;
+    extracted_text: string;
+    bounding_boxes: Json | null;
+    image_data: string | null;
+    created_at: string;
+  } | null;
 }
 
-const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
+const OCRWorkspace = ({
+  imageFile,
+  onBack,
+  initialHistoryEntry = null,
+}: OCRWorkspaceProps) => {
   const { user } = useAuth();
   const [imageUrl, setImageUrl] = useState("");
   const [showHistory, setShowHistory] = useState(false);
@@ -68,15 +80,16 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText);
 
-  const { copied, copy, download, exportPdf, downloadDocx } = useSingleImageExportActions({
-    activeTab,
-    editor,
-    turndown,
-    markdownText,
-    jsonText,
-    imageUrl,
-    sourceImageName: imageFile.name,
-  });
+  const { copied, copy, download, exportPdf, downloadDocx } =
+    useSingleImageExportActions({
+      activeTab,
+      editor,
+      turndown,
+      markdownText,
+      jsonText,
+      imageUrl,
+      sourceImageName: imageFile.name,
+    });
 
   const handleMarkdownHighlightChange = useCallback(
     (indices: number[] | null) => {
@@ -131,7 +144,13 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     setImageUrl(url);
   }, []);
 
-  const { canUse: quotaCanUse, remaining: quotaRemaining, isUnlimited: quotaUnlimited, refresh: refreshQuota } = useOcrQuota();
+  const {
+    canUse: quotaCanUse,
+    remaining: quotaRemaining,
+    isUnlimited: quotaUnlimited,
+    loading: quotaLoading,
+    refresh: refreshQuota,
+  } = useOcrQuota();
 
   const startOcr = useCallback(async () => {
     if (phase === "processing") return;
@@ -139,14 +158,25 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     if (!quotaCanUse) {
       if (!user) {
         toast.error("Vui lòng đăng nhập để sử dụng OCR.", {
-          action: { label: "Đăng nhập", onClick: () => { window.location.href = "/auth"; } },
+          action: {
+            label: "Đăng nhập",
+            onClick: () => {
+              window.location.href = "/auth";
+            },
+          },
           duration: 8000,
         });
       } else {
-        toast.error("Bạn đã hết lượt OCR miễn phí hôm nay. Nâng cấp Pro để không giới hạn.", {
-          action: { label: "Nâng cấp", onClick: () => window.location.href = "/profile?tab=pricing" },
-          duration: 8000,
-        });
+        toast.error(
+          "Bạn đã hết lượt OCR miễn phí hôm nay. Nâng cấp Pro để không giới hạn.",
+          {
+            action: {
+              label: "Nâng cấp",
+              onClick: () => (window.location.href = "/profile?tab=pricing"),
+            },
+            duration: 8000,
+          },
+        );
       }
       return;
     }
@@ -353,6 +383,12 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
     [setBoundingBoxes, setJsonText, setMarkdownText],
   );
 
+  useEffect(() => {
+    if (initialHistoryEntry) {
+      handleHistorySelect(initialHistoryEntry);
+    }
+  }, [handleHistorySelect, initialHistoryEntry]);
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <OCRToolbar
@@ -405,43 +441,39 @@ const OCRWorkspace = ({ imageFile, onBack }: OCRWorkspaceProps) => {
           />
         </>
       ) : (
-        <SingleImageEditPhase
-          editImageUrl={editImageUrl}
-          ocrPipelineBusy={ocrPipelineBusy}
-          isEditingBusy={isEditingBusy}
-          enhance={enhance}
-          cropperApiRef={cropperApiRef}
-          onCropperApiReady={(api) => {
-            cropperApiRef.current = api;
-          }}
-          onRotate={(deg) => void applyRotate(deg)}
-          onToggleEnhance={() => void applyEnhance()}
-          onResetImage={() => {
-            setEditFile(imageFile);
-            setEnhance(false);
-            cropperApiRef.current?.reset();
-          }}
-          onStartOcr={() => void startOcr()}
-          quotaRemaining={quotaRemaining}
-          quotaUnlimited={quotaUnlimited}
-        />
-      )}
+        <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+            <SingleImageEditPhase
+              editImageUrl={editImageUrl}
+              ocrPipelineBusy={ocrPipelineBusy}
+              isEditingBusy={isEditingBusy}
+              enhance={enhance}
+              cropperApiRef={cropperApiRef}
+              onCropperApiReady={(api) => {
+                cropperApiRef.current = api;
+              }}
+              onRotate={(deg) => void applyRotate(deg)}
+              onToggleEnhance={() => void applyEnhance()}
+              onResetImage={() => {
+                setEditFile(imageFile);
+                setEnhance(false);
+                cropperApiRef.current?.reset();
+              }}
+              onStartOcr={() => void startOcr()}
+              quotaRemaining={quotaRemaining}
+              quotaUnlimited={quotaUnlimited}
+            />
+          </div>
 
-      {showHistory && isLg && phase !== "result" ? (
-        <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setShowHistory(false)}>
-          <div
-            className="absolute right-0 top-0 h-full"
-            onClick={(e) => e.stopPropagation()}
-            role="presentation"
-          >
+          {showHistory && isLg ? (
             <HistorySidebar
               isOpen={true}
               onSelect={handleHistorySelect}
               refreshKey={historyRefresh}
             />
-          </div>
+          ) : null}
         </div>
-      ) : null}
+      )}
 
       <OcrHistoryMobileDrawer
         open={showHistory && !isLg && phase !== "result"}

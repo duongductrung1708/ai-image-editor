@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +40,7 @@ import {
   ExternalLink,
   History,
   Trash2,
+  Eye,
 } from "lucide-react";
 
 function toHistoryTextPreview(input: string): string {
@@ -135,6 +137,7 @@ const ProfilePage = () => {
   }
 
   const { user, session } = useAuth();
+  const navigate = useNavigate();
   const {
     tier: currentTier,
     subscriptionEnd,
@@ -835,27 +838,44 @@ const ProfilePage = () => {
                                 ).toLocaleString("vi-VN")}
                               </p>
                             </div>
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="sm"
-                              className="gap-1.5"
-                              onClick={() => setConfirmDeleteOneOpen(true)}
-                              disabled={deletingHistory}
-                            >
-                              {deletingHistory ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-3.5 w-3.5" />
-                              )}
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  navigate(`/app?historyId=${selectedHistory.id}`)
+                                }
+                                title="Mở trong OCR"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="icon"
+                                className="gap-1.5"
+                                onClick={() => setConfirmDeleteOneOpen(true)}
+                                disabled={deletingHistory}
+                              >
+                                {deletingHistory ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            </div>
                           </div>
 
                           {selectedHistory.image_data ? (
                             <img
                               src={selectedHistory.image_data}
                               alt={selectedHistory.image_name}
-                              className="max-h-56 w-full rounded border border-border object-contain"
+                              className="max-h-56 w-full cursor-pointer rounded border border-border object-contain"
+                              title="Bấm để mở trong OCR"
+                              onClick={() =>
+                                navigate(`/app?historyId=${selectedHistory.id}`)
+                              }
                             />
                           ) : null}
 

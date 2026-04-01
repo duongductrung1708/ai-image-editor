@@ -1,9 +1,12 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import DropZone from "@/components/DropZone";
 import OCRWorkspace from "@/components/OCRWorkspace";
 import BatchOCRWorkspace from "@/components/BatchOCRWorkspace";
 import Navbar from "@/components/Navbar";
 import { motion } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import {
   FileSearch,
   Files,
@@ -53,6 +56,24 @@ const quickSteps = [
 
 const AppPage = () => {
   const [files, setFiles] = useState<File[] | null>(null);
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const historyId = useMemo(
+    () => searchParams.get("historyId"),
+    [searchParams],
+  );
+
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [resumeEntry, setResumeEntry] = useState<{
+    id: string;
+    image_name: string;
+    extracted_text: string;
+    image_data: string | null;
+    bounding_boxes: Json | null;
+    created_at: string;
+  } | null>(null);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
 
   const handleFilesSelect = useCallback((picked: File[]) => {
     if (!picked.length) return;
@@ -61,6 +82,115 @@ const AppPage = () => {
     );
     setFiles(sorted);
   }, []);
+
+  useEffect(() => {
+    if (!historyId) return;
+    if (files && files.length > 0) return;
+
+    let cancelled = false;
+    const run = async () => {
+      setResumeLoading(true);
+      setResumeError(null);
+      setResumeEntry(null);
+      setResumeFile(null);
+      try {
+        const { data, error } = await supabase
+          .from("ocr_history")
+          .select(
+            "id, image_name, extracted_text, image_data, bounding_boxes, created_at",
+          )
+          .eq("id", historyId)
+          .single();
+
+        if (error || !data) {
+          throw new Error("Không thể tải bản ghi lịch sử.");
+        }
+
+        const entry = data as {
+          id: string;
+          image_name: string;
+          extracted_text: string;
+          image_data: string | null;
+          bounding_boxes: Json | null;
+          created_at: string;
+        };
+
+        let file: File;
+        if (entry.image_data) {
+          const res = await fetch(entry.image_data);
+          const blob = await res.blob();
+          const type = blob.type || "image/png";
+          file = new File([blob], entry.image_name || "ocr-history.png", {
+            type,
+          });
+        } else {
+          file = new File(
+            [new Blob([])],
+            entry.image_name || "ocr-history.png",
+            {
+              type: "image/png",
+            },
+          );
+        }
+
+        if (cancelled) return;
+        setResumeEntry(entry);
+        setResumeFile(file);
+      } catch (e: unknown) {
+        if (cancelled) return;
+        const msg =
+          e instanceof Error ? e.message : "Không thể mở bản ghi lịch sử.";
+        setResumeError(msg);
+      } finally {
+        if (!cancelled) setResumeLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [files, historyId]);
+
+  if (historyId && (resumeLoading || resumeEntry || resumeError)) {
+    if (resumeLoading || !resumeFile) {
+      return (
+        <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+          <Navbar />
+          <div className="flex flex-1 items-center justify-center px-6">
+            <div className="text-sm text-muted-foreground">
+              Đang mở lịch sử OCR...
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (resumeError) {
+      return (
+        <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+          <Navbar />
+          <div className="flex flex-1 items-center justify-center px-6">
+            <div className="max-w-md text-center">
+              <p className="text-sm text-destructive">{resumeError}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <OCRWorkspace
+            imageFile={resumeFile}
+            onBack={() => navigate("/app")}
+            initialHistoryEntry={resumeEntry}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (files && files.length > 1) {
     const clear = () => setFiles(null);

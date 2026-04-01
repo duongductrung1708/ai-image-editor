@@ -178,7 +178,7 @@ const SingleImageEditPhase = ({
                 <span className={quotaRemaining <= 3 ? "text-destructive" : "text-primary"}>
                   {quotaRemaining}
                 </span>
-                /10 lượt hôm nay
+                {" "}lượt hôm nay
               </p>
             )}
             <p className="mt-1 text-xs text-muted-foreground">
