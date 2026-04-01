@@ -72,7 +72,10 @@ export async function exportSingleImageOcrPdf({
   const proseMirrorEl = document.querySelector<HTMLElement>(".ProseMirror");
   if (editor && proseMirrorEl && activeTab !== "json") {
     try {
-      const h = Math.max(proseMirrorEl.scrollHeight, proseMirrorEl.clientHeight);
+      const h = Math.max(
+        proseMirrorEl.scrollHeight,
+        proseMirrorEl.clientHeight,
+      );
       const canvas = await html2canvas(proseMirrorEl, {
         scale: 2,
         backgroundColor: "#ffffff",
@@ -91,7 +94,7 @@ export async function exportSingleImageOcrPdf({
       while (remaining > 0) {
         const available = 287 - cursorY;
         const sliceH = Math.min(remaining, available);
-        
+
         if (sliceH < 10 && remaining > 10) {
           doc.addPage();
           cursorY = 20;
@@ -111,7 +114,7 @@ export async function exportSingleImageOcrPdf({
         cursorY += sliceH + 4;
         remaining -= sliceH;
         srcY += sliceH;
-        
+
         if (remaining > 0) {
           doc.addPage();
           cursorY = 20;
@@ -125,10 +128,7 @@ export async function exportSingleImageOcrPdf({
 
   // Fallback: plain text
   if (!capturedEditor) {
-    const text =
-      activeTab === "json"
-        ? jsonText
-        : markdownText;
+    const text = activeTab === "json" ? jsonText : markdownText;
     if (text.trim()) {
       doc.setFontSize(11);
       doc.setTextColor(0, 0, 0);
@@ -144,7 +144,10 @@ export async function exportSingleImageOcrPdf({
     }
   }
 
-  const safeName = (sourceImageName || "monkeyocr").replace(/[/\\?%*:|"<>]/g, "-");
+  const safeName = (sourceImageName || "monkeyocr").replace(
+    /[/\\?%*:|"<>]/g,
+    "-",
+  );
   doc.save(`${safeName}.pdf`);
 }
 

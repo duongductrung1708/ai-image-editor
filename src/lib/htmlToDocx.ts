@@ -44,7 +44,9 @@ function normalizeHexColor(value?: string | null): string | undefined {
   const rgb = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(v);
   if (!rgb) return undefined;
   const toHex = (n: string) =>
-    Math.max(0, Math.min(255, Number(n))).toString(16).padStart(2, "0");
+    Math.max(0, Math.min(255, Number(n)))
+      .toString(16)
+      .padStart(2, "0");
   return `${toHex(rgb[1])}${toHex(rgb[2])}${toHex(rgb[3])}`.toUpperCase();
 }
 
@@ -57,7 +59,9 @@ function pxToHalfPoints(value?: string | null): number | undefined {
   return Math.round(px * 1.5);
 }
 
-function getAlignment(el: HTMLElement): (typeof AlignmentType)[keyof typeof AlignmentType] | undefined {
+function getAlignment(
+  el: HTMLElement,
+): (typeof AlignmentType)[keyof typeof AlignmentType] | undefined {
   const align = el.style?.textAlign || el.getAttribute("align");
   switch (align) {
     case "center":
@@ -71,7 +75,9 @@ function getAlignment(el: HTMLElement): (typeof AlignmentType)[keyof typeof Alig
   }
 }
 
-function getHeadingLevel(tag: string): (typeof HeadingLevel)[keyof typeof HeadingLevel] | undefined {
+function getHeadingLevel(
+  tag: string,
+): (typeof HeadingLevel)[keyof typeof HeadingLevel] | undefined {
   switch (tag) {
     case "H1":
       return HeadingLevel.HEADING_1;
@@ -93,25 +99,27 @@ function extractRuns(node: Node, parentStyle: RunStyle = {}): TextRun[] {
   if (node.nodeType === Node.TEXT_NODE) {
     const text = node.textContent || "";
     if (text) {
-      runs.push(new TextRun({
-        text,
-        bold: parentStyle.bold || undefined,
-        italics: parentStyle.italics || undefined,
-        underline: parentStyle.underline,
-        color: parentStyle.color,
-        size: parentStyle.size,
-        ...(parentStyle.highlight
-          ? {
-              shading: {
-                type: ShadingType.CLEAR,
-                fill:
-                  parentStyle.highlight === "true"
-                    ? "FFFF00"
-                    : parentStyle.highlight,
-              },
-            }
-          : {}),
-      }));
+      runs.push(
+        new TextRun({
+          text,
+          bold: parentStyle.bold || undefined,
+          italics: parentStyle.italics || undefined,
+          underline: parentStyle.underline,
+          color: parentStyle.color,
+          size: parentStyle.size,
+          ...(parentStyle.highlight
+            ? {
+                shading: {
+                  type: ShadingType.CLEAR,
+                  fill:
+                    parentStyle.highlight === "true"
+                      ? "FFFF00"
+                      : parentStyle.highlight,
+                },
+              }
+            : {}),
+        }),
+      );
     }
     return runs;
   }
@@ -129,8 +137,7 @@ function extractRuns(node: Node, parentStyle: RunStyle = {}): TextRun[] {
     style.highlight =
       normalizeHexColor(el.getAttribute("data-color")) || "FFFF00";
   }
-  style.color =
-    normalizeHexColor(el.style.color) || style.color || undefined;
+  style.color = normalizeHexColor(el.style.color) || style.color || undefined;
   style.size = pxToHalfPoints(el.style.fontSize) || style.size || undefined;
   if (tag === "BR") {
     runs.push(new TextRun({ break: 1, text: "" }));
@@ -183,9 +190,7 @@ function tableToDocxTable(tableEl: HTMLElement): Table {
 
   // Determine column count from first row
   const firstTr = trEls[0];
-  const colCount = firstTr
-    ? firstTr.querySelectorAll("td, th").length
-    : 2;
+  const colCount = firstTr ? firstTr.querySelectorAll("td, th").length : 2;
   const tableWidth = 9360; // A4 with 1" margins
   const colWidth = Math.floor(tableWidth / Math.max(colCount, 1));
 
@@ -233,9 +238,7 @@ function tableToDocxTable(tableEl: HTMLElement): Table {
 }
 
 /** Process children of a container, returning Paragraph[] and Table[]. */
-function processChildren(
-  container: HTMLElement,
-): (Paragraph | Table)[] {
+function processChildren(container: HTMLElement): (Paragraph | Table)[] {
   const result: (Paragraph | Table)[] = [];
 
   for (const child of Array.from(container.childNodes)) {
@@ -284,8 +287,7 @@ function processChildren(
     if (tag === "UL" || tag === "OL") {
       const items = el.querySelectorAll(":scope > li");
       items.forEach((li, idx) => {
-        const prefix =
-          tag === "OL" ? `${idx + 1}. ` : "• ";
+        const prefix = tag === "OL" ? `${idx + 1}. ` : "• ";
         const runs = extractRuns(li);
         if (runs.length > 0) {
           result.push(
@@ -324,9 +326,7 @@ function processChildren(
 /**
  * Convert TipTap HTML string to docx Document children (Paragraph[] & Table[]).
  */
-export function htmlToDocxChildren(
-  html: string,
-): (Paragraph | Table)[] {
+export function htmlToDocxChildren(html: string): (Paragraph | Table)[] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
   return processChildren(doc.body);

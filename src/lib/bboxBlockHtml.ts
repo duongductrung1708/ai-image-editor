@@ -23,8 +23,7 @@ export function normalizeBoundingBoxes(
   blocks: BoundingBox[],
   pageIndex?: number,
 ): BoundingBox[] {
-  const prefix =
-    pageIndex !== undefined ? `p${pageIndex}-` : "";
+  const prefix = pageIndex !== undefined ? `p${pageIndex}-` : "";
   return blocks.map((b, i) => {
     const id =
       b.id?.trim() && b.id.trim().length > 0
@@ -79,9 +78,7 @@ export function buildOcrHtmlFromBlocks(
       continue;
     }
 
-    const inner = t
-      ? escapeHtml(t).replace(/\n/g, "<br/>")
-      : "<br/>";
+    const inner = t ? escapeHtml(t).replace(/\n/g, "<br/>") : "<br/>";
     parts.push(
       `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}">${inner}</p>`,
     );

@@ -31,7 +31,10 @@ async function loadImageFromFile(file: Blob): Promise<HTMLImageElement> {
   }
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string): Promise<Blob> {
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  mimeType: string,
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -44,7 +47,10 @@ function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string): Promise<Blob
   });
 }
 
-export async function rotateFile(file: File, angleDegrees: number): Promise<File> {
+export async function rotateFile(
+  file: File,
+  angleDegrees: number,
+): Promise<File> {
   const angle = angleDegrees % 360;
   const shouldSwap = Math.abs(angle) === 90 || Math.abs(angle) === 270;
 
@@ -75,7 +81,11 @@ export async function rotateFile(file: File, angleDegrees: number): Promise<File
 
 export async function enhanceFile(
   file: File,
-  options: { contrast?: number; brightness?: number; sharpenPass?: number } = {},
+  options: {
+    contrast?: number;
+    brightness?: number;
+    sharpenPass?: number;
+  } = {},
 ): Promise<File> {
   const { contrast = 1.25, brightness = 1.03, sharpenPass = 0 } = options;
 
@@ -104,12 +114,19 @@ export async function enhanceFile(
   }
 
   const blob = await canvasToBlob(canvas, "image/png");
-  return new File([blob], `${file.name.replace(/\.[^/.]+$/, "")}_enhanced.png`, {
-    type: "image/png",
-  });
+  return new File(
+    [blob],
+    `${file.name.replace(/\.[^/.]+$/, "")}_enhanced.png`,
+    {
+      type: "image/png",
+    },
+  );
 }
 
-export async function cropFile(file: File, crop: NormalizedCropRect): Promise<File> {
+export async function cropFile(
+  file: File,
+  crop: NormalizedCropRect,
+): Promise<File> {
   const img = await loadImageFromFile(file);
   const inW = img.naturalWidth;
   const inH = img.naturalHeight;
@@ -138,4 +155,3 @@ export async function cropFile(file: File, crop: NormalizedCropRect): Promise<Fi
     type: "image/png",
   });
 }
-

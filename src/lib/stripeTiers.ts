@@ -11,7 +11,9 @@ export const STRIPE_TIERS = {
 
 export type StripeTier = keyof typeof STRIPE_TIERS;
 
-export function getTierByProductId(productId: string | null): StripeTier | "free" {
+export function getTierByProductId(
+  productId: string | null,
+): StripeTier | "free" {
   if (!productId) return "free";
   for (const [tier, config] of Object.entries(STRIPE_TIERS)) {
     if (config.product_id === productId) return tier as StripeTier;

@@ -68,9 +68,15 @@ export function findMatchingBoxIndices(
 
     // Strategy 1: exact substring containment
     if (norm.includes(bt)) {
-      score = Math.max(score, 0.6 + 0.4 * (bt.length / Math.max(norm.length, 1)));
+      score = Math.max(
+        score,
+        0.6 + 0.4 * (bt.length / Math.max(norm.length, 1)),
+      );
     } else if (bt.includes(norm)) {
-      score = Math.max(score, 0.55 + 0.4 * (norm.length / Math.max(bt.length, 1)));
+      score = Math.max(
+        score,
+        0.55 + 0.4 * (norm.length / Math.max(bt.length, 1)),
+      );
     }
 
     // Strategy 2: token overlap (Jaccard-like)
@@ -108,9 +114,7 @@ export function findMatchingBoxIndices(
 
   scored.sort((a, b) => b.score - a.score);
   const best = scored[0].score;
-  return scored
-    .filter((s) => s.score >= best * 0.6)
-    .map((s) => s.index);
+  return scored.filter((s) => s.score >= best * 0.6).map((s) => s.index);
 }
 
 export function mergeBoxRectsPercent(
