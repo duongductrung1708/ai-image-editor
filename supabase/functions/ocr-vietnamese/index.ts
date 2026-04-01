@@ -607,7 +607,9 @@ async function fetchProviderContent(
   let response: Response;
   if (cfg.provider === "gemini") {
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+    const rawModel = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+    // Strip "models/" prefix if user accidentally included it
+    const GEMINI_MODEL = rawModel.replace(/^models\//, "");
     const GEMINI_MODEL_FALLBACK =
       Deno.env.get("GEMINI_MODEL_FALLBACK") || "gemini-2.0-flash";
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
@@ -828,7 +830,14 @@ async function fetchProviderContent(
     }
     const t = await response.text();
     console.error("OCR provider error:", response.status, t);
-    throw new Error(`OCR provider error: ${response.status}`);
+    // Surface the actual provider error message for easier debugging
+    let detail = `OCR provider error: ${response.status}`;
+    try {
+      const errJson = JSON.parse(t);
+      const msg = errJson?.error?.message || errJson?.error || "";
+      if (msg) detail = `${cfg.provider} API ${response.status}: ${msg}`;
+    } catch { /* use generic */ }
+    throw new Error(detail);
   }
 
   const data = await response.json();
