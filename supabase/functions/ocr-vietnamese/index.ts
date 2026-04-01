@@ -830,7 +830,14 @@ async function fetchProviderContent(
     }
     const t = await response.text();
     console.error("OCR provider error:", response.status, t);
-    throw new Error(`OCR provider error: ${response.status}`);
+    // Surface the actual provider error message for easier debugging
+    let detail = `OCR provider error: ${response.status}`;
+    try {
+      const errJson = JSON.parse(t);
+      const msg = errJson?.error?.message || errJson?.error || "";
+      if (msg) detail = `${cfg.provider} API ${response.status}: ${msg}`;
+    } catch { /* use generic */ }
+    throw new Error(detail);
   }
 
   const data = await response.json();

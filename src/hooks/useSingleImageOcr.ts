@@ -17,8 +17,7 @@ import {
   type OcrApiResponse,
 } from "@/types/ocr";
 
-const OCR_FUNCTION_URL =
-  "https://stfjeonxdidrqbrunkss.supabase.co/functions/v1/ocr-vietnamese";
+const OCR_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-vietnamese`;
 
 function normalizeOcrText(value: string): string {
   if (!value) return "";
