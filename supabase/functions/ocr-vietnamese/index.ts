@@ -341,7 +341,10 @@ function buildPrompt(
     "- Join words that belong to the SAME logical paragraph/sentence into one continuous line, even if they span multiple visual lines in the image.\n" +
     "- Only insert a line break (\\n) when the document clearly starts a NEW paragraph, a new list item, a new heading, or a new section.\n" +
     "- Preserve indentation: if the original document indents a paragraph (e.g. first-line indent), represent it with leading spaces or use Markdown block-quote (>) for quoted sections.\n" +
-    "- Do NOT break lines at every OCR bounding-box boundary.\n";
+    "- Do NOT break lines at every OCR bounding-box boundary.\n" +
+    "\nTABLES (critical):\n" +
+    "- If the image contains a table (rows/columns, grid lines, or aligned columns like STT | Họ tên | ...), output it as a GitHub-flavored Markdown pipe table: header row, | --- | --- | separator, then one row per line.\n" +
+    "- Do NOT merge tabular data into a single paragraph; keep table structure in markdown.\n";
 
   const baseClean =
     baseRaw +
@@ -378,6 +381,7 @@ function buildPrompt(
       "- The 'markdown' field must contain well-formatted text where sentences in the same paragraph are joined on the same line.\n" +
       "- Do NOT split the markdown at every bounding box. Merge consecutive text blocks that belong to the same paragraph.\n" +
       "- Use proper indentation: first-line indent with spaces, blockquotes with >, headings with #.\n" +
+      "- For tables: use GFM pipe tables (| col | col |) with header and --- separator rows; never flatten tables into prose.\n" +
       "\nBOUNDING BOX RULES (critical):\n" +
       "- You MUST use the native 1000x1000 spatial coordinate system.\n" +
       "- 'box_2d' must be an array of exactly 4 integers: [ymin, xmin, ymax, xmax] (between 0 and 1000).\n" +
@@ -409,6 +413,7 @@ function buildPrompt(
     "- markdown: string\n" +
     "- full_text: string\n" +
     '- blocks: array of { id?: string, text, x, y, width, height, kind: "text"|"figure"|"stamp"|"signature" }.\n' +
+    "MARKDOWN: Use GFM pipe tables for tabular layouts; do not flatten tables into plain paragraphs.\n" +
     "BOUNDING BOX RULES (critical):\n" +
     "- Coordinate system: origin TOP-LEFT of the image. x increases to the RIGHT, y increases DOWNWARD.\n" +
     "- x and y are the TOP-LEFT corner of the rectangle, in PERCENT of image width and height (0–100, decimals allowed).\n" +
