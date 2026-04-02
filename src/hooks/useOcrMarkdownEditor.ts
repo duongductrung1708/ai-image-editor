@@ -8,7 +8,6 @@ import Highlight from "@tiptap/extension-highlight";
 import TextAlign from "@tiptap/extension-text-align";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import Underline from "@tiptap/extension-underline";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
@@ -44,7 +43,19 @@ function toEditorHtml(markdownText: string): string {
     : trimmed;
 
   if (normalized.startsWith("<")) {
-    return DOMPurify.sanitize(normalized, {
+    // OCR/providers may return HTML like `<p>line1\nline2</p>`.
+    // HTML collapses newlines inside <p>, so convert '\n' -> '<br/>'.
+    const htmlWithBreaks = normalized.replace(/\r?\n/g, "<br/>");
+
+    // Some providers may put Markdown markers inside HTML paragraphs
+    // (e.g. `<p>**bold**</p>`). TipTap won't interpret `**` unless we
+    // convert it to real HTML tags first.
+    const htmlWithInlineMarkdown = htmlWithBreaks
+      .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([\s\S]+?)\*/g, "<em>$1</em>")
+      .replace(/__([\s\S]+?)__/g, "<u>$1</u>");
+
+    return DOMPurify.sanitize(htmlWithInlineMarkdown, {
       ADD_ATTR: [
         "data-bbox-id",
         "data-bbox-kind",
@@ -90,7 +101,6 @@ export function useOcrMarkdownEditor(markdownText: string) {
         bulletList: { keepMarks: true },
         orderedList: { keepMarks: true },
       }),
-      Underline,
       BboxParagraph,
       Image.configure({
         inline: true,
