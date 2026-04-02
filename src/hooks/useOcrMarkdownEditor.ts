@@ -8,6 +8,7 @@ import Highlight from "@tiptap/extension-highlight";
 import TextAlign from "@tiptap/extension-text-align";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import Underline from "@tiptap/extension-underline";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
@@ -44,8 +45,15 @@ function toEditorHtml(markdownText: string): string {
 
   if (normalized.startsWith("<")) {
     return DOMPurify.sanitize(normalized, {
-      ADD_ATTR: ["data-bbox-id", "data-bbox-kind", "class", "src", "alt"],
-      ADD_TAGS: ["img", "p", "br", "span", "figure"],
+      ADD_ATTR: [
+        "data-bbox-id",
+        "data-bbox-kind",
+        "class",
+        "src",
+        "alt",
+        "style",
+      ],
+      ADD_TAGS: ["img", "p", "br", "span", "figure", "strong", "em", "u"],
     });
   }
 
@@ -82,6 +90,7 @@ export function useOcrMarkdownEditor(markdownText: string) {
         bulletList: { keepMarks: true },
         orderedList: { keepMarks: true },
       }),
+      Underline,
       BboxParagraph,
       Image.configure({
         inline: true,

@@ -136,13 +136,18 @@ export function useSingleImageOcr() {
       }
 
       if (normalizedBlocks.length > 0) {
-        const objectUrl = URL.createObjectURL(file);
-        try {
-          const cropUrls: Record<string, string> = {};
-          await Promise.all(
-            normalizedBlocks
-              .filter((b) => isVisualBboxKind(b.kind))
-              .map(async (b) => {
+        const visualBlocks = normalizedBlocks.filter((b) =>
+          isVisualBboxKind(b.kind),
+        );
+
+        // Nếu chỉ có text (không có con dấu/chữ ký/figure), đừng ghi đè markdown của model.
+        // Việc ghi đè bằng HTML `<p data-bbox-id>` làm mất các style/định dạng model trả về.
+        if (visualBlocks.length > 0) {
+          const objectUrl = URL.createObjectURL(file);
+          try {
+            const cropUrls: Record<string, string> = {};
+            await Promise.all(
+              visualBlocks.map(async (b) => {
                 const id = b.id;
                 if (!id) return;
                 try {
@@ -151,30 +156,17 @@ export function useSingleImageOcr() {
                   /* crop thất bại — vẫn hiển thị placeholder trong HTML */
                 }
               }),
-          );
-
-          if (looksLikeMarkdownTable(mdOut)) {
-            // Bảng từ full_text + con dấu/chữ ký/figure (crop) — không ghi đè bằng HTML từng ô chữ.
-            const visualBlocks = normalizedBlocks.filter((b) =>
-              isVisualBboxKind(b.kind),
             );
-            const visualHtml =
-              visualBlocks.length > 0
-                ? buildOcrHtmlFromBlocks(visualBlocks, { cropUrls })
-                : "";
+
+            const visualHtml = buildOcrHtmlFromBlocks(visualBlocks, {
+              cropUrls,
+            });
             if (visualHtml.length > 0) {
               mdOut = `${mdOut.trimEnd()}\n\n${visualHtml}`;
             }
-          } else {
-            const html = buildOcrHtmlFromBlocks(normalizedBlocks, {
-              cropUrls,
-            });
-            if (html.length > 0) {
-              mdOut = html;
-            }
+          } finally {
+            URL.revokeObjectURL(objectUrl);
           }
-        } finally {
-          URL.revokeObjectURL(objectUrl);
         }
       }
 

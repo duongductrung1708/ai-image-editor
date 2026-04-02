@@ -342,6 +342,15 @@ function buildPrompt(
     "- Only insert a line break (\\n) when the document clearly starts a NEW paragraph, a new list item, a new heading, or a new section.\n" +
     "- Preserve indentation: if the original document indents a paragraph (e.g. first-line indent), represent it with leading spaces or use Markdown block-quote (>) for quoted sections.\n" +
     "- Do NOT break lines at every OCR bounding-box boundary.\n" +
+    "\nVISUAL FORMATTING (only when clearly visible in the image — use Markdown + minimal HTML):\n" +
+    "- Bold → **text** or <strong>text</strong>.\n" +
+    "- Italic/slanted → *text* or <em>text</em>.\n" +
+    "- Underline (distinct from bold) → <u>text</u>.\n" +
+    "- Centered title or line → <p style=\"text-align:center\">...</p> (one paragraph per block).\n" +
+    "- Right-aligned → <p style=\"text-align:right\">...</p>.\n" +
+    "- Justified body → <p style=\"text-align:justify\">...</p> when clearly full justified.\n" +
+    "- First-line indent (thụt đầu dòng) → <p style=\"text-indent:2em\">...</p> for that paragraph (not blockquote unless it is a quotation).\n" +
+    "- Do not invent bold/italic/underline if the scan does not show that styling.\n" +
     "\nTABLES (critical):\n" +
     "- If the image contains a table (rows/columns, grid lines, or aligned columns like STT | Họ tên | ...), output it as a GitHub-flavored Markdown pipe table: header row, | --- | --- | separator, then one row per line.\n" +
     "- Do NOT merge tabular data into a single paragraph; keep table structure in markdown.\n";
@@ -352,7 +361,7 @@ function buildPrompt(
     "- Only transform formatting (headings, emphasis, lists, tables). Do not rewrite sentences.\n" +
     "- Use Markdown headings (#, ##, ###) when you are confident a line is a heading.\n" +
     "- Use bullet/numbered lists when the document clearly uses them.\n" +
-    "- Convert bold/italic/underline to Markdown emphasis.\n" +
+    "- Convert bold/italic/underline per VISUAL FORMATTING rules (Markdown + <p style=...> / <u> as needed).\n" +
     "- For tables, use GitHub-flavored Markdown tables when it clearly improves readability.\n";
 
   const base = markdownStyle === "clean" ? baseClean : baseRaw;
@@ -381,6 +390,7 @@ function buildPrompt(
       "- The 'markdown' field must contain well-formatted text where sentences in the same paragraph are joined on the same line.\n" +
       "- Do NOT split the markdown at every bounding box. Merge consecutive text blocks that belong to the same paragraph.\n" +
       "- Use proper indentation: first-line indent with spaces, blockquotes with >, headings with #.\n" +
+      "- Apply VISUAL FORMATTING (bold/italic/underline, center/right/justify, text-indent) in 'markdown' and 'full_text' as in the system rules.\n" +
       "- For tables: use GFM pipe tables (| col | col |) with header and --- separator rows; never flatten tables into prose.\n" +
       "\nBOUNDING BOX RULES (critical):\n" +
       "- You MUST use the native 1000x1000 spatial coordinate system.\n" +
@@ -413,7 +423,7 @@ function buildPrompt(
     "- markdown: string\n" +
     "- full_text: string\n" +
     '- blocks: array of { id?: string, text, x, y, width, height, kind: "text"|"figure"|"stamp"|"signature" }.\n' +
-    "MARKDOWN: Use GFM pipe tables for tabular layouts; do not flatten tables into plain paragraphs.\n" +
+    "MARKDOWN: GFM tables for grids; apply VISUAL FORMATTING (bold/italic/u, alignment, text-indent) when visible; do not flatten tables into plain paragraphs.\n" +
     "BOUNDING BOX RULES (critical):\n" +
     "- Coordinate system: origin TOP-LEFT of the image. x increases to the RIGHT, y increases DOWNWARD.\n" +
     "- x and y are the TOP-LEFT corner of the rectangle, in PERCENT of image width and height (0–100, decimals allowed).\n" +
