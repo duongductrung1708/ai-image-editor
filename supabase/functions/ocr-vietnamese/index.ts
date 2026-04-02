@@ -350,6 +350,7 @@ function buildPrompt(
     "- Right-aligned → <p style=\"text-align:right\">...</p>.\n" +
     "- Justified body → <p style=\"text-align:justify\">...</p> when clearly full justified.\n" +
     "- First-line indent (thụt đầu dòng) → <p style=\"text-indent:2em\">...</p> for that paragraph (not blockquote unless it is a quotation).\n" +
+    "- Text color (nếu nhìn thấy rõ): dùng `<span style=\"color: ...\">text</span>` cho phần chữ có màu khác (ví dụ đỏ/xanh). Không bọc cả trang nếu không cần.\n" +
     "- Do not invent bold/italic/underline if the scan does not show that styling.\n" +
     "\nTABLES (critical):\n" +
     "- If the image contains a table (rows/columns, grid lines, or aligned columns like STT | Họ tên | ...), output it as a GitHub-flavored Markdown pipe table: header row, | --- | --- | separator, then one row per line.\n" +
@@ -390,7 +391,7 @@ function buildPrompt(
       "- The 'markdown' field must contain well-formatted text where sentences in the same paragraph are joined on the same line.\n" +
       "- Do NOT split the markdown at every bounding box. Merge consecutive text blocks that belong to the same paragraph.\n" +
       "- Use proper indentation: first-line indent with spaces, blockquotes with >, headings with #.\n" +
-      "- Apply VISUAL FORMATTING (bold/italic/underline, center/right/justify, text-indent) in 'markdown' and 'full_text' as in the system rules.\n" +
+      "- Apply VISUAL FORMATTING (bold/italic/underline, center/right/justify, text-indent, text color) in 'markdown' and 'full_text' as in the system rules.\n" +
       "- For tables: use GFM pipe tables (| col | col |) with header and --- separator rows; never flatten tables into prose.\n" +
       "\nBOUNDING BOX RULES (critical):\n" +
       "- You MUST use the native 1000x1000 spatial coordinate system.\n" +

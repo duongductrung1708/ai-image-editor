@@ -55,7 +55,25 @@ function toEditorHtml(markdownText: string): string {
       .replace(/\*([\s\S]+?)\*/g, "<em>$1</em>")
       .replace(/__([\s\S]+?)__/g, "<u>$1</u>");
 
-    return DOMPurify.sanitize(htmlWithInlineMarkdown, {
+    // Support mixed HTML + markdown blocks like:
+    // `<p>...</p>\n\n### Heading`
+    // Since we are in the HTML branch, Markdown parser won't run, so we convert headings manually.
+    const htmlWithHeadings = htmlWithInlineMarkdown.replace(
+      /^\s*(#{1,6})\s+(.+?)\s*$/gm,
+      (_m, hashes: string, title: string) => {
+        const level = Math.min(6, Math.max(1, hashes.length));
+        return `<h${level}>${escapeHtml(title)}</h${level}>`;
+      },
+    );
+
+    // Support legacy HTML color tags too: `<font color="red">...</font>` -> `<span style="color:red">...</span>`
+    const htmlWithFontColors = htmlWithHeadings.replace(
+      /<font\s+color=["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/font>/gi,
+      (_m, color: string, inner: string) =>
+        `<span style="color:${color}">${inner}</span>`,
+    );
+
+    return DOMPurify.sanitize(htmlWithFontColors, {
       ADD_ATTR: [
         "data-bbox-id",
         "data-bbox-kind",
@@ -64,7 +82,23 @@ function toEditorHtml(markdownText: string): string {
         "alt",
         "style",
       ],
-      ADD_TAGS: ["img", "p", "br", "span", "figure", "strong", "em", "u"],
+      ADD_TAGS: [
+        "img",
+        "p",
+        "br",
+        "span",
+        "font",
+        "figure",
+        "strong",
+        "em",
+        "u",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+      ],
     });
   }
 
