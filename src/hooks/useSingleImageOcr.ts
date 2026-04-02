@@ -16,6 +16,7 @@ import {
   isOcrSuccessResponse,
   type OcrApiResponse,
 } from "@/types/ocr";
+import { looksLikeMarkdownTable } from "@/lib/ocrMarkdownHeuristics";
 
 const OCR_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-vietnamese`;
 
@@ -121,12 +122,18 @@ export function useSingleImageOcr() {
         : [];
       const normalizedBlocks = normalizeBoundingBoxes(rawBlocks);
 
-      let mdOut =
-        md.length > 0
-          ? md
-          : fullText.length > 0
-            ? fullText
-            : "Không phát hiện văn bản.";
+      // Prefer real Markdown (e.g. pipe tables in full_text) over per-bbox <p> HTML;
+      // otherwise the editor never renders GFM tables.
+      let mdOut = "Không phát hiện văn bản.";
+      if (looksLikeMarkdownTable(fullText)) {
+        mdOut = fullText;
+      } else if (looksLikeMarkdownTable(md)) {
+        mdOut = md;
+      } else if (md.length > 0) {
+        mdOut = md;
+      } else if (fullText.length > 0) {
+        mdOut = fullText;
+      }
 
       if (normalizedBlocks.length > 0) {
         const objectUrl = URL.createObjectURL(file);
@@ -145,11 +152,26 @@ export function useSingleImageOcr() {
                 }
               }),
           );
-          const html = buildOcrHtmlFromBlocks(normalizedBlocks, {
-            cropUrls,
-          });
-          if (html.length > 0) {
-            mdOut = html;
+
+          if (looksLikeMarkdownTable(mdOut)) {
+            // Bảng từ full_text + con dấu/chữ ký/figure (crop) — không ghi đè bằng HTML từng ô chữ.
+            const visualBlocks = normalizedBlocks.filter((b) =>
+              isVisualBboxKind(b.kind),
+            );
+            const visualHtml =
+              visualBlocks.length > 0
+                ? buildOcrHtmlFromBlocks(visualBlocks, { cropUrls })
+                : "";
+            if (visualHtml.length > 0) {
+              mdOut = `${mdOut.trimEnd()}\n\n${visualHtml}`;
+            }
+          } else {
+            const html = buildOcrHtmlFromBlocks(normalizedBlocks, {
+              cropUrls,
+            });
+            if (html.length > 0) {
+              mdOut = html;
+            }
           }
         } finally {
           URL.revokeObjectURL(objectUrl);
