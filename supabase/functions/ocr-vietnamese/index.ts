@@ -299,7 +299,7 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
           origId:
             r.origId && s.origId
               ? `${r.origId}-${s.origId}`
-              : r.origId ?? s.origId,
+              : (r.origId ?? s.origId),
         });
         continue;
       }
@@ -417,11 +417,11 @@ function buildPrompt(
     "- One block per distinct paragraph, line group, table region, stamp, signature, or figure; follow natural reading order when listing blocks.\n" +
     '- Use kind "stamp" for seals/stamps, "signature" for hand-written signatures, "figure" for photos/charts/diagrams — NOT for plain text blocks.\n' +
     "STAMP & SIGNATURE RULES (critical):\n" +
-    "- If you detect a red stamp/seal (con dau do), you MUST create a separate block with kind = \"stamp\".\n" +
+    '- If you detect a red stamp/seal (con dau do), you MUST create a separate block with kind = "stamp".\n' +
     '- For stamp blocks, set text to the readable content if any; otherwise use placeholder "[CON DẤU]".\n' +
-    "- If you detect a hand-written signature (chu ky), you MUST create a separate block with kind = \"signature\".\n" +
+    '- If you detect a hand-written signature (chu ky), you MUST create a separate block with kind = "signature".\n' +
     '- For signature blocks, set text to the readable content if any; otherwise use placeholder "[CHỮ KÝ]".\n' +
-    "- If stamp and signature overlap or are immediately adjacent, you MAY merge them into ONE block: kind = \"stamp\" and text = \"[CON DẤU + CHỮ KÝ]\".\n" +
+    '- If stamp and signature overlap or are immediately adjacent, you MAY merge them into ONE block: kind = "stamp" and text = "[CON DẤU + CHỮ KÝ]".\n' +
     "If bounding boxes are uncertain, still return best-effort values (do not omit 'blocks').\n"
   );
 }
@@ -493,7 +493,9 @@ function parseQwenBoundingBoxes(text: string): ParsedOcr | null {
   };
 }
 
-function buildMarkdownFromBlocks(blocks: Array<{ text?: string; kind?: string }>): string {
+function buildMarkdownFromBlocks(
+  blocks: Array<{ text?: string; kind?: string }>,
+): string {
   return blocks
     .filter((b) => typeof b?.text === "string" && b.text.trim())
     .map((b) => b.text!.trim())
@@ -537,15 +539,18 @@ function parseOcrPayload(content: string, markdownStyle: string): ParsedOcr {
     // instead of a strict JSON object.
     const qwenData = parseQwenBoundingBoxes(content);
     if (qwenData) {
-      const markdown = postProcessMarkdown(qwenData.markdown || "", markdownStyle);
+      const markdown = postProcessMarkdown(
+        qwenData.markdown || "",
+        markdownStyle,
+      );
       return {
         markdown,
-        full_text: typeof qwenData.full_text === "string"
-          ? qwenData.full_text
-          : markdown,
+        full_text:
+          typeof qwenData.full_text === "string"
+            ? qwenData.full_text
+            : markdown,
         blocks: Array.isArray(qwenData.blocks) ? qwenData.blocks : [],
-        warning:
-          "Model did not return JSON; parsed <box> tags instead.",
+        warning: "Model did not return JSON; parsed <box> tags instead.",
       };
     }
 
@@ -697,8 +702,9 @@ async function fetchProviderContent(
     }
   } else if (cfg.provider === "openai") {
     const model = Deno.env.get("OPENAI_MODEL") || "gpt-4o";
-    const baseUrl = (Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1")
-      .replace(/\/+$/, "");
+    const baseUrl = (
+      Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1"
+    ).replace(/\/+$/, "");
     const apiKey = Deno.env.get("OPENAI_API_KEY") || "";
 
     if (!model) throw new Error("OPENAI_MODEL is not configured");
@@ -722,8 +728,7 @@ async function fetchProviderContent(
             content: [
               {
                 type: "text",
-                text:
-                  "Process the image exactly following the system instructions. Return only the requested output.",
+                text: "Process the image exactly following the system instructions. Return only the requested output.",
               },
               {
                 type: "image_url",
@@ -755,7 +760,9 @@ async function fetchProviderContent(
       const errJson = JSON.parse(t);
       const msg = errJson?.error?.message || errJson?.error || "";
       if (msg) detail = `${cfg.provider} API ${response.status}: ${msg}`;
-    } catch { /* use generic */ }
+    } catch {
+      /* use generic */
+    }
     throw new Error(detail);
   }
 
