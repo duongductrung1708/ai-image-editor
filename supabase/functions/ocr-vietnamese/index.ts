@@ -393,10 +393,15 @@ function buildPrompt(
       "- Use proper indentation: first-line indent with spaces, blockquotes with >, headings with #.\n" +
       "- Apply VISUAL FORMATTING (bold/italic/underline, center/right/justify, text-indent, text color) in 'markdown' and 'full_text' as in the system rules.\n" +
       "- For tables: use GFM pipe tables (| col | col |) with header and --- separator rows; never flatten tables into prose.\n" +
-      "\nBOUNDING BOX RULES (critical):\n" +
-      "- You MUST use the native 1000x1000 spatial coordinate system.\n" +
-      "- 'box_2d' must be an array of exactly 4 integers: [ymin, xmin, ymax, xmax] (between 0 and 1000).\n" +
-      "- Draw TIGHT boxes around each region.\n" +
+      "\nBOUNDING BOX RULES (critical — accuracy is paramount):\n" +
+      "- Coordinate system: 1000×1000 grid. (0,0) = top-left pixel, (1000,1000) = bottom-right pixel.\n" +
+      "- 'box_2d' = [y_min, x_min, y_max, x_max] — all integers 0–1000.\n" +
+      "- y_min = TOP edge of text/region, y_max = BOTTOM edge.\n" +
+      "- x_min = LEFT edge of text/region, x_max = RIGHT edge.\n" +
+      "- TIGHT FIT: edges must touch the outermost ink/pixels of the text or visual element. No extra whitespace around.\n" +
+      "- For multi-line text blocks: the box should span from the first character of the first line to the last character of the last line.\n" +
+      "- Do NOT create page-wide boxes unless the content truly spans the entire width.\n" +
+      "- Verify: x_min < x_max AND y_min < y_max always.\n" +
       "\nSEAL / STAMP DETECTION (con dấu) — TOP PRIORITY:\n" +
       "- A seal/stamp (con dấu) is typically a circular or oval shape, often RED or BLUE ink, containing text arranged in a circle/arc.\n" +
       "- Common patterns: company name around the rim, a star in the center, registration number.\n" +
