@@ -9,7 +9,7 @@ export function refineBBoxGeometry(
   height: number,
   options?: { paddingPct?: number },
 ): { x: number; y: number; width: number; height: number } {
-  const pad = Math.min(0.5, Math.max(0, options?.paddingPct ?? 0.2));
+  const pad = Math.min(0.5, Math.max(0, options?.paddingPct ?? 0.1));
 
   let nx = x;
   let ny = y;
