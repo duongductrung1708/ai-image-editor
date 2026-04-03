@@ -618,7 +618,7 @@ async function fetchProviderContent(
     // Strip "models/" prefix if user accidentally included it
     const GEMINI_MODEL = rawModel.replace(/^models\//, "");
     const GEMINI_MODEL_FALLBACK =
-      Deno.env.get("GEMINI_MODEL_FALLBACK") || "gemini-2.5-flash";
+      Deno.env.get("GEMINI_MODEL_FALLBACK") || "gemini-2.0-flash";
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
 
     // BÍ KÍP Ở ĐÂY: Tách luật lệ ra khỏi lời nói của User
