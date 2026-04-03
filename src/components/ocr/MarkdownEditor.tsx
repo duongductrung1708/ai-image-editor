@@ -21,10 +21,20 @@ import {
   Eraser,
   CaseLower,
   CaseUpper,
+  ChevronDown,
   Table2,
   TableColumnsSplit,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { BoundingBox } from "@/components/ImageViewer";
 import { findMatchingBoxIndices } from "@/lib/bboxTextMatch";
 import {
@@ -85,6 +95,14 @@ function getBatchMarkdownPageIndex(editor: Editor, pos: number): number {
   return Math.max(0, h2Before - 1);
 }
 
+const TABLE_DIM_MIN = 1;
+const TABLE_DIM_MAX = 20;
+
+function clampTableDimension(n: number): number {
+  if (!Number.isFinite(n)) return TABLE_DIM_MIN;
+  return Math.min(TABLE_DIM_MAX, Math.max(TABLE_DIM_MIN, Math.round(n)));
+}
+
 const MarkdownEditor = ({
   editor,
   isProcessing,
@@ -101,6 +119,22 @@ const MarkdownEditor = ({
   const [fontSize, setFontSize] = useState("16px");
   const [canMergeCells, setCanMergeCells] = useState(false);
   const [canSplitCell, setCanSplitCell] = useState(false);
+  const [tableInsertOpen, setTableInsertOpen] = useState(false);
+  const [insertTableRows, setInsertTableRows] = useState(3);
+  const [insertTableCols, setInsertTableCols] = useState(3);
+  const [insertTableHeaderRow, setInsertTableHeaderRow] = useState(true);
+
+  const insertTableWithOptions = useCallback(() => {
+    if (!editor) return;
+    const rows = clampTableDimension(insertTableRows);
+    const cols = clampTableDimension(insertTableCols);
+    editor
+      .chain()
+      .focus()
+      .insertTable({ rows, cols, withHeaderRow: insertTableHeaderRow })
+      .run();
+    setTableInsertOpen(false);
+  }, [editor, insertTableRows, insertTableCols, insertTableHeaderRow]);
 
   useEffect(() => {
     if (!editor) {
@@ -260,7 +294,11 @@ const MarkdownEditor = ({
         onJumpToBoxHandled?.();
         return;
       }
-      pos = findFirstDocPosForBoxIndex(editor, jumpToBox.boxIndex, boundingBoxes);
+      pos = findFirstDocPosForBoxIndex(
+        editor,
+        jumpToBox.boxIndex,
+        boundingBoxes,
+      );
     } else {
       if (!batchBoxPages?.length) {
         onJumpToBoxHandled?.();
@@ -437,7 +475,12 @@ const MarkdownEditor = ({
             ? original.toLocaleUpperCase()
             : original.toLocaleLowerCase();
         if (transformed === original) return;
-        segments.push({ from: start, to: end, text: transformed, marks: node.marks });
+        segments.push({
+          from: start,
+          to: end,
+          text: transformed,
+          marks: node.marks,
+        });
       });
 
       if (segments.length === 0) return;
@@ -445,7 +488,11 @@ const MarkdownEditor = ({
       const tr = state.tr;
       for (let i = segments.length - 1; i >= 0; i -= 1) {
         const seg = segments[i];
-        tr.replaceWith(seg.from, seg.to, state.schema.text(seg.text, seg.marks));
+        tr.replaceWith(
+          seg.from,
+          seg.to,
+          state.schema.text(seg.text, seg.marks),
+        );
       }
       editor.view.dispatch(tr);
       editor.view.focus();
@@ -735,23 +782,96 @@ const MarkdownEditor = ({
 
         <span className="mx-1 h-5 w-px bg-border" />
 
-        <button
-          type="button"
-          className="flex h-7 items-center justify-center rounded border border-transparent px-2 hover:border-border hover:bg-muted/60"
-          onClick={() =>
-            editor
-              ?.chain()
-              .focus()
-              .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-              .run()
-          }
-          disabled={isProcessing || !editor}
-          aria-label="Chèn bảng"
-          title="Chèn bảng 3×3 (có dòng tiêu đề)"
-        >
-          <Table2 className="h-3.5 w-3.5" />
-          <span className="ml-1 text-[10px]">Tạo bảng</span>
-        </button>
+        <Popover open={tableInsertOpen} onOpenChange={setTableInsertOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="flex h-7 items-center justify-center rounded border border-transparent px-2 hover:border-border hover:bg-muted/60"
+              disabled={isProcessing || !editor}
+              aria-label="Chèn bảng"
+              title="Chọn số dòng, cột rồi chèn bảng"
+            >
+              <Table2 className="h-3.5 w-3.5" />
+              <span className="ml-1 text-[10px]">Tạo bảng</span>
+              <ChevronDown className="ml-0.5 h-3 w-3 opacity-70" aria-hidden />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-auto min-w-[240px] p-3">
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                insertTableWithOptions();
+              }}
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="insert-table-rows" className="text-xs">
+                    Số dòng
+                  </Label>
+                  <Input
+                    id="insert-table-rows"
+                    type="number"
+                    min={TABLE_DIM_MIN}
+                    max={TABLE_DIM_MAX}
+                    className="h-8"
+                    value={insertTableRows}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      setInsertTableRows(
+                        Number.isFinite(v)
+                          ? clampTableDimension(v)
+                          : TABLE_DIM_MIN,
+                      );
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="insert-table-cols" className="text-xs">
+                    Số cột
+                  </Label>
+                  <Input
+                    id="insert-table-cols"
+                    type="number"
+                    min={TABLE_DIM_MIN}
+                    max={TABLE_DIM_MAX}
+                    className="h-8"
+                    value={insertTableCols}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      setInsertTableCols(
+                        Number.isFinite(v)
+                          ? clampTableDimension(v)
+                          : TABLE_DIM_MIN,
+                      );
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="insert-table-header"
+                  checked={insertTableHeaderRow}
+                  onCheckedChange={(c) => setInsertTableHeaderRow(c === true)}
+                />
+                <Label
+                  htmlFor="insert-table-header"
+                  className="cursor-pointer text-xs font-normal"
+                >
+                  Dòng tiêu đề
+                </Label>
+              </div>
+              <Button
+                type="submit"
+                size="sm"
+                className="w-full"
+                disabled={!editor}
+              >
+                Chèn bảng
+              </Button>
+            </form>
+          </PopoverContent>
+        </Popover>
 
         <button
           type="button"
