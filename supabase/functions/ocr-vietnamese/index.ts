@@ -126,7 +126,7 @@ function refineBBoxGeometry(
   const rawPad = Deno.env.get("OCR_BBOX_PADDING_PCT");
   const pad = Math.min(
     0.5,
-    Math.max(0, rawPad !== undefined ? Number(rawPad) || 0.2 : 0.2),
+    Math.max(0, rawPad !== undefined ? Number(rawPad) || 0.1 : 0.1),
   );
 
   let nx = x;
