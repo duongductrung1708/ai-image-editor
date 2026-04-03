@@ -686,26 +686,13 @@ async function fetchProviderContent(
         console.warn(
           `[ocr-gemini] finishReason=RECITATION on ${GEMINI_MODEL}; text length=${text.length}`,
         );
-        // Try fallback model first
-        if (GEMINI_MODEL_FALLBACK && GEMINI_MODEL_FALLBACK !== GEMINI_MODEL) {
-          console.warn(`[ocr-gemini] Retrying with fallback ${GEMINI_MODEL_FALLBACK}`);
-          response = await doGeminiFetch(GEMINI_MODEL_FALLBACK);
-          if (response.ok) {
-            const data2 = await response.json().catch(() => null);
-            const text2 =
-              data2?.candidates?.[0]?.content?.parts?.find(
-                (p: { text?: unknown }) => typeof p?.text === "string",
-              )?.text || "";
-            if (text2) return text2;
-          }
-        }
-        // If fallback also failed but we have partial text from primary, use it
+        // Use partial text if available
         if (text) {
           console.warn(`[ocr-gemini] Using partial RECITATION text (${text.length} chars)`);
           return text;
         }
         throw new Error(
-          "OCR provider returned empty response (RECITATION blocked)",
+          "RECITATION: Ảnh chứa nội dung có bản quyền hoặc quá giống tài liệu đã công bố, Gemini từ chối trích xuất. Vui lòng thử lại với ảnh khác hoặc cắt bớt nội dung.",
         );
       } else {
         if (text) return text;
