@@ -1002,11 +1002,12 @@ serve(async (req) => {
 
     const singleImage = body?.image ?? body?.imageBase64;
     const payload = await runSingleOcr(singleImage, body?.mimeType);
+    // blocks are already normalized inside parseOcrPayload — do NOT call normalizeOcrBlocks again
     return new Response(
       JSON.stringify({
         markdown: payload.markdown || payload.full_text || "",
         full_text: payload.full_text || "",
-        blocks: normalizeOcrBlocks(payload.blocks),
+        blocks: Array.isArray(payload.blocks) ? payload.blocks : [],
         ...(typeof payload.warning === "string"
           ? { warning: payload.warning }
           : {}),
