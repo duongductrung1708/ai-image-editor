@@ -21,6 +21,8 @@ import {
   Eraser,
   CaseLower,
   CaseUpper,
+  Table2,
+  TableColumnsSplit,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { BoundingBox } from "@/components/ImageViewer";
@@ -97,6 +99,27 @@ const MarkdownEditor = ({
   const [fontColor, setFontColor] = useState("#000000");
   const [highlightColor, setHighlightColor] = useState("#fff59d");
   const [fontSize, setFontSize] = useState("16px");
+  const [canMergeCells, setCanMergeCells] = useState(false);
+  const [canSplitCell, setCanSplitCell] = useState(false);
+
+  useEffect(() => {
+    if (!editor) {
+      setCanMergeCells(false);
+      setCanSplitCell(false);
+      return;
+    }
+    const sync = () => {
+      setCanMergeCells(editor.can().mergeCells());
+      setCanSplitCell(editor.can().splitCell());
+    };
+    sync();
+    editor.on("selectionUpdate", sync);
+    editor.on("transaction", sync);
+    return () => {
+      editor.off("selectionUpdate", sync);
+      editor.off("transaction", sync);
+    };
+  }, [editor]);
 
   const clearHighlight = useCallback(() => {
     onMarkdownHighlightChange?.(null);
@@ -715,13 +738,59 @@ const MarkdownEditor = ({
         <button
           type="button"
           className="flex h-7 items-center justify-center rounded border border-transparent px-2 hover:border-border hover:bg-muted/60"
+          onClick={() =>
+            editor
+              ?.chain()
+              .focus()
+              .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+              .run()
+          }
+          disabled={isProcessing || !editor}
+          aria-label="Chèn bảng"
+          title="Chèn bảng 3×3 (có dòng tiêu đề)"
+        >
+          <Table2 className="h-3.5 w-3.5" />
+          <span className="ml-1 text-[10px]">Tạo bảng</span>
+        </button>
+
+        <button
+          type="button"
+          className={
+            canMergeCells
+              ? "flex h-7 items-center justify-center rounded border border-primary/35 bg-primary/5 px-2 hover:border-border hover:bg-muted/60"
+              : "flex h-7 items-center justify-center rounded border border-transparent px-2 hover:border-border hover:bg-muted/60"
+          }
           onClick={() => editor?.chain().focus().mergeCells().run()}
           disabled={isProcessing || !editor}
           aria-label="Gộp ô bảng"
-          title="Gộp ô bảng"
+          title={
+            canMergeCells
+              ? "Gộp các ô đang chọn"
+              : "Kéo chọn nhiều ô trong bảng, rồi bấm Merge"
+          }
         >
           <Grid3x3 className="h-3.5 w-3.5" />
-          <span className="ml-1 text-[10px]">Merge</span>
+          <span className="ml-1 text-[10px]">Gộp ô</span>
+        </button>
+
+        <button
+          type="button"
+          className={
+            canSplitCell
+              ? "flex h-7 items-center justify-center rounded border border-primary/35 bg-primary/5 px-2 hover:border-border hover:bg-muted/60"
+              : "flex h-7 items-center justify-center rounded border border-transparent px-2 hover:border-border hover:bg-muted/60"
+          }
+          onClick={() => editor?.chain().focus().splitCell().run()}
+          disabled={isProcessing || !editor}
+          aria-label="Tách ô bảng"
+          title={
+            canSplitCell
+              ? "Tách ô đang chọn (ô đã gộp hoặc có colspan/rowspan)"
+              : "Đặt con trỏ trong ô đã gộp, rồi bấm Tách ô"
+          }
+        >
+          <TableColumnsSplit className="h-3.5 w-3.5" />
+          <span className="ml-1 text-[10px]">Tách ô</span>
         </button>
       </div>
 

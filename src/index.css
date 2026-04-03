@@ -2,10 +2,22 @@
 @import "@fontsource/be-vietnam-pro/500.css";
 @import "@fontsource/be-vietnam-pro/600.css";
 @import "@fontsource/be-vietnam-pro/700.css";
+/* TipTap / ProseMirror table: cell selection (`.selectedCell`) — must stay with other @import before @tailwind */
+@import "prosemirror-tables/style/tables.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Default min width for table cells when colwidth is not set */
+.ProseMirror {
+  --default-cell-min-width: 80px;
+}
+
+/* Rõ hơn overlay ô đang chọn (gộp ô) — khớp theme */
+.ProseMirror .selectedCell:after {
+  background: hsl(var(--primary) / 0.22);
+}
 
 @layer base {
   :root {
