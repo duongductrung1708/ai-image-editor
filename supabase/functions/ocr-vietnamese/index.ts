@@ -618,7 +618,7 @@ async function fetchProviderContent(
     // Strip "models/" prefix if user accidentally included it
     const GEMINI_MODEL = rawModel.replace(/^models\//, "");
     const GEMINI_MODEL_FALLBACK =
-      Deno.env.get("GEMINI_MODEL_FALLBACK") || "gemini-2.5-flash";
+      Deno.env.get("GEMINI_MODEL_FALLBACK") || "gemini-2.0-flash";
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
 
     // BÍ KÍP Ở ĐÂY: Tách luật lệ ra khỏi lời nói của User
@@ -654,6 +654,12 @@ async function fetchProviderContent(
         responseMimeType:
           cfg.mode === "markdown" ? "text/plain" : "application/json",
       },
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+      ],
     };
 
     const doGeminiFetch = async (model: string): Promise<Response> => {
@@ -676,22 +682,31 @@ async function fetchProviderContent(
         )?.text || "";
       const finishReason = data?.candidates?.[0]?.finishReason;
 
-      if (!text && finishReason === "RECITATION" && GEMINI_MODEL_FALLBACK) {
+      if (finishReason === "RECITATION") {
         console.warn(
-          `[ocr-gemini] finishReason=RECITATION on ${GEMINI_MODEL}; retry with ${GEMINI_MODEL_FALLBACK}`,
+          `[ocr-gemini] finishReason=RECITATION on ${GEMINI_MODEL}; text length=${text.length}`,
         );
-        response = await doGeminiFetch(GEMINI_MODEL_FALLBACK);
-        if (response.ok) {
-          const data2 = await response.json().catch(() => null);
-          const text2 =
-            data2?.candidates?.[0]?.content?.parts?.find(
-              (p: { text?: unknown }) => typeof p?.text === "string",
-            )?.text || "";
-          if (text2) return text2;
-          throw new Error(
-            "OCR provider returned empty response (fallback model after RECITATION)",
-          );
+        // Try fallback model first
+        if (GEMINI_MODEL_FALLBACK && GEMINI_MODEL_FALLBACK !== GEMINI_MODEL) {
+          console.warn(`[ocr-gemini] Retrying with fallback ${GEMINI_MODEL_FALLBACK}`);
+          response = await doGeminiFetch(GEMINI_MODEL_FALLBACK);
+          if (response.ok) {
+            const data2 = await response.json().catch(() => null);
+            const text2 =
+              data2?.candidates?.[0]?.content?.parts?.find(
+                (p: { text?: unknown }) => typeof p?.text === "string",
+              )?.text || "";
+            if (text2) return text2;
+          }
         }
+        // If fallback also failed but we have partial text from primary, use it
+        if (text) {
+          console.warn(`[ocr-gemini] Using partial RECITATION text (${text.length} chars)`);
+          return text;
+        }
+        throw new Error(
+          "OCR provider returned empty response (RECITATION blocked)",
+        );
       } else {
         if (text) return text;
 
