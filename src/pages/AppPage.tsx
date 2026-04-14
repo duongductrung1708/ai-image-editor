@@ -100,10 +100,15 @@ const AppPage = () => {
             "id, image_name, extracted_text, image_data, bounding_boxes, created_at",
           )
           .eq("id", historyId)
-          .single();
+          .maybeSingle();
 
-        if (error || !data) {
-          throw new Error("Không thể tải bản ghi lịch sử.");
+        if (error) {
+          throw error;
+        }
+        if (!data) {
+          throw new Error(
+            "Không tìm thấy bản ghi lịch sử (hoặc bạn không có quyền truy cập).",
+          );
         }
 
         const entry = data as {
