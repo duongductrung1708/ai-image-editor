@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
+import FontFamily from "@tiptap/extension-font-family";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
@@ -78,6 +79,8 @@ function toEditorHtml(markdownText: string): string {
         "data-bbox-id",
         "data-bbox-kind",
         "data-font-size-px",
+        "data-font-family",
+        "data-ocr-fontsize",
         "class",
         "src",
         "alt",
@@ -143,6 +146,9 @@ export function useOcrMarkdownEditor(markdownText: string) {
         HTMLAttributes: { class: "max-w-full rounded-md" },
       }),
       TextStyle,
+      FontFamily.configure({
+        types: ["textStyle"],
+      }),
       Color,
       FontSize,
       Highlight.configure({ multicolor: true }),

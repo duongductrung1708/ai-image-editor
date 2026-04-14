@@ -91,6 +91,17 @@ function postProcessMarkdown(markdown: string, style: string): string {
 
 type OcrBlockKind = "text" | "figure" | "stamp" | "signature";
 
+type OcrFontFamily = "sans" | "serif" | "mono" | "unknown";
+
+function parseOcrFontFamily(raw: unknown): OcrFontFamily {
+  const t = typeof raw === "string" ? raw.toLowerCase().trim() : "";
+  if (!t) return "unknown";
+  if (t === "sans" || t === "sans-serif" || t === "sansserif") return "sans";
+  if (t === "serif") return "serif";
+  if (t === "mono" || t === "monospace" || t === "mono-space") return "mono";
+  return "unknown";
+}
+
 function parseOcrBlockKind(rawKind: unknown, text: string): OcrBlockKind {
   const t = typeof rawKind === "string" ? rawKind.toLowerCase().trim() : "";
   if (t === "stamp" || t === "seal") return "stamp";
@@ -114,6 +125,7 @@ type OcrBlockNorm = {
   width: number;
   height: number;
   kind: OcrBlockKind;
+  fontFamily?: OcrFontFamily;
 };
 
 type ImageSizePx = { width: number; height: number };
@@ -331,6 +343,7 @@ type OcrBlockRow = {
   width: number;
   height: number;
   kind: OcrBlockKind;
+  fontFamily?: OcrFontFamily;
   origId: string | null;
 };
 
@@ -371,11 +384,13 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
 
     const refined = refineBBoxGeometry(x, y, width, height);
     const kind = parseOcrBlockKind(b.kind, text);
+    const fontFamily = parseOcrFontFamily(b.font_family ?? b.fontFamily);
     const origId = typeof b.id === "string" && b.id.trim() ? b.id.trim() : null;
     return {
       text,
       ...refined,
       kind,
+      ...(fontFamily !== "unknown" ? { fontFamily } : {}),
       origId,
     };
   });
@@ -476,6 +491,7 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
     width: row.width,
     height: row.height,
     kind: row.kind,
+    ...(row.fontFamily ? { fontFamily: row.fontFamily } : {}),
   }));
 }
 
@@ -539,7 +555,8 @@ function buildPrompt(
       "JSON must match fields exactly:\n" +
       "- markdown: string — properly formatted text with paragraphs joined (NOT one line per bbox). Use \\n\\n between paragraphs.\n" +
       "- full_text: string — same content as markdown\n" +
-      '- blocks: array of { text: string, box_2d: [number, number, number, number], kind: "text"|"figure"|"stamp"|"signature" }.\n' +
+      '- blocks: array of { text: string, box_2d: [number, number, number, number], kind: "text"|"figure"|"stamp"|"signature", font_family?: "sans"|"serif"|"mono"|"unknown" }.\n' +
+      '  - font_family: classify the text style family (best-effort). Use "sans" for sans-serif (Arial-like), "serif" for Times-like, "mono" for monospace, "unknown" if unsure.\n' +
       "\nIMPORTANT — 'markdown' field formatting:\n" +
       "- The 'markdown' field must contain well-formatted text where sentences in the same paragraph are joined on the same line.\n" +
       "- Do NOT split the markdown at every bounding box. Merge consecutive text blocks that belong to the same paragraph.\n" +
@@ -581,7 +598,8 @@ function buildPrompt(
     "JSON must match fields exactly:\n" +
     "- markdown: string\n" +
     "- full_text: string\n" +
-    '- blocks: array of { id?: string, text, x, y, width, height, kind: "text"|"figure"|"stamp"|"signature" }.\n' +
+    '- blocks: array of { id?: string, text, x, y, width, height, kind: "text"|"figure"|"stamp"|"signature", font_family?: "sans"|"serif"|"mono"|"unknown" }.\n' +
+    '  - font_family: classify the text style family (best-effort). Use "sans" for sans-serif (Arial-like), "serif" for Times-like, "mono" for monospace, "unknown" if unsure.\n' +
     "MARKDOWN: GFM tables for grids; apply VISUAL FORMATTING (bold/italic/u, alignment, text-indent) when visible; do not flatten tables into plain paragraphs.\n" +
     "BOUNDING BOX RULES (critical):\n" +
     "- Coordinate system: origin TOP-LEFT of the image. x increases to the RIGHT, y increases DOWNWARD.\n" +

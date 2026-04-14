@@ -14,6 +14,8 @@ export interface BoundingBox {
   kind?: "text" | "figure" | "stamp" | "signature";
   /** Cỡ chữ (px) ước lượng từ bbox + kích thước ảnh nguồn. */
   fontSizePx?: number;
+  /** Nhóm font (best-effort): sans/serif/mono/unknown */
+  fontFamily?: "sans" | "serif" | "mono" | "unknown";
 }
 
 interface ImageViewerProps {
@@ -194,6 +196,9 @@ const ImageViewer = ({
                 {!box.text ? boxKindLabel(box.kind) : ""}
                 {typeof box.fontSizePx === "number" && box.fontSizePx > 0
                   ? ` · ${Math.round(box.fontSizePx)}px`
+                  : ""}
+                {box.fontFamily && box.fontFamily !== "unknown"
+                  ? ` · ${box.fontFamily}`
                   : ""}
               </div>
             )}

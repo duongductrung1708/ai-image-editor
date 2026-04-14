@@ -117,12 +117,23 @@ const MarkdownEditor = ({
   const [fontColor, setFontColor] = useState("#000000");
   const [highlightColor, setHighlightColor] = useState("#fff59d");
   const [fontSize, setFontSize] = useState("16px");
+  const [fontFamily, setFontFamily] = useState("default");
   const [canMergeCells, setCanMergeCells] = useState(false);
   const [canSplitCell, setCanSplitCell] = useState(false);
   const [tableInsertOpen, setTableInsertOpen] = useState(false);
   const [insertTableRows, setInsertTableRows] = useState(3);
   const [insertTableCols, setInsertTableCols] = useState(3);
   const [insertTableHeaderRow, setInsertTableHeaderRow] = useState(true);
+  const [toolbarTick, setToolbarTick] = useState(0);
+
+  const toolbarButtonClass = (active: boolean, wide = false) => {
+    const base = wide
+      ? "flex h-7 items-center justify-center rounded border px-2 text-[11px]"
+      : "flex h-7 w-7 items-center justify-center rounded border";
+    return active
+      ? `${base} border-primary/35 bg-primary/10 text-foreground`
+      : `${base} border-transparent hover:border-border hover:bg-muted/60`;
+  };
 
   const insertTableWithOptions = useCallback(() => {
     if (!editor) return;
@@ -145,6 +156,7 @@ const MarkdownEditor = ({
     const sync = () => {
       setCanMergeCells(editor.can().mergeCells());
       setCanSplitCell(editor.can().splitCell());
+      setToolbarTick((t) => (t + 1) % 1000000);
     };
     sync();
     editor.on("selectionUpdate", sync);
@@ -385,13 +397,24 @@ const MarkdownEditor = ({
 
       const nextFontColor = normalizeHex(attrs.color);
       if (nextFontColor) setFontColor(nextFontColor);
+      else setFontColor("#000000");
 
       const nextHighlightColor = normalizeHex(markAttrs.color);
       if (nextHighlightColor) setHighlightColor(nextHighlightColor);
+      else setHighlightColor("#fff59d");
 
       if (typeof attrs.fontSize === "string" && attrs.fontSize) {
         setFontSize(attrs.fontSize);
+      } else {
+        setFontSize("16px");
       }
+
+      const ff =
+        typeof attrs.fontFamily === "string" && attrs.fontFamily
+          ? attrs.fontFamily
+          : null;
+      if (ff) setFontFamily(ff);
+      else setFontFamily("default");
     };
 
     syncFormatState();
@@ -412,6 +435,19 @@ const MarkdownEditor = ({
         return;
       }
       editor.chain().focus().setMark("textStyle", { fontSize: size }).run();
+    },
+    [editor],
+  );
+
+  const applyFontFamily = useCallback(
+    (family: string) => {
+      if (!editor) return;
+      setFontFamily(family);
+      if (!family || family === "default") {
+        editor.chain().focus().setFontFamily(null).run();
+        return;
+      }
+      editor.chain().focus().setFontFamily(family).run();
     },
     [editor],
   );
@@ -439,10 +475,12 @@ const MarkdownEditor = ({
     editor
       .chain()
       .focus()
-      .setMark("textStyle", { color: null, fontSize: null })
+      .setMark("textStyle", { color: null, fontSize: null, fontFamily: null })
+      .setFontFamily(null)
       .unsetHighlight()
       .run();
     setFontSize("16px");
+    setFontFamily("default");
     setFontColor("#000000");
     setHighlightColor("#fff59d");
   }, [editor]);
@@ -522,7 +560,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive("bold")))}
           onClick={() => editor?.chain().focus().toggleBold().run()}
           disabled={isProcessing || !editor}
           aria-label="Đậm"
@@ -533,7 +571,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive("italic")))}
           onClick={() => editor?.chain().focus().toggleItalic().run()}
           disabled={isProcessing || !editor}
           aria-label="Nghiêng"
@@ -544,7 +582,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive("heading", { level: 2 })))}
           onClick={() =>
             editor?.chain().focus().toggleHeading({ level: 2 }).run()
           }
@@ -557,7 +595,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive("underline")))}
           onClick={() => editor?.chain().focus().toggleUnderline().run()}
           disabled={isProcessing || !editor}
           aria-label="Gạch chân"
@@ -568,7 +606,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive("highlight")))}
           onClick={() => editor?.chain().focus().toggleHighlight().run()}
           disabled={isProcessing || !editor}
           aria-label="Highlight"
@@ -579,7 +617,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive("bulletList")))}
           onClick={() => editor?.chain().focus().toggleBulletList().run()}
           disabled={isProcessing || !editor}
           aria-label="Danh sách"
@@ -590,7 +628,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive("orderedList")))}
           onClick={() => editor?.chain().focus().toggleOrderedList().run()}
           disabled={isProcessing || !editor}
           aria-label="Danh sách đánh số"
@@ -601,7 +639,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive("blockquote")))}
           onClick={() => editor?.chain().focus().toggleBlockquote().run()}
           disabled={isProcessing || !editor}
           aria-label="Trích dẫn"
@@ -612,7 +650,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="ml-2 flex h-7 items-center justify-center rounded border border-transparent px-2 hover:border-border hover:bg-muted/60"
+          className={`ml-2 ${toolbarButtonClass(Boolean(editor?.isActive("taskList")), true)}`}
           onClick={() => editor?.chain().focus().toggleTaskList().run()}
           disabled={isProcessing || !editor}
           aria-label="Checklist"
@@ -625,6 +663,22 @@ const MarkdownEditor = ({
 
         <label className="flex h-7 items-center gap-1 rounded border border-transparent px-1 text-[11px] text-muted-foreground">
           <Type className="h-3.5 w-3.5" />
+          <select
+            className="h-6 rounded border border-border bg-background px-1.5 text-[11px] text-foreground"
+            value={fontFamily}
+            onChange={(e) => applyFontFamily(e.target.value)}
+            disabled={isProcessing || !editor}
+            aria-label="Font chữ"
+            title="Font chữ"
+          >
+            <option value="default">Mặc định</option>
+            <option value="Inter">Inter</option>
+            <option value="Be Vietnam Pro">Be Vietnam Pro</option>
+            <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
+            <option value="Arial">Arial</option>
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="Courier New">Courier New</option>
+          </select>
           <select
             className="h-6 rounded border border-border bg-background px-1.5 text-[11px] text-foreground"
             value={fontSize}
@@ -738,7 +792,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive({ textAlign: "left" })))}
           onClick={() => editor?.chain().focus().setTextAlign("left").run()}
           disabled={isProcessing || !editor}
           aria-label="Căn trái"
@@ -749,7 +803,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive({ textAlign: "center" })))}
           onClick={() => editor?.chain().focus().setTextAlign("center").run()}
           disabled={isProcessing || !editor}
           aria-label="Căn giữa"
@@ -760,7 +814,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive({ textAlign: "right" })))}
           onClick={() => editor?.chain().focus().setTextAlign("right").run()}
           disabled={isProcessing || !editor}
           aria-label="Căn phải"
@@ -771,7 +825,7 @@ const MarkdownEditor = ({
 
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded border border-transparent hover:border-border hover:bg-muted/60"
+          className={toolbarButtonClass(Boolean(editor?.isActive({ textAlign: "justify" })))}
           onClick={() => editor?.chain().focus().setTextAlign("justify").run()}
           disabled={isProcessing || !editor}
           aria-label="Căn đều"
