@@ -76,7 +76,6 @@ const ImageViewer = ({
       measureImgMetrics();
     }, 0);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrl]);
 
   useEffect(() => {
@@ -94,7 +93,6 @@ const ImageViewer = ({
     }
 
     return () => ro.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const boxFrameClass = (kind: BoundingBox["kind"] | undefined) => {

@@ -138,7 +138,6 @@ export function useBatchOcr(files: File[]) {
     files,
     sourcePreviewUrls,
     restoredFromHistory,
-    historyFirstImageData,
     historyPageImageDatas,
   ]);
 
@@ -308,7 +307,7 @@ export function useBatchOcr(files: File[]) {
       }
       setIsProcessing(false);
     }
-  }, [files, isProcessing]);
+  }, [files, isProcessing, user?.id]);
 
   const cancelBatch = useCallback(() => {
     batchAbortRef.current?.abort();

@@ -12,6 +12,7 @@ import { useOcrBatchExportActions } from "@/hooks/useOcrBatchExportActions";
 import { useOcrQuota } from "@/hooks/useOcrQuota";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 interface BatchOCRWorkspaceProps {
   files: File[];
@@ -26,7 +27,12 @@ const BatchOCRWorkspace = ({
 }: BatchOCRWorkspaceProps) => {
   const { user } = useAuth();
   const isLg = useIsLgScreen();
-  const [showHistory, setShowHistory] = useState(false);
+  const showHistory = useWorkspaceStore((s) => s.showHistory);
+  const setShowHistory = useWorkspaceStore((s) => s.setShowHistory);
+  const toggleHistoryOpen = useWorkspaceStore((s) => s.toggleHistory);
+  const batchActiveTab = useWorkspaceStore((s) => s.batchActiveTab);
+  const setBatchActiveTab = useWorkspaceStore((s) => s.setBatchActiveTab);
+  const resetWorkspaceUi = useWorkspaceStore((s) => s.reset);
   const [linkedBatchHighlight, setLinkedBatchHighlight] = useState<{
     pageIndex: number;
     indices: number[];
@@ -72,9 +78,9 @@ const BatchOCRWorkspace = ({
     jsonText,
   });
 
-  const toggleHistory = useCallback(() => {
-    setShowHistory((v) => !v);
-  }, []);
+  const handleToggleHistory = useCallback(() => {
+    toggleHistoryOpen();
+  }, [toggleHistoryOpen]);
 
   const handleBatchMarkdownHighlightChange = useCallback(
     (payload: { pageIndex: number; indices: number[] } | null) => {
@@ -96,6 +102,11 @@ const BatchOCRWorkspace = ({
   }, [markdownText, batchPages]);
 
   useEffect(() => {
+    // Keep query/store tab as source of truth for the hook-controlled tab.
+    setActiveTab(batchActiveTab);
+  }, [batchActiveTab, setActiveTab]);
+
+  useEffect(() => {
     document.documentElement.classList.add("ocr-workspace");
     document.body.classList.add("ocr-workspace");
     return () => {
@@ -103,6 +114,11 @@ const BatchOCRWorkspace = ({
       document.body.classList.remove("ocr-workspace");
     };
   }, []);
+
+  useEffect(() => {
+    // New batch workspace instance: reset shared workspace UI.
+    resetWorkspaceUi();
+  }, [resetWorkspaceUi]);
 
   const guardedRunBatch = useCallback(() => {
     if (!quotaCanUse) {
@@ -163,7 +179,7 @@ const BatchOCRWorkspace = ({
         onBack={onBack}
         onReprocess={handleToolbarReprocess}
         onPickAnother={onPickAnother}
-        onToggleHistory={toggleHistory}
+        onToggleHistory={handleToggleHistory}
         onCopy={copy}
         onDownloadMarkdown={downloadMarkdown}
         onDownloadJson={downloadJson}
@@ -220,7 +236,10 @@ const BatchOCRWorkspace = ({
           linkedBatchHighlight={linkedBatchHighlight}
           onBatchMarkdownHighlightChange={handleBatchMarkdownHighlightChange}
           activeTab={activeTab}
-          onActiveTabChange={setActiveTab}
+          onActiveTabChange={(t) => {
+            setActiveTab(t);
+            setBatchActiveTab(t);
+          }}
           editor={editor}
           jsonText={jsonText}
           onJsonTextChange={setJsonText}

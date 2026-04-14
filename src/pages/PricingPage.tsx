@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
 import { CREDIT_PACKS } from "@/lib/creditPacks";
+import { useCreateVnpayPayment, useVerifyVnpayPayment } from "@/hooks/useVnpay";
 
 const PricingPage = () => {
   const navigate = useNavigate();
@@ -16,6 +16,8 @@ const PricingPage = () => {
   const { balance, refresh: refreshCredits } = useCredits();
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const verifyVnpay = useVerifyVnpayPayment();
+  const createVnpayPayment = useCreateVnpayPayment();
 
   // Handle VNPay return
   useEffect(() => {
@@ -30,25 +32,22 @@ const PricingPage = () => {
     if (!vnpayParams.vnp_ResponseCode) return;
 
     setVerifying(true);
-    supabase.functions
-      .invoke("vnpay-verify", {
-        body: { vnpayParams },
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      .then(({ data, error }) => {
-        if (error) {
-          toast.error("Không thể xác minh thanh toán.");
-        } else if (data?.success) {
+    verifyVnpay
+      .mutateAsync(vnpayParams)
+      .then((data) => {
+        if (data?.success) {
           toast.success(`Nạp thành công ${data.credits} credits!`);
           refreshCredits();
         } else {
           toast.error(data?.message || "Thanh toán không thành công.");
         }
-        // Clean URL
-        navigate("/pricing", { replace: true });
       })
-      .finally(() => setVerifying(false));
-  }, [searchParams, session?.access_token]);
+      .catch(() => toast.error("Không thể xác minh thanh toán."))
+      .finally(() => {
+        setVerifying(false);
+        navigate("/pricing", { replace: true });
+      });
+  }, [navigate, refreshCredits, searchParams, session?.access_token, verifyVnpay]);
 
   const handleBuyPack = async (packId: string) => {
     if (!user || !session?.access_token) {
@@ -58,11 +57,7 @@ const PricingPage = () => {
 
     setCheckoutLoading(packId);
     try {
-      const { data, error } = await supabase.functions.invoke("create-vnpay-payment", {
-        body: { packId },
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (error) throw error;
+      const data = await createVnpayPayment.mutateAsync(packId);
       if (data?.url) window.location.href = data.url;
     } catch {
       toast.error("Không thể tạo phiên thanh toán VNPay.");

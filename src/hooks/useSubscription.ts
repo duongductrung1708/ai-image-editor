@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getTierByProductId, type StripeTier } from "@/lib/stripeTiers";
@@ -10,46 +10,57 @@ interface SubscriptionState {
   loading: boolean;
 }
 
+const subscriptionQueryKey = (userId: string | null) =>
+  ["subscription", userId] as const;
+
 export function useSubscription() {
   const { user, session } = useAuth();
-  const [state, setState] = useState<SubscriptionState>({
-    subscribed: false,
-    tier: "free",
-    subscriptionEnd: null,
-    loading: true,
+  const qc = useQueryClient();
+
+  const q = useQuery({
+    queryKey: subscriptionQueryKey(user?.id ?? null),
+    enabled: Boolean(user?.id && session?.access_token),
+    queryFn: async () => {
+      const accessToken = session?.access_token;
+      if (!user?.id || !accessToken) {
+        return {
+          subscribed: false,
+          tier: "free" as const,
+          subscriptionEnd: null,
+        };
+      }
+
+      const { data, error } = await supabase.functions.invoke(
+        "check-subscription",
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
+      if (error) throw error;
+
+      return {
+        subscribed: Boolean(data?.subscribed),
+        tier: getTierByProductId(data?.product_id),
+        subscriptionEnd: (data?.subscription_end as string | null) ?? null,
+      };
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 
-  const check = useCallback(async () => {
-    if (!user) {
-      setState({ subscribed: false, tier: "free", subscriptionEnd: null, loading: false });
-      return;
-    }
-    const accessToken = session?.access_token;
-    if (!accessToken) {
-      setState({ subscribed: false, tier: "free", subscriptionEnd: null, loading: false });
-      return;
-    }
-    try {
-      const { data, error } = await supabase.functions.invoke("check-subscription", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (error) throw error;
-      setState({
-        subscribed: data.subscribed,
-        tier: getTierByProductId(data.product_id),
-        subscriptionEnd: data.subscription_end,
-        loading: false,
-      });
-    } catch {
-      setState((s) => ({ ...s, loading: false }));
-    }
-  }, [session, user]);
+  const data: SubscriptionState = {
+    subscribed: q.data?.subscribed ?? false,
+    tier: q.data?.tier ?? "free",
+    subscriptionEnd: q.data?.subscriptionEnd ?? null,
+    loading: q.isLoading,
+  };
 
-  useEffect(() => {
-    check();
-    const interval = setInterval(check, 60_000);
-    return () => clearInterval(interval);
-  }, [check]);
-
-  return { ...state, refresh: check };
+  return {
+    ...data,
+    error: q.error,
+    refresh: () =>
+      qc.invalidateQueries({
+        queryKey: subscriptionQueryKey(user?.id ?? null),
+      }),
+  };
 }

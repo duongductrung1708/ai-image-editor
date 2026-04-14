@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Clock, Trash2, Eye, Images, ChevronDown, ChevronRight, FileText, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,8 @@ import {
 import { toast } from "sonner";
 import type { Json } from "@/integrations/supabase/types";
 import { Badge } from "@/components/ui/badge";
+import { useOcrHistory } from "@/hooks/useOcrHistory";
+import { useUiStore } from "@/stores/uiStore";
 
 interface HistoryEntry {
   id: string;
@@ -49,15 +51,20 @@ const HistorySidebar = ({
   onSelect,
   refreshKey,
 }: HistorySidebarProps) => {
-  const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  void refreshKey;
+  const { entries, loading, deleteOne } = useOcrHistory(50);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{
     id: string;
     imageName: string;
+    batchSessionId?: string;
   } | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month">("all");
+  const isDeleting = deleteOne.isPending;
+
+  const searchQuery = useUiStore((s) => s.historySearchQuery);
+  const setSearchQuery = useUiStore((s) => s.setHistorySearchQuery);
+  const dateFilter = useUiStore((s) => s.historyDateFilter);
+  const setDateFilter = useUiStore((s) => s.setHistoryDateFilter);
   const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
   const [batchPages, setBatchPages] = useState<Record<string, BatchPageDetail[]>>({});
   const [loadingPages, setLoadingPages] = useState<string | null>(null);
@@ -90,40 +97,7 @@ const HistorySidebar = ({
     return result;
   }, [entries, searchQuery, dateFilter]);
 
-  const fetchHistory = async () => {
-    const { data: histData, error: histErr } = await supabase
-      .from("ocr_history")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (histErr) {
-      console.error("Error fetching history:", histErr);
-    }
-
-    const enriched: HistoryEntry[] = (histData || []).map((entry) => {
-      const bb = entry.bounding_boxes;
-      let batch_page_count: number | undefined;
-      let batch_session_id: string | undefined;
-      if (
-        bb && typeof bb === "object" && !Array.isArray(bb) &&
-        (bb as { batch?: boolean }).batch === true
-      ) {
-        if (Array.isArray((bb as { pages?: unknown }).pages)) {
-          batch_page_count = ((bb as { pages: unknown[] }).pages).length;
-        }
-        if (typeof (bb as { batch_session_id?: string }).batch_session_id === "string") {
-          batch_session_id = (bb as { batch_session_id: string }).batch_session_id;
-        }
-      }
-      return { ...entry, batch_page_count, batch_session_id };
-    });
-
-    setEntries(enriched);
-  };
-
-  useEffect(() => {
-    fetchHistory();
-  }, [refreshKey]);
+  // refreshKey is kept for compatibility; history hook uses cache invalidation elsewhere.
 
   const toggleBatchExpand = async (entry: HistoryEntry, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -191,35 +165,22 @@ const HistorySidebar = ({
 
   const handleRequestDelete = (id: string, imageName: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setPendingDelete({ id, imageName });
+    const entry = entries.find((en) => en.id === id);
+    setPendingDelete({ id, imageName, batchSessionId: entry?.batch_session_id });
     setIsConfirmOpen(true);
   };
 
   const handleConfirmDelete = async () => {
     if (!pendingDelete) return;
-
-    setIsDeleting(true);
     try {
-      // Also delete batch session if linked
-      const entry = entries.find((e) => e.id === pendingDelete.id);
-      if (entry?.batch_session_id) {
-        await supabase.from("ocr_batch_sessions").delete().eq("id", entry.batch_session_id);
-      }
-
-      const { error } = await supabase
-        .from("ocr_history")
-        .delete()
-        .eq("id", pendingDelete.id);
-
-      if (error) {
-        toast.error("Lỗi khi xóa");
-        return;
-      }
-
-      setEntries((prev) => prev.filter((e) => e.id !== pendingDelete.id));
+      await deleteOne.mutateAsync({
+        id: pendingDelete.id,
+        batchSessionId: pendingDelete.batchSessionId,
+      });
       toast.success("Đã xóa");
+    } catch {
+      toast.error("Lỗi khi xóa");
     } finally {
-      setIsDeleting(false);
       setIsConfirmOpen(false);
       setPendingDelete(null);
     }
@@ -306,7 +267,11 @@ const HistorySidebar = ({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {filteredEntries.length === 0 ? (
+        {loading ? (
+          <p className="p-4 text-center text-xs text-muted-foreground">
+            Đang tải...
+          </p>
+        ) : filteredEntries.length === 0 ? (
           <p className="p-4 text-center text-xs text-muted-foreground">
             {entries.length === 0 ? "Chưa có lịch sử" : "Không tìm thấy kết quả"}
           </p>

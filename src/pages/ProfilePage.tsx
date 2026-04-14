@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
+import { useOcrHistory } from "@/hooks/useOcrHistory";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { CREDIT_PACKS } from "@/lib/creditPacks";
+import { useCreateVnpayPayment } from "@/hooks/useVnpay";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,11 +43,22 @@ import {
   Trash2,
   Eye,
 } from "lucide-react";
+import { useProfileStore } from "@/stores/profileStore";
 
 function toHistoryTextPreview(input: string): string {
   const raw = (input ?? "").trim();
   if (!raw) return "";
-  if (!raw.startsWith("<")) return raw;
+
+  // OCR history can be:
+  // - plain text/markdown
+  // - HTML produced by the OCR editor
+  // - mixed text + embedded HTML tags
+  // If it contains HTML tags anywhere, prefer extracting text-only preview.
+  const looksLikeHtml =
+    raw.startsWith("<") ||
+    /<\s*(p|div|span|table|img|br|h\d|ul|ol|li)\b/i.test(raw);
+  if (!looksLikeHtml) return raw;
+
   try {
     const doc = new DOMParser().parseFromString(raw, "text/html");
     const out: string[] = [];
@@ -82,6 +95,7 @@ const ProfilePage = () => {
   const { user, session } = useAuth();
   const navigate = useNavigate();
   const { balance, loading: creditsLoading, refresh: refreshCredits } = useCredits();
+  const createVnpayPayment = useCreateVnpayPayment();
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,10 +105,10 @@ const ProfilePage = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const [ocrHistory, setOcrHistory] = useState<OcrHistoryItem[]>([]);
-  const [ocrHistoryLoading, setOcrHistoryLoading] = useState(false);
-  const [ocrHistoryQuery, setOcrHistoryQuery] = useState("");
-  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const ocrHistoryQuery = useProfileStore((s) => s.ocrHistoryQuery);
+  const setOcrHistoryQuery = useProfileStore((s) => s.setOcrHistoryQuery);
+  const selectedHistoryId = useProfileStore((s) => s.selectedHistoryId);
+  const setSelectedHistoryId = useProfileStore((s) => s.setSelectedHistoryId);
   const [deletingHistory, setDeletingHistory] = useState(false);
   const [deletingAllHistory, setDeletingAllHistory] = useState(false);
   const [confirmDeleteOneOpen, setConfirmDeleteOneOpen] = useState(false);
@@ -116,27 +130,22 @@ const ProfilePage = () => {
       });
   }, [user]);
 
+  const {
+    entries: ocrHistory,
+    loading: ocrHistoryLoading,
+    deleteOne: deleteHistoryOne,
+    deleteAll: deleteHistoryAll,
+  } = useOcrHistory(100);
+
   useEffect(() => {
-    if (!user) return;
-    const fetchOcrHistory = async () => {
-      setOcrHistoryLoading(true);
-      const { data, error } = await supabase
-        .from("ocr_history")
-        .select("id, image_name, extracted_text, image_data, bounding_boxes, created_at")
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error) {
-        toast.error("Không thể tải lịch sử OCR.");
-        setOcrHistoryLoading(false);
-        return;
-      }
-      const rows = (data ?? []) as OcrHistoryItem[];
-      setOcrHistory(rows);
-      setSelectedHistoryId((prev) => prev ?? rows[0]?.id ?? null);
-      setOcrHistoryLoading(false);
-    };
-    void fetchOcrHistory();
-  }, [user]);
+    if (!selectedHistoryId) {
+      setSelectedHistoryId(ocrHistory[0]?.id ?? null);
+      return;
+    }
+    if (ocrHistory.length > 0 && !ocrHistory.some((h) => h.id === selectedHistoryId)) {
+      setSelectedHistoryId(ocrHistory[0]?.id ?? null);
+    }
+  }, [ocrHistory, selectedHistoryId, setSelectedHistoryId]);
 
   const filteredHistory = ocrHistory.filter((item) => {
     if (!ocrHistoryQuery.trim()) return true;
@@ -150,15 +159,14 @@ const ProfilePage = () => {
     if (!selectedHistory || deletingHistory) return;
     setDeletingHistory(true);
     try {
-      const { error } = await supabase.from("ocr_history").delete().eq("id", selectedHistory.id);
-      if (error) { toast.error("Không thể xóa lịch sử OCR."); return; }
-      setOcrHistory((prev) => {
-        const next = prev.filter((item) => item.id !== selectedHistory.id);
-        setSelectedHistoryId(next[0]?.id ?? null);
-        return next;
+      await deleteHistoryOne.mutateAsync({
+        id: selectedHistory.id,
+        batchSessionId: (selectedHistory as unknown as { batch_session_id?: string }).batch_session_id,
       });
       setConfirmDeleteOneOpen(false);
       toast.success("Đã xóa lịch sử OCR.");
+    } catch {
+      toast.error("Không thể xóa lịch sử OCR.");
     } finally { setDeletingHistory(false); }
   };
 
@@ -166,12 +174,12 @@ const ProfilePage = () => {
     if (ocrHistory.length === 0 || deletingAllHistory) return;
     setDeletingAllHistory(true);
     try {
-      const { error } = await supabase.from("ocr_history").delete().neq("id", "");
-      if (error) { toast.error("Không thể xóa toàn bộ lịch sử OCR."); return; }
-      setOcrHistory([]);
+      await deleteHistoryAll.mutateAsync();
       setSelectedHistoryId(null);
       setConfirmDeleteAllOpen(false);
       toast.success("Đã xóa toàn bộ lịch sử OCR.");
+    } catch {
+      toast.error("Không thể xóa toàn bộ lịch sử OCR.");
     } finally { setDeletingAllHistory(false); }
   };
 
@@ -225,15 +233,7 @@ const ProfilePage = () => {
   const handleBuyCredits = async (packId: string) => {
     setCheckoutLoading(packId);
     try {
-      if (!session?.access_token) {
-        toast.error("Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.");
-        return;
-      }
-      const { data, error } = await supabase.functions.invoke("create-vnpay-payment", {
-        body: { packId },
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (error) throw error;
+      const data = await createVnpayPayment.mutateAsync(packId);
       if (data?.url) window.location.href = data.url;
     } catch { toast.error("Không thể tạo phiên thanh toán."); }
     finally { setCheckoutLoading(null); }
@@ -458,12 +458,14 @@ const ProfilePage = () => {
                       })}
                     </div>
 
-                    <div className="rounded-md border border-border bg-card p-3">
+                    <div className="min-w-0 rounded-md border border-border bg-card p-3">
                       {selectedHistory ? (
                         <div className="space-y-3">
                           <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-semibold text-foreground">{selectedHistory.image_name}</p>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-foreground">
+                                {selectedHistory.image_name}
+                              </p>
                               <p className="text-xs text-muted-foreground">{new Date(selectedHistory.created_at).toLocaleString("vi-VN")}</p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -476,9 +478,15 @@ const ProfilePage = () => {
                             </div>
                           </div>
                           {selectedHistory.image_data ? (
-                            <img src={selectedHistory.image_data} alt={selectedHistory.image_name}
-                              className="max-h-56 w-full cursor-pointer rounded border border-border object-contain"
-                              title="Bấm để mở trong OCR" onClick={() => navigate(`/app?historyId=${selectedHistory.id}`)} />
+                            <div className="w-full overflow-hidden rounded border border-border bg-background">
+                              <img
+                                src={selectedHistory.image_data}
+                                alt={selectedHistory.image_name}
+                                className="block max-h-56 w-full max-w-full cursor-pointer object-contain"
+                                title="Bấm để mở trong OCR"
+                                onClick={() => navigate(`/app?historyId=${selectedHistory.id}`)}
+                              />
+                            </div>
                           ) : null}
                           <div className="max-h-48 overflow-y-auto rounded border border-border bg-background p-2">
                             <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">

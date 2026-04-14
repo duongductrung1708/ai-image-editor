@@ -17,6 +17,7 @@ import { useSingleImageExportActions } from "@/hooks/useSingleImageExportActions
 import { useOcrQuota } from "@/hooks/useOcrQuota";
 import { useAuth } from "@/hooks/useAuth";
 import { enhanceFile } from "@/lib/imageProcessing";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 interface OCRWorkspaceProps {
   imageFile: File;
@@ -38,10 +39,12 @@ const OCRWorkspace = ({
 }: OCRWorkspaceProps) => {
   const { user } = useAuth();
   const [imageUrl, setImageUrl] = useState("");
-  const [showHistory, setShowHistory] = useState(false);
-  const [activeTab, setActiveTab] = useState<"markdown" | "json" | "tables">(
-    "markdown",
-  );
+  const showHistory = useWorkspaceStore((s) => s.showHistory);
+  const setShowHistory = useWorkspaceStore((s) => s.setShowHistory);
+  const toggleHistoryOpen = useWorkspaceStore((s) => s.toggleHistory);
+  const activeTab = useWorkspaceStore((s) => s.singleActiveTab);
+  const setActiveTab = useWorkspaceStore((s) => s.setSingleActiveTab);
+  const resetWorkspaceUi = useWorkspaceStore((s) => s.reset);
   const [markdownLinkedBoxIndices, setMarkdownLinkedBoxIndices] = useState<
     number[] | null
   >(null);
@@ -110,12 +113,11 @@ const OCRWorkspace = ({
     setPhase("edit");
     setEditFile(imageFile);
     setEnhance(false);
-    setShowHistory(false);
-    setActiveTab("markdown");
+    resetWorkspaceUi();
     setMarkdownText("");
     setJsonText("");
     setBoundingBoxes([]);
-  }, [imageFile, setBoundingBoxes, setJsonText, setMarkdownText]);
+  }, [imageFile, resetWorkspaceUi, setBoundingBoxes, setJsonText, setMarkdownText]);
 
   useEffect(() => {
     // Chỉ trong OCR workspace: chặn scrollbar ở cấp html/body để tránh "scroll ngoài".
@@ -246,6 +248,8 @@ const OCRWorkspace = ({
     quotaCanUse,
     refreshQuota,
     runOcrOnFile,
+    setActiveTab,
+    setShowHistory,
     user,
     setOcrImageFromFile,
     setOcrLoadingUi,
@@ -284,11 +288,19 @@ const OCRWorkspace = ({
       return;
     }
     void startOcr();
-  }, [phase, startOcr, setBoundingBoxes, setJsonText, setMarkdownText]);
+  }, [
+    phase,
+    setActiveTab,
+    setBoundingBoxes,
+    setJsonText,
+    setMarkdownText,
+    setShowHistory,
+    startOcr,
+  ]);
 
-  const toggleHistory = useCallback(() => {
-    setShowHistory((v) => !v);
-  }, []);
+  const handleToggleHistory = useCallback(() => {
+    toggleHistoryOpen();
+  }, [toggleHistoryOpen]);
 
   const handleHistorySelect = useCallback(
     (entry: {
@@ -400,7 +412,7 @@ const OCRWorkspace = ({
         onBack={onBack}
         onReprocess={handleReprocess}
         onPickAnother={onBack}
-        onToggleHistory={toggleHistory}
+        onToggleHistory={handleToggleHistory}
         onCopy={copy}
         onDownloadMarkdown={() => download("markdown")}
         onDownloadJson={() => download("json")}

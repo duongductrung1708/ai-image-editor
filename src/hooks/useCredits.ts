@@ -1,45 +1,47 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
-interface CreditsState {
-  balance: number;
-  loading: boolean;
-}
+const creditsQueryKey = (userId: string | null) => ["credits", userId] as const;
 
 export function useCredits() {
   const { user } = useAuth();
-  const [state, setState] = useState<CreditsState>({ balance: 0, loading: true });
+  const qc = useQueryClient();
 
-  const fetch = useCallback(async () => {
-    if (!user) {
-      setState({ balance: 0, loading: false });
-      return;
-    }
-    const { data, error } = await supabase
-      .from("user_credits")
-      .select("balance")
-      .eq("user_id", user.id)
-      .maybeSingle();
+  const q = useQuery({
+    queryKey: creditsQueryKey(user?.id ?? null),
+    enabled: Boolean(user?.id),
+    queryFn: async () => {
+      const userId = user?.id;
+      if (!userId) return 0;
 
-    if (error) {
-      setState((s) => ({ ...s, loading: false }));
-      return;
-    }
+      const { data, error } = await supabase
+        .from("user_credits")
+        .select("balance")
+        .eq("user_id", userId)
+        .maybeSingle();
 
-    // If no row yet (user created before migration), create one
-    if (!data) {
-      await supabase.from("user_credits").insert({ user_id: user.id, balance: 0 });
-      setState({ balance: 0, loading: false });
-      return;
-    }
+      if (error) throw error;
 
-    setState({ balance: data.balance, loading: false });
-  }, [user]);
+      // If no row yet (user created before migration), create one
+      if (!data) {
+        const { error: insertErr } = await supabase
+          .from("user_credits")
+          .insert({ user_id: userId, balance: 0 });
+        if (insertErr) throw insertErr;
+        return 0;
+      }
 
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
+      return data.balance ?? 0;
+    },
+    staleTime: 15_000,
+  });
 
-  return { ...state, refresh: fetch };
+  return {
+    balance: q.data ?? 0,
+    loading: q.isLoading,
+    error: q.error,
+    refresh: () =>
+      qc.invalidateQueries({ queryKey: creditsQueryKey(user?.id ?? null) }),
+  };
 }
