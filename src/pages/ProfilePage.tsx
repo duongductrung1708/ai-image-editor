@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useSubscription } from "@/hooks/useSubscription";
+import { useCredits } from "@/hooks/useCredits";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { STRIPE_TIERS } from "@/lib/stripeTiers";
+import { CREDIT_PACKS } from "@/lib/creditPacks";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,9 +35,8 @@ import {
   Upload,
   KeyRound,
   User,
-  CreditCard,
+  Coins,
   Check,
-  ExternalLink,
   History,
   Trash2,
   Eye,
@@ -78,53 +77,7 @@ function toHistoryTextPreview(input: string): string {
   }
 }
 
-const plans = [
-  {
-    key: "free" as const,
-    name: "Free",
-    price: "0đ",
-    period: "/tháng",
-    model: "Model OCR Lite",
-    outputQuality: "Chuẩn",
-    description: "Phù hợp để trải nghiệm OCR cơ bản.",
-    features: [
-      "Model Lite tối ưu cho tài liệu in rõ",
-      "Đầu ra sạch cho đoạn văn ngắn",
-      "Giữ dấu tiếng Việt tốt",
-    ],
-    highlighted: false,
-  },
-  {
-    key: "pro" as const,
-    name: "Pro",
-    price: "99.000đ",
-    period: "/tháng",
-    model: "Model OCR Pro v2",
-    outputQuality: "Cao",
-    description: "Chất lượng OCR cao trên tài liệu phức tạp.",
-    features: [
-      "Tăng độ chính xác trên ảnh mờ, nghiêng",
-      "Tách cột, nhận diện bảng biểu",
-      "Giảm lỗi ký tự tiếng Việt có dấu",
-    ],
-    highlighted: true,
-  },
-  {
-    key: "business" as const,
-    name: "Business",
-    price: "499.000đ",
-    period: "/tháng",
-    model: "Model OCR Enterprise X",
-    outputQuality: "Rất cao",
-    description: "Dành cho doanh nghiệp cần đầu ra ổn định nhất.",
-    features: [
-      "Tài liệu scan kém, nén và nhiễu cao",
-      "Giữ bố cục nhiều cấp sát bản gốc",
-      "Chất lượng nhất quán ở quy mô lớn",
-    ],
-    highlighted: false,
-  },
-];
+
 
 const ProfilePage = () => {
   interface OcrHistoryItem {
@@ -138,12 +91,7 @@ const ProfilePage = () => {
 
   const { user, session } = useAuth();
   const navigate = useNavigate();
-  const {
-    tier: currentTier,
-    subscriptionEnd,
-    loading: subLoading,
-    refresh,
-  } = useSubscription();
+  const { balance, loading: creditsLoading, refresh: refreshCredits } = useCredits();
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -153,7 +101,6 @@ const ProfilePage = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const [portalLoading, setPortalLoading] = useState(false);
   const [ocrHistory, setOcrHistory] = useState<OcrHistoryItem[]>([]);
   const [ocrHistoryLoading, setOcrHistoryLoading] = useState(false);
   const [ocrHistoryQuery, setOcrHistoryQuery] = useState("");
