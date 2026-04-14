@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useSubscription } from "@/hooks/useSubscription";
+import { useCredits } from "@/hooks/useCredits";
 
 const FREE_DAILY_LIMIT = 5;
 
 export function useOcrQuota() {
   const { user } = useAuth();
-  const { tier, loading: subscriptionLoading } = useSubscription();
+  const { balance, loading: creditsLoading, refresh: refreshCredits } = useCredits();
   const [todayCount, setTodayCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -45,26 +45,32 @@ export function useOcrQuota() {
     fetchCount();
   }, [fetchCount]);
 
-  const isUnlimited = tier === "pro" || tier === "business";
-  const dailyLimit = FREE_DAILY_LIMIT;
-  const ready = Boolean(user) && !loading && !subscriptionLoading;
+  const hasCredits = balance > 0;
+  const freeDailyRemaining = Math.max(0, FREE_DAILY_LIMIT - todayCount);
+  const ready = Boolean(user) && !loading && !creditsLoading;
+
+  // User can OCR if: has credits OR has free daily remaining
+  const canUse = Boolean(user) && (hasCredits || freeDailyRemaining > 0);
+
+  // Remaining: credits + free daily remaining
   const remaining = !user
     ? 0
-    : subscriptionLoading
+    : creditsLoading
       ? undefined
-      : isUnlimited
-        ? Infinity
-        : Math.max(0, dailyLimit - todayCount);
-  const canUse = Boolean(user) && (isUnlimited || (remaining ?? 0) > 0);
+      : hasCredits
+        ? balance + freeDailyRemaining
+        : freeDailyRemaining;
 
   return {
     todayCount,
     remaining,
-    limit: isUnlimited ? Infinity : dailyLimit,
+    balance,
+    freeDailyRemaining,
+    limit: hasCredits ? Infinity : FREE_DAILY_LIMIT,
     canUse,
-    isUnlimited,
-    loading: loading || subscriptionLoading,
+    isUnlimited: false,
+    loading: loading || creditsLoading,
     ready,
-    refresh: fetchCount,
+    refresh: () => { fetchCount(); refreshCredits(); },
   };
 }
