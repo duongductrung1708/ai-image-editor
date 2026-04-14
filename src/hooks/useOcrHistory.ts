@@ -18,6 +18,19 @@ export interface OcrHistoryEntryEnriched extends OcrHistoryEntryRow {
 
 const ocrHistoryQueryKey = (limit: number) => ["ocr_history", { limit }] as const;
 
+function updateAllHistoryCaches(
+  qc: ReturnType<typeof useQueryClient>,
+  updater: (prev: OcrHistoryEntryEnriched[] | undefined) => OcrHistoryEntryEnriched[],
+) {
+  const all = qc.getQueriesData({ queryKey: ["ocr_history"] });
+  for (const [key, data] of all) {
+    qc.setQueryData(
+      key,
+      updater(data as OcrHistoryEntryEnriched[] | undefined),
+    );
+  }
+}
+
 function enrichEntry(entry: OcrHistoryEntryRow): OcrHistoryEntryEnriched {
   const bb = entry.bounding_boxes;
   let batch_page_count: number | undefined;
@@ -71,8 +84,22 @@ export function useOcrHistory(limit = 50) {
       const { error } = await supabase.from("ocr_history").delete().eq("id", payload.id);
       if (error) throw error;
     },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ocrHistoryQueryKey(limit) });
+    onMutate: async (payload) => {
+      await qc.cancelQueries({ queryKey: ["ocr_history"] });
+      const prev = qc.getQueriesData({ queryKey: ["ocr_history"] });
+      updateAllHistoryCaches(qc, (old) =>
+        (old ?? []).filter((e) => e.id !== payload.id),
+      );
+      return { prev };
+    },
+    onError: async (_err, _vars, ctx) => {
+      if (!ctx?.prev) return;
+      for (const [key, data] of ctx.prev) {
+        qc.setQueryData(key, data);
+      }
+    },
+    onSettled: async () => {
+      await qc.invalidateQueries({ queryKey: ["ocr_history"] });
     },
   });
 
@@ -81,8 +108,20 @@ export function useOcrHistory(limit = 50) {
       const { error } = await supabase.from("ocr_history").delete().neq("id", "");
       if (error) throw error;
     },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ocrHistoryQueryKey(limit) });
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["ocr_history"] });
+      const prev = qc.getQueriesData({ queryKey: ["ocr_history"] });
+      updateAllHistoryCaches(qc, () => []);
+      return { prev };
+    },
+    onError: async (_err, _vars, ctx) => {
+      if (!ctx?.prev) return;
+      for (const [key, data] of ctx.prev) {
+        qc.setQueryData(key, data);
+      }
+    },
+    onSettled: async () => {
+      await qc.invalidateQueries({ queryKey: ["ocr_history"] });
     },
   });
 

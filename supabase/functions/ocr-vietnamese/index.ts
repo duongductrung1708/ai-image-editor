@@ -1,6 +1,7 @@
 /// <reference lib="deno.ns" />
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 type ParsedOcr = {
   markdown?: string;
@@ -9,11 +10,114 @@ type ParsedOcr = {
   warning?: string;
 };
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+function parseAllowedOrigins(): string[] {
+  const raw = (Deno.env.get("ALLOWED_ORIGINS") || "").trim();
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function requireAllowedOrigins(): boolean {
+  return (Deno.env.get("REQUIRE_ALLOWED_ORIGINS") || "0").trim() === "1";
+}
+
+function corsHeadersForRequest(req: Request): Record<string, string> {
+  const allowlist = parseAllowedOrigins();
+  const origin = req.headers.get("origin") || "";
+
+  // If no allowlist is configured, keep permissive behavior (dev-friendly).
+  const allowOrigin =
+    allowlist.length === 0
+      ? requireAllowedOrigins()
+        ? "null"
+        : "*"
+      : allowlist.includes(origin)
+        ? origin
+        : "null";
+
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    ...(allowlist.length > 0 ? { Vary: "Origin" } : {}),
+  };
+}
+
+function getBearerToken(req: Request): string | null {
+  const auth = req.headers.get("Authorization") || "";
+  const m = /^Bearer\s+(.+)\s*$/i.exec(auth);
+  return m?.[1] ? m[1].trim() : null;
+}
+
+function getCreditsPerImage(): number {
+  const raw = Deno.env.get("OCR_CREDITS_PER_IMAGE") || "1";
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function getClientIp(req: Request): string {
+  // Supabase / edge proxies commonly set x-forwarded-for. Use first IP.
+  const xff = req.headers.get("x-forwarded-for") || "";
+  const first = xff.split(",")[0]?.trim();
+  return first || req.headers.get("x-real-ip") || "";
+}
+
+function getRateLimitWindowSeconds(): number {
+  const raw = Deno.env.get("RATE_LIMIT_WINDOW_SECONDS") || "60";
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : 60;
+}
+
+function getRateLimitOcrPerWindow(): number {
+  const raw = Deno.env.get("RATE_LIMIT_OCR_PER_WINDOW") || "20";
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : 20;
+}
+
+async function chargeCreditsOrThrow(opts: {
+  userId: string;
+  amount: number;
+  srvClient: ReturnType<typeof createClient>;
+}): Promise<number> {
+  const { userId, amount, srvClient } = opts;
+  if (amount <= 0) return 0;
+
+  const { data, error } = await srvClient.rpc("charge_credits", {
+    p_user_id: userId,
+    p_amount: amount,
+    p_reason: "ocr",
+  });
+
+  if (error) {
+    const msg = String(error.message || "").trim();
+    if (msg.includes("INSUFFICIENT_CREDITS")) throw new Error("INSUFFICIENT_CREDITS");
+    console.error("[credits] charge_credits rpc failed:", error);
+    throw new Error("Unable to charge credits");
+  }
+
+  const balance = Number(data ?? 0);
+  return Number.isFinite(balance) ? balance : 0;
+}
+
+async function refundCreditsBestEffort(opts: {
+  userId: string;
+  amount: number;
+  srvClient: ReturnType<typeof createClient>;
+  reason: string;
+}) {
+  const { userId, amount, srvClient, reason } = opts;
+  if (amount <= 0) return;
+
+  const { error } = await srvClient.rpc("refund_credits", {
+    p_user_id: userId,
+    p_amount: amount,
+    p_reason: reason,
+  });
+  if (error) console.error("[credits] refund_credits rpc failed:", error);
+}
 
 function normalizeImageAndMimeType(
   imageInput: unknown,
@@ -787,6 +891,25 @@ async function fetchProviderContent(
   cfg: OcrConfig,
   prompt: string,
 ): Promise<string> {
+  const timeoutMsRaw =
+    (cfg.provider === "gemini"
+      ? Deno.env.get("GEMINI_TIMEOUT_MS")
+      : Deno.env.get("OPENAI_TIMEOUT_MS")) || "60000";
+  const timeoutMs = Math.max(5_000, Math.floor(Number(timeoutMsRaw) || 60_000));
+
+  const fetchWithTimeout = async (
+    url: string,
+    init: RequestInit,
+  ): Promise<Response> => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(id);
+    }
+  };
+
   let response!: Response;
   if (cfg.provider === "gemini") {
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
@@ -840,7 +963,7 @@ async function fetchProviderContent(
 
     const doGeminiFetch = async (model: string): Promise<Response> => {
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
-      return await fetch(geminiUrl, {
+      return await fetchWithTimeout(geminiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
@@ -904,7 +1027,7 @@ async function fetchProviderContent(
     if (!model) throw new Error("OPENAI_MODEL is not configured");
     if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
 
-    response = await fetch(`${baseUrl}/chat/completions`, {
+    response = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1039,10 +1162,81 @@ function mergeBatchMarkdown(
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
+  const corsHeaders = corsHeadersForRequest(req);
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
 
   try {
+    // Enforce allowlist in production.
+    if (corsHeaders["Access-Control-Allow-Origin"] === "null") {
+      return new Response(JSON.stringify({ error: "Origin not allowed" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return new Response(JSON.stringify({ error: "Missing Supabase config (SUPABASE_URL / SUPABASE_ANON_KEY)" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!serviceRoleKey) {
+      return new Response(JSON.stringify({ error: "Missing Supabase service role key (SUPABASE_SERVICE_ROLE_KEY)" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const token = getBearerToken(req);
+    if (!token) {
+      return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // We verify the user explicitly to obtain user_id for billing/rate-limits.
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false },
+    });
+    const { data: userData } = await authClient.auth.getUser(token);
+    const user = userData.user;
+    if (!user) {
+      return new Response(JSON.stringify({ error: "User not authenticated" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const srvClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
+    });
+
+    const ip = getClientIp(req);
+    const windowSeconds = getRateLimitWindowSeconds();
+    const maxReq = getRateLimitOcrPerWindow();
+    const { error: rlErr } = await srvClient.rpc("enforce_rate_limit", {
+      p_user_id: user.id,
+      p_ip: ip,
+      p_scope: "ocr",
+      p_window_seconds: windowSeconds,
+      p_max: maxReq,
+    });
+    if (rlErr) {
+      const msg = String(rlErr.message || "");
+      if (msg.includes("RATE_LIMIT")) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      console.error("[rate-limit] enforce_rate_limit failed:", rlErr);
+      // If rate limit fails, proceed (fail-open) to avoid breaking service due to DB transient issues.
+    }
+
     const url = new URL(req.url);
     const body = await req.json();
 
@@ -1105,6 +1299,25 @@ serve(async (req) => {
         }),
       );
 
+      const creditsPerImage = getCreditsPerImage();
+      const chargeAmount = tasks.length * creditsPerImage;
+      try {
+        await chargeCreditsOrThrow({
+          userId: user.id,
+          amount: chargeAmount,
+          srvClient,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === "INSUFFICIENT_CREDITS") {
+          return new Response(JSON.stringify({ error: "Insufficient credits" }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        throw err;
+      }
+
       const pages = await runPool(tasks, concurrency, async (task) => {
         try {
           if (typeof task.image !== "string" || !task.image.trim()) {
@@ -1155,6 +1368,16 @@ serve(async (req) => {
         .map((p) => p.full_text || p.markdown)
         .join("\n\n");
 
+      const failCount = pages.filter((p) => !p.ok).length;
+      if (failCount > 0) {
+        await refundCreditsBestEffort({
+          userId: user.id,
+          amount: failCount * creditsPerImage,
+          srvClient,
+          reason: "batch_page_failed",
+        });
+      }
+
       return new Response(
         JSON.stringify({
           markdown: mergedMarkdown,
@@ -1162,6 +1385,7 @@ serve(async (req) => {
           pages,
           pageCount: pages.length,
           concurrency,
+          creditsPerImage,
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1177,7 +1401,36 @@ serve(async (req) => {
     }
 
     const singleImage = body?.image ?? body?.imageBase64;
-    const payload = await runSingleOcr(singleImage, body?.mimeType);
+    const creditsPerImage = getCreditsPerImage();
+    try {
+      await chargeCreditsOrThrow({
+        userId: user.id,
+        amount: creditsPerImage,
+        srvClient,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "INSUFFICIENT_CREDITS") {
+        return new Response(JSON.stringify({ error: "Insufficient credits" }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      throw err;
+    }
+
+    let payload: ParsedOcr;
+    try {
+      payload = await runSingleOcr(singleImage, body?.mimeType);
+    } catch (err) {
+      await refundCreditsBestEffort({
+        userId: user.id,
+        amount: creditsPerImage,
+        srvClient,
+        reason: "single_ocr_failed",
+      });
+      throw err;
+    }
     const normalized = normalizeImageAndMimeType(singleImage, body?.mimeType);
     const imageSize = getImageSizePx(normalized.image, normalized.mimeType);
     // blocks are already normalized inside parseOcrPayload — do NOT call normalizeOcrBlocks again
@@ -1192,6 +1445,7 @@ serve(async (req) => {
           ? { warning: payload.warning }
           : {}),
         ...(imageSize ? { imageSize } : {}),
+        creditsPerImage,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1209,10 +1463,10 @@ serve(async (req) => {
     const status = message.toLowerCase().includes("rate limit") ? 429 : 500;
     return new Response(
       JSON.stringify({
-        error: message,
+        error: message === "INSUFFICIENT_CREDITS" ? "Insufficient credits" : message,
       }),
       {
-        status,
+        status: message === "INSUFFICIENT_CREDITS" ? 402 : status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );

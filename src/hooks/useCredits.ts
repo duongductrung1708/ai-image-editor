@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
-const creditsQueryKey = (userId: string | null) => ["credits", userId] as const;
+export const creditsQueryKey = (userId: string | null) =>
+  ["credits", userId] as const;
 
 export function useCredits() {
   const { user } = useAuth();

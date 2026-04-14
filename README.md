@@ -76,8 +76,16 @@ Set secrets on Supabase for the deployed function (or local env when using `supa
 - `OCR_PROVIDER` — `gemini` | `openai` (default in code: `gemini`)
 - `OCR_MODE` — `both` | `json` | `markdown` (default: `both`)
 - `OCR_MARKDOWN_STYLE` — `raw` | `clean`
+- `OCR_CREDITS_PER_IMAGE` — credits charged per image (default: `1`)
+- `ALLOWED_ORIGINS` — comma-separated CORS allowlist for production (empty = allow all, dev-only)
+- `REQUIRE_ALLOWED_ORIGINS` — set `1` to block requests when allowlist is empty (recommended in prod)
+- `RATE_LIMIT_WINDOW_SECONDS` — rate limit window size in seconds (default: `60`)
+- `RATE_LIMIT_OCR_PER_WINDOW` — max OCR requests per window (default: `20`)
+- `RATE_LIMIT_BILLING_PER_WINDOW` — max billing requests per window (default: `10`)
+- `IDEMPOTENCY_TTL_SECONDS` — idempotency key TTL in seconds (default: `600`)
 - **Gemini**: `GEMINI_API_KEY`, `GEMINI_MODEL` (e.g. `gemini-2.5-flash`), optional `GEMINI_MODEL_FALLBACK`
 - **OpenAI-compatible**: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`
+- `OPENAI_TIMEOUT_MS` — timeout for OpenAI-compatible provider calls (default: `60000`)
 - **Batch OCR** (optional): `OCR_BATCH_CONCURRENCY` (default `2`, max `8`), `OCR_BATCH_MAX_IMAGES` (default `30`, max `100`)
 
 ### Run the frontend locally

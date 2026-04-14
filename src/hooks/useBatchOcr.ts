@@ -15,7 +15,7 @@ import {
 } from "@/types/ocr";
 
 const OCR_FUNCTION_URL =
-  "https://stfjeonxdidrqbrunkss.supabase.co/functions/v1/ocr-vietnamese";
+  `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-vietnamese`;
 
 function normalizeOcrText(value: string): string {
   if (!value) return "";
@@ -37,7 +37,7 @@ function normalizeOcrText(value: string): string {
 export type BatchPhase = "ready" | "processing" | "result";
 
 export function useBatchOcr(files: File[]) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [phase, setPhase] = useState<BatchPhase>("ready");
   const [markdownText, setMarkdownText] = useState("");
   const [jsonText, setJsonText] = useState("");
@@ -167,6 +167,11 @@ export function useBatchOcr(files: File[]) {
     setHistoryPageImageDatas([]);
 
     try {
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        throw new Error("Missing Authorization header");
+      }
+
       const images = await Promise.all(
         files.map(async (f) => ({
           name: f.name,
@@ -177,7 +182,10 @@ export function useBatchOcr(files: File[]) {
 
       const r = await fetch(`${OCR_FUNCTION_URL}/batch`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ images }),
         signal,
       });
@@ -307,7 +315,7 @@ export function useBatchOcr(files: File[]) {
       }
       setIsProcessing(false);
     }
-  }, [files, isProcessing, user?.id]);
+  }, [files, isProcessing, session?.access_token, user?.id]);
 
   const cancelBatch = useCallback(() => {
     batchAbortRef.current?.abort();

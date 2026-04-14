@@ -50,7 +50,7 @@ function normalizeOcrText(value: string): string {
  * Gọi API OCR một ảnh, lưu lịch sử, hỗ trợ Abort / hủy.
  */
 export function useSingleImageOcr() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [markdownText, setMarkdownText] = useState("");
   const [jsonText, setJsonText] = useState("");
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>([]);
@@ -93,9 +93,16 @@ export function useSingleImageOcr() {
 
       setLoadingLabel("Đang gửi lên OCR...");
       setLoadingProgress(45);
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        throw new Error("Missing Authorization header");
+      }
       const r = await fetch(OCR_FUNCTION_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
         signal,
       });
@@ -233,7 +240,7 @@ export function useSingleImageOcr() {
     }
 
     return ok;
-  }, [user]);
+  }, [session?.access_token, user]);
 
   const cancelProcessing = useCallback(() => {
     ocrCancelRequestedRef.current = true;
