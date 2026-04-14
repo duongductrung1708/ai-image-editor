@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
@@ -34,28 +35,66 @@ function vnpayDate(d: Date): string {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders, status: 204 });
   }
 
-  const supabaseClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-  );
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const tmnCode = Deno.env.get("VNPAY_TMN_CODE") ?? "";
+  const hashSecret = Deno.env.get("VNPAY_HASH_SECRET") ?? "";
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return new Response(JSON.stringify({ error: "Missing Supabase config (SUPABASE_URL / SUPABASE_ANON_KEY)" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
+
+  if (!serviceRoleKey) {
+    return new Response(JSON.stringify({ error: "Missing Supabase service role key (SUPABASE_SERVICE_ROLE_KEY)" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
+
+  if (!tmnCode || !hashSecret) {
+    return new Response(JSON.stringify({ error: "VNPay not configured (VNPAY_TMN_CODE / VNPAY_HASH_SECRET)" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
+
+  const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
   try {
-    const authHeader = req.headers.get("Authorization")!;
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
     const token = authHeader.replace("Bearer ", "");
     const { data } = await supabaseClient.auth.getUser(token);
     const user = data.user;
     if (!user) throw new Error("User not authenticated");
 
-    const { packId } = await req.json();
+    const body = await req.json().catch(() => null);
+    const packId = body?.packId as string | undefined;
+    if (!packId) {
+      return new Response(JSON.stringify({ error: "packId is required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
     const pack = CREDIT_PACKS[packId];
-    if (!pack) throw new Error("Invalid pack");
-
-    const tmnCode = Deno.env.get("VNPAY_TMN_CODE");
-    const hashSecret = Deno.env.get("VNPAY_HASH_SECRET");
-    if (!tmnCode || !hashSecret) throw new Error("VNPay not configured");
+    if (!pack) {
+      return new Response(JSON.stringify({ error: "Invalid packId" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
 
     const vnpayUrl = Deno.env.get("VNPAY_URL") || "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
     const origin = req.headers.get("origin") || "https://localhost:3000";
@@ -88,23 +127,26 @@ serve(async (req) => {
     const paymentUrl = `${vnpayUrl}?${signData}&vnp_SecureHash=${secureHash}`;
 
     // Store pending transaction in credit_transactions using service role
-    const srvClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } },
-    );
-    await srvClient.from("credit_transactions").insert({
+    const srvClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const { error: insertErr } = await srvClient.from("credit_transactions").insert({
       user_id: user.id,
       amount: pack.credits,
       type: "topup",
       description: `Pending: ${pack.credits} credits (${txnRef})`,
       vnpay_txn_ref: txnRef,
     });
+    if (insertErr) {
+      console.error("create-vnpay-payment insert error:", insertErr);
+      throw new Error("Failed to create pending transaction");
+    }
 
     return new Response(JSON.stringify({ url: paymentUrl, txnRef }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: unknown) {
+    console.error("create-vnpay-payment error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 },

@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
@@ -26,22 +27,42 @@ function hmacSha512(key: string, data: string): Promise<string> {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders, status: 204 });
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const hashSecret = Deno.env.get("VNPAY_HASH_SECRET") ?? "";
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return new Response(JSON.stringify({ success: false, message: "Missing Supabase config (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
+
+  if (!hashSecret) {
+    return new Response(JSON.stringify({ success: false, message: "VNPay not configured (VNPAY_HASH_SECRET)" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
   }
 
   const srvClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    supabaseUrl,
+    serviceRoleKey,
     { auth: { persistSession: false } },
   );
 
   try {
-    const hashSecret = Deno.env.get("VNPAY_HASH_SECRET");
-    if (!hashSecret) throw new Error("VNPay not configured");
-
     // Authenticate user
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ success: false, message: "Missing Authorization header" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
     const token = authHeader.replace("Bearer ", "");
     const { data: userData, error: userError } = await srvClient.auth.getUser(token);
     if (userError || !userData.user) throw new Error("User not authenticated");
