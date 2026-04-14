@@ -128,14 +128,7 @@ const ProfilePage = () => {
       });
   }, [user]);
 
-  // Refresh subscription after checkout redirect
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("success") === "true") {
-      toast.success("Thanh toán thành công! Đang cập nhật gói...");
-      refresh();
-    }
-  }, [refresh]);
+  // No longer needed - removed Stripe subscription refresh
 
   useEffect(() => {
     if (!user) return;
@@ -432,8 +425,8 @@ const ProfilePage = () => {
               Bảo mật
             </TabsTrigger>
             <TabsTrigger value="plan" className="gap-1.5">
-              <CreditCard className="h-4 w-4" />
-              Gói dịch vụ
+              <Coins className="h-4 w-4" />
+              Credits
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-1.5">
               <History className="h-4 w-4" />
