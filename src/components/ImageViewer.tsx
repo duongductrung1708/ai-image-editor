@@ -12,6 +12,8 @@ export interface BoundingBox {
   height: number;
   /** `figure`: ảnh/biểu đồ; `stamp`: con dấu; `signature`: chữ ký tay. */
   kind?: "text" | "figure" | "stamp" | "signature";
+  /** Cỡ chữ (px) ước lượng từ bbox + kích thước ảnh nguồn. */
+  fontSizePx?: number;
 }
 
 interface ImageViewerProps {
@@ -192,6 +194,9 @@ const ImageViewer = ({
                 </span>
                 {box.text ? ` · ${box.text}` : ""}
                 {!box.text ? boxKindLabel(box.kind) : ""}
+                {typeof box.fontSizePx === "number" && box.fontSizePx > 0
+                  ? ` · ${Math.round(box.fontSizePx)}px`
+                  : ""}
               </div>
             )}
           </div>

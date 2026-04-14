@@ -61,11 +61,15 @@ export function buildOcrHtmlFromBlocks(
     const kind = parseBboxKindFromApi(b.kind, b.text);
     const crop = cropUrls[id];
     const kindAttr = kind;
+    const fontSizeAttr =
+      typeof b.fontSizePx === "number" && b.fontSizePx > 0
+        ? ` data-font-size-px="${escapeHtml(String(Math.round(b.fontSizePx)))}"`
+        : "";
     const alt = visualBboxAlt(kind) || "Hình";
 
     if (isVisualBboxKind(kind) && crop) {
       parts.push(
-        `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"><img src="${escapeHtml(crop)}" alt="${escapeHtml(alt)}" class="max-w-full rounded-md border border-border" /></p>`,
+        `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"${fontSizeAttr}><img src="${escapeHtml(crop)}" alt="${escapeHtml(alt)}" class="max-w-full rounded-md border border-border" /></p>`,
       );
       continue;
     }
@@ -73,14 +77,14 @@ export function buildOcrHtmlFromBlocks(
     const t = (b.text ?? "").trim();
     if (isVisualBboxKind(kind) && !crop) {
       parts.push(
-        `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"><span class="text-muted-foreground text-sm">(Không tải được ảnh vùng)</span></p>`,
+        `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"${fontSizeAttr}><span class="text-muted-foreground text-sm">(Không tải được ảnh vùng)</span></p>`,
       );
       continue;
     }
 
     const inner = t ? escapeHtml(t).replace(/\n/g, "<br/>") : "<br/>";
     parts.push(
-      `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}">${inner}</p>`,
+      `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"${fontSizeAttr}>${inner}</p>`,
     );
   }
 

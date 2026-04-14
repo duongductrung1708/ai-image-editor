@@ -6,6 +6,8 @@ export type OcrBlock = {
   width: number;
   height: number;
   kind?: "text" | "figure" | "stamp" | "signature";
+  /** Ước lượng từ chiều cao bbox theo px của ảnh nguồn (best-effort). */
+  fontSizePx?: number;
 };
 
 export type OcrSuccessResponse = {

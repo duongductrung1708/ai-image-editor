@@ -116,6 +116,158 @@ type OcrBlockNorm = {
   kind: OcrBlockKind;
 };
 
+type ImageSizePx = { width: number; height: number };
+
+function decodeBase64ToBytes(base64: string): Uint8Array {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function readU32BE(bytes: Uint8Array, offset: number): number {
+  return (
+    ((bytes[offset] ?? 0) << 24) |
+    ((bytes[offset + 1] ?? 0) << 16) |
+    ((bytes[offset + 2] ?? 0) << 8) |
+    (bytes[offset + 3] ?? 0)
+  ) >>> 0;
+}
+
+function readU16BE(bytes: Uint8Array, offset: number): number {
+  return (((bytes[offset] ?? 0) << 8) | (bytes[offset + 1] ?? 0)) >>> 0;
+}
+
+function parsePngSize(bytes: Uint8Array): ImageSizePx | null {
+  // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    bytes.length < 24 ||
+    bytes[0] !== 0x89 ||
+    bytes[1] !== 0x50 ||
+    bytes[2] !== 0x4e ||
+    bytes[3] !== 0x47 ||
+    bytes[4] !== 0x0d ||
+    bytes[5] !== 0x0a ||
+    bytes[6] !== 0x1a ||
+    bytes[7] !== 0x0a
+  ) {
+    return null;
+  }
+
+  // First chunk is IHDR at offset 8:
+  // length(4) type(4='IHDR') width(4) height(4)
+  const type =
+    String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]) || "";
+  if (type !== "IHDR") return null;
+  const width = readU32BE(bytes, 16);
+  const height = readU32BE(bytes, 20);
+  if (!width || !height) return null;
+  return { width, height };
+}
+
+function parseJpegSize(bytes: Uint8Array): ImageSizePx | null {
+  // JPEG starts with FF D8
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+
+  let i = 2;
+  while (i + 3 < bytes.length) {
+    // Find marker prefix 0xFF
+    if (bytes[i] !== 0xff) {
+      i += 1;
+      continue;
+    }
+
+    // Skip fill bytes (0xFF ... 0xFF)
+    while (i < bytes.length && bytes[i] === 0xff) i += 1;
+    if (i >= bytes.length) break;
+    const marker = bytes[i];
+    i += 1;
+
+    // Standalone markers without length
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) continue;
+    if (i + 1 >= bytes.length) break;
+
+    const segmentLen = readU16BE(bytes, i);
+    if (segmentLen < 2) return null;
+    const segmentStart = i + 2;
+
+    // SOF0, SOF1, SOF2, SOF3, SOF5, SOF6, SOF7, SOF9, SOF10, SOF11, SOF13, SOF14, SOF15
+    const isSof =
+      marker === 0xc0 ||
+      marker === 0xc1 ||
+      marker === 0xc2 ||
+      marker === 0xc3 ||
+      marker === 0xc5 ||
+      marker === 0xc6 ||
+      marker === 0xc7 ||
+      marker === 0xc9 ||
+      marker === 0xca ||
+      marker === 0xcb ||
+      marker === 0xcd ||
+      marker === 0xce ||
+      marker === 0xcf;
+
+    if (isSof) {
+      // segment payload: [precision(1), height(2), width(2), ...]
+      if (segmentStart + 4 >= bytes.length) break;
+      const height = readU16BE(bytes, segmentStart + 1);
+      const width = readU16BE(bytes, segmentStart + 3);
+      if (!width || !height) return null;
+      return { width, height };
+    }
+
+    i = segmentStart + (segmentLen - 2);
+  }
+
+  return null;
+}
+
+function getImageSizePx(
+  base64Image: string,
+  mimeType: string,
+): ImageSizePx | null {
+  try {
+    const bytes = decodeBase64ToBytes(base64Image);
+    const mt = (mimeType || "").toLowerCase();
+    if (mt.includes("png")) return parsePngSize(bytes);
+    if (mt.includes("jpeg") || mt.includes("jpg")) return parseJpegSize(bytes);
+
+    // Best-effort sniffing when mimeType is wrong/missing
+    return parsePngSize(bytes) ?? parseJpegSize(bytes);
+  } catch {
+    return null;
+  }
+}
+
+function estimateFontSizePxFromLineHeightPx(lineHeightPx: number): number {
+  const coeffRaw = Deno.env.get("OCR_FONT_SIZE_COEFF");
+  const coeff = Math.max(
+    0.2,
+    Math.min(1.2, coeffRaw !== undefined ? Number(coeffRaw) || 0.78 : 0.78),
+  );
+  const minRaw = Deno.env.get("OCR_FONT_SIZE_MIN_PX");
+  const maxRaw = Deno.env.get("OCR_FONT_SIZE_MAX_PX");
+  const minPx = Math.max(1, Number(minRaw) || 8);
+  const maxPx = Math.max(minPx, Number(maxRaw) || 96);
+  const px = Math.round(Math.max(0, lineHeightPx) * coeff);
+  return Math.max(minPx, Math.min(maxPx, px));
+}
+
+function addFontSizesToBlocks(
+  blocks: OcrBlockNorm[],
+  imageSize: ImageSizePx | null,
+): Array<OcrBlockNorm & { fontSizePx?: number }> {
+  if (!imageSize) return blocks;
+  return blocks.map((b) => {
+    if (b.kind !== "text") return b;
+    const lineHeightPx = (b.height / 100) * imageSize.height;
+    return {
+      ...b,
+      fontSizePx: estimateFontSizePxFromLineHeightPx(lineHeightPx),
+    };
+  });
+}
+
 /** Padding + clamp; đồng bộ logic với `src/lib/bboxRefine.ts`. */
 function refineBBoxGeometry(
   x: number,
@@ -949,16 +1101,21 @@ serve(async (req) => {
             };
           }
           const out = await runSingleOcr(task.image, task.mimeType);
+          const normalized = normalizeImageAndMimeType(task.image, task.mimeType);
+          const imageSize = getImageSizePx(normalized.image, normalized.mimeType);
           return {
             index: task.index,
             name: task.name,
             ok: true,
             markdown: out.markdown || out.full_text || "",
             full_text: out.full_text || out.markdown || "",
-            blocks: Array.isArray(out.blocks) ? out.blocks : [],
+            blocks: Array.isArray(out.blocks)
+              ? addFontSizesToBlocks(out.blocks as OcrBlockNorm[], imageSize)
+              : [],
             ...(typeof out.warning === "string"
               ? { warning: out.warning }
               : {}),
+            ...(imageSize ? { imageSize } : {}),
           };
         } catch (err) {
           return {
@@ -1003,15 +1160,20 @@ serve(async (req) => {
 
     const singleImage = body?.image ?? body?.imageBase64;
     const payload = await runSingleOcr(singleImage, body?.mimeType);
+    const normalized = normalizeImageAndMimeType(singleImage, body?.mimeType);
+    const imageSize = getImageSizePx(normalized.image, normalized.mimeType);
     // blocks are already normalized inside parseOcrPayload — do NOT call normalizeOcrBlocks again
     return new Response(
       JSON.stringify({
         markdown: payload.markdown || payload.full_text || "",
         full_text: payload.full_text || "",
-        blocks: Array.isArray(payload.blocks) ? payload.blocks : [],
+        blocks: Array.isArray(payload.blocks)
+          ? addFontSizesToBlocks(payload.blocks as OcrBlockNorm[], imageSize)
+          : [],
         ...(typeof payload.warning === "string"
           ? { warning: payload.warning }
           : {}),
+        ...(imageSize ? { imageSize } : {}),
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

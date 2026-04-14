@@ -77,6 +77,7 @@ function toEditorHtml(markdownText: string): string {
       ADD_ATTR: [
         "data-bbox-id",
         "data-bbox-kind",
+        "data-font-size-px",
         "class",
         "src",
         "alt",

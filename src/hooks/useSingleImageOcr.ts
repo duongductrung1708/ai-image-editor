@@ -17,6 +17,7 @@ import {
   type OcrApiResponse,
 } from "@/types/ocr";
 import { looksLikeMarkdownTable } from "@/lib/ocrMarkdownHeuristics";
+import { applyOcrFontSizesToHtml } from "@/lib/ocrApplyFontSizes";
 
 const OCR_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-vietnamese`;
 
@@ -168,6 +169,12 @@ export function useSingleImageOcr() {
             URL.revokeObjectURL(objectUrl);
           }
         }
+      }
+
+      // If OCR already returned HTML (<p style=...>...), inject per-line font-size
+      // so TipTap can render closer to the original image.
+      if (mdOut.trim().startsWith("<") && normalizedBlocks.length > 0) {
+        mdOut = applyOcrFontSizesToHtml(mdOut, normalizedBlocks);
       }
 
       setMarkdownText(mdOut);

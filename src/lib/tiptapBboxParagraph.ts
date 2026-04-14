@@ -27,6 +27,14 @@ export const BboxParagraph = Paragraph.extend({
             ? { "data-bbox-kind": attrs.dataBboxKind as string }
             : {},
       },
+      dataFontSizePx: {
+        default: null as string | null,
+        parseHTML: (el) => el.getAttribute("data-font-size-px"),
+        renderHTML: (attrs) =>
+          attrs.dataFontSizePx
+            ? { "data-font-size-px": attrs.dataFontSizePx as string }
+            : {},
+      },
       textIndent: {
         default: null as string | null,
         parseHTML: (el) => {
@@ -43,8 +51,10 @@ export const BboxParagraph = Paragraph.extend({
     const styles: string[] = [];
     const ta = node.attrs.textAlign as string | null | undefined;
     const ti = node.attrs.textIndent as string | null | undefined;
+    const fs = node.attrs.dataFontSizePx as string | null | undefined;
     if (ta) styles.push(`text-align: ${ta}`);
     if (ti) styles.push(`text-indent: ${ti}`);
+    if (fs) styles.push(`font-size: ${fs}px`);
     const merged: Record<string, unknown> = { ...HTMLAttributes };
     if (styles.length) {
       merged.style = styles.join("; ");
