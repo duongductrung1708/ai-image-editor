@@ -49,10 +49,12 @@ export function useOcrQuota() {
   const freeDailyRemaining = Math.max(0, FREE_DAILY_LIMIT - todayCount);
   const ready = Boolean(user) && !loading && !creditsLoading;
 
-  // User can OCR if: has credits OR has free daily remaining
-  const canUse = Boolean(user) && (hasCredits || freeDailyRemaining > 0);
+  // User can OCR if: has free daily remaining OR has credits
+  const canUse = Boolean(user) && (freeDailyRemaining > 0 || hasCredits);
 
-  // Remaining: credits + free daily remaining
+  // Will this next OCR use a credit (i.e. free daily exhausted)?
+  const willUseCredit = freeDailyRemaining <= 0 && hasCredits;
+
   const remaining = !user
     ? 0
     : creditsLoading
@@ -61,6 +63,28 @@ export function useOcrQuota() {
         ? balance + freeDailyRemaining
         : freeDailyRemaining;
 
+  /** Call after a successful OCR to deduct 1 credit if free daily is exhausted */
+  const deductCredit = useCallback(async () => {
+    if (!user) return;
+    // Re-check: if today's count >= free limit, deduct a credit
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    // We just did an OCR so todayCount is stale; check if free was already used
+    if (todayCount >= FREE_DAILY_LIMIT && balance > 0) {
+      await supabase.rpc("deduct_credit" as never, { p_user_id: user.id } as never).then(() => {
+        // Also log the transaction
+        supabase.from("credit_transactions").insert({
+          user_id: user.id,
+          amount: -1,
+          type: "usage" as const,
+          description: "OCR usage",
+        });
+      });
+      refreshCredits();
+    }
+  }, [user, todayCount, balance, refreshCredits]);
+
   return {
     todayCount,
     remaining,
@@ -68,9 +92,11 @@ export function useOcrQuota() {
     freeDailyRemaining,
     limit: hasCredits ? Infinity : FREE_DAILY_LIMIT,
     canUse,
+    willUseCredit,
     isUnlimited: false,
     loading: loading || creditsLoading,
     ready,
     refresh: () => { fetchCount(); refreshCredits(); },
+    deductCredit,
   };
 }
