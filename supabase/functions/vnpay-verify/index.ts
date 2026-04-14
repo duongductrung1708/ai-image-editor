@@ -25,6 +25,20 @@ function hmacSha512(key: string, data: string): Promise<string> {
     );
 }
 
+function encodeVnp(value: unknown): string {
+  // VNPay canonical query encoding: encodeURIComponent + space as '+'
+  return encodeURIComponent(String(value))
+    .replace(/%20/g, "+")
+    .replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function buildVnpQuery(params: Record<string, unknown>): string {
+  return Object.keys(params)
+    .sort()
+    .map((k) => `${encodeVnp(k)}=${encodeVnp(params[k])}`)
+    .join("&");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders, status: 204 });
@@ -78,8 +92,7 @@ serve(async (req) => {
     delete verifyParams.vnp_SecureHash;
     delete verifyParams.vnp_SecureHashType;
 
-    const sorted = Object.keys(verifyParams).sort();
-    const signData = sorted.map((k) => `${k}=${verifyParams[k]}`).join("&");
+    const signData = buildVnpQuery(verifyParams as Record<string, unknown>);
     const computedHash = await hmacSha512(hashSecret, signData);
 
     if (computedHash.toLowerCase() !== receivedHash) {

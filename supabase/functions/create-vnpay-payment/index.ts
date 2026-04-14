@@ -33,6 +33,20 @@ function vnpayDate(d: Date): string {
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
+function encodeVnp(value: unknown): string {
+  // VNPay canonical query encoding: encodeURIComponent + space as '+'
+  return encodeURIComponent(String(value))
+    .replace(/%20/g, "+")
+    .replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function buildVnpQuery(params: Record<string, string>): string {
+  return Object.keys(params)
+    .sort()
+    .map((k) => `${encodeVnp(k)}=${encodeVnp(params[k])}`)
+    .join("&");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders, status: 204 });
@@ -119,12 +133,10 @@ serve(async (req) => {
       vnp_CreateDate: createDate,
     };
 
-    // Sort and build query
-    const sorted = Object.keys(params).sort();
-    const signData = sorted.map((k) => `${k}=${params[k]}`).join("&");
+    const signData = buildVnpQuery(params);
     const secureHash = await hmacSha512(hashSecret, signData);
 
-    const paymentUrl = `${vnpayUrl}?${signData}&vnp_SecureHash=${secureHash}`;
+    const paymentUrl = `${vnpayUrl}?${signData}&vnp_SecureHash=${encodeVnp(secureHash)}`;
 
     // Store pending transaction in credit_transactions using service role
     const srvClient = createClient(supabaseUrl, serviceRoleKey, {

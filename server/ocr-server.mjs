@@ -148,7 +148,7 @@ function httpRequestJson(
 }
 
 const PORT = Number(getEnv("OCR_API_PORT", "8787"));
-const OCR_PROVIDER = getEnv("OCR_PROVIDER", "ollama"); // "ollama" | "gemini" | "lmstudio" | "openai" | "paddle"
+const OCR_PROVIDER = getEnv("OCR_PROVIDER", "ollama"); // "ollama" | "gemini" | "lmstudio" | "openai"
 const OCR_MODE = getEnv("OCR_MODE", "both"); // "both" | "json" | "markdown"
 const OCR_MARKDOWN_STYLE = getEnv("OCR_MARKDOWN_STYLE", "raw"); // "raw" | "clean"
 const OCR_BATCH_CONCURRENCY = Math.max(
@@ -212,23 +212,6 @@ const OPENAI_TIMEOUT_MS = Number(
   getEnv("OPENAI_TIMEOUT_MS", String(60 * 1000)),
 );
 
-// PaddleOCR: gọi paddle_worker.py trong repo (venv Python của bạn)
-const PADDLE_PYTHON = getEnv(
-  "PADDLE_PYTHON",
-  process.platform === "win32" ? "python" : "python3",
-);
-const PADDLE_WORKER_SCRIPT =
-  getEnv("PADDLE_WORKER_SCRIPT") ||
-  path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "paddleOCR",
-    "paddle_worker.py",
-  );
-const PADDLE_TIMEOUT_MS = Number(
-  getEnv("PADDLE_TIMEOUT_MS", String(15 * 60 * 1000)),
-);
-
 // Environment Checks
 if (OCR_PROVIDER === "ollama" && !OLLAMA_MODEL) {
   console.error("Missing env OLLAMA_MODEL");
@@ -244,12 +227,6 @@ if (OCR_PROVIDER === "lmstudio" && !LMSTUDIO_MODEL) {
 }
 if (OCR_PROVIDER === "openai" && !OPENAI_API_KEY) {
   console.error("Missing env OPENAI_API_KEY");
-  process.exit(1);
-}
-if (OCR_PROVIDER === "paddle" && !fs.existsSync(PADDLE_WORKER_SCRIPT)) {
-  console.error(
-    `[ocr-server] Paddle: không thấy worker: ${PADDLE_WORKER_SCRIPT}`,
-  );
   process.exit(1);
 }
 
@@ -574,9 +551,6 @@ function parseQwenBoundingBoxes(text) {
 }
 
 function buildOcrPrompt() {
-  if (OCR_PROVIDER === "paddle") {
-    return "";
-  }
   return ["gemini", "lmstudio", "openai"].includes(OCR_PROVIDER)
     ? buildPrompt(
         OCR_MODE === "json" || OCR_MODE === "both" ? "both" : "markdown",
@@ -584,123 +558,7 @@ function buildOcrPrompt() {
     : buildPrompt(OCR_MODE);
 }
 
-function parsePaddleStdoutJson(stdout) {
-  const lines = stdout.split(/\r?\n/);
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim();
-    if (!line.startsWith("{")) continue;
-    try {
-      return JSON.parse(line);
-    } catch {
-      continue;
-    }
-  }
-  throw new Error(
-    "Không đọc được JSON từ paddle_worker (stdout không hợp lệ hoặc rỗng)",
-  );
-}
-
-async function runPaddleOcr(imageBase64, mimeType) {
-  let tmpDir;
-  try {
-    const ext =
-      mimeType.includes("jpeg") || mimeType.includes("jpg")
-        ? ".jpg"
-        : mimeType.includes("webp")
-          ? ".webp"
-          : mimeType.includes("gif")
-            ? ".gif"
-            : ".png";
-    tmpDir = await fsp.mkdtemp(path.join(tmpdir(), "ocr-paddle-"));
-    const imgPath = path.join(tmpDir, `input${ext}`);
-    await fsp.writeFile(imgPath, Buffer.from(imageBase64, "base64"));
-
-    const stdout = await new Promise((resolve, reject) => {
-      const proc = spawn(PADDLE_PYTHON, [PADDLE_WORKER_SCRIPT, imgPath], {
-        env: {
-          ...process.env,
-          PYTHONUNBUFFERED: "1",
-          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: getEnv(
-            "PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK",
-            "True",
-          ),
-        },
-        windowsHide: true,
-      });
-      let out = "";
-      let err = "";
-      proc.stdout.setEncoding("utf8");
-      proc.stderr.setEncoding("utf8");
-      proc.stdout.on("data", (c) => {
-        out += c;
-      });
-      proc.stderr.on("data", (c) => {
-        err += c;
-      });
-      const timer = setTimeout(() => {
-        proc.kill("SIGTERM");
-        reject(
-          new Error(`Paddle worker timeout sau ${PADDLE_TIMEOUT_MS / 1000}s`),
-        );
-      }, PADDLE_TIMEOUT_MS);
-      proc.on("error", (e) => {
-        clearTimeout(timer);
-        reject(e);
-      });
-      proc.on("close", (code) => {
-        clearTimeout(timer);
-        if (!out.trim()) {
-          reject(
-            new Error(
-              err.trim() ||
-                `paddle_worker thoát mã ${code}; kiểm tra PADDLE_PYTHON và paddle_worker.py`,
-            ),
-          );
-          return;
-        }
-        resolve(out);
-      });
-    });
-
-    const parsed = parsePaddleStdoutJson(stdout);
-    if (parsed.error) {
-      return { ok: false, status: 502, error: String(parsed.error) };
-    }
-    const fullText =
-      typeof parsed.full_text === "string" ? parsed.full_text : "";
-    const tables = Array.isArray(parsed.tables_html) ? parsed.tables_html : [];
-    let markdown = fullText;
-    for (const html of tables) {
-      if (html && String(html).trim()) markdown += `\n\n${html}\n\n`;
-    }
-    markdown = postProcessMarkdown(markdown);
-    const content = JSON.stringify({
-      markdown,
-      full_text: fullText,
-      blocks: [],
-    });
-    return { ok: true, content };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, status: 502, error: msg };
-  } finally {
-    if (tmpDir) {
-      try {
-        await fsp.rm(tmpDir, { recursive: true, force: true });
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-}
-
 async function fetchProviderRawContent(imageBase64, mimeType, prompt) {
-  if (OCR_PROVIDER === "paddle") {
-    const paddle = await runPaddleOcr(imageBase64, mimeType);
-    if (!paddle.ok) return paddle;
-    return { ok: true, content: paddle.content };
-  }
-
   if (OCR_PROVIDER === "gemini") {
     const shouldUseGeminiJson =
       OCR_MODE === "json" || OCR_MODE === "both" || GEMINI_BBOX_JSON;
@@ -1112,9 +970,5 @@ server.listen(PORT, "127.0.0.1", () => {
   else if (OCR_PROVIDER === "openai")
     console.log(
       `[ocr-server] openai base: ${OPENAI_BASE_URL} | model: ${OPENAI_MODEL}`,
-    );
-  else if (OCR_PROVIDER === "paddle")
-    console.log(
-      `[ocr-server] paddle: python=${PADDLE_PYTHON} | worker=${PADDLE_WORKER_SCRIPT} | timeout=${PADDLE_TIMEOUT_MS}ms`,
     );
 });
