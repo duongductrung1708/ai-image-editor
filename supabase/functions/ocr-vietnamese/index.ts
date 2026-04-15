@@ -779,9 +779,29 @@ function buildPrompt(
     "JSON must match fields exactly:\n" +
     "- markdown: string\n" +
     "- full_text: string\n" +
-    '- blocks: array of { id?: string, text, x, y, width, height, kind: "text"|"figure"|"stamp"|"signature", font_family?: "sans"|"serif"|"mono"|"unknown" }.\n' +
-    '  - font_family: classify the text style family (best-effort). Use "sans" for sans-serif (Arial-like), "serif" for Times-like, "mono" for monospace, "unknown" if unsure.\n' +
-    "MARKDOWN: GFM tables for grids; apply VISUAL FORMATTING (bold/italic/u, alignment, text-indent) when visible; do not flatten tables into plain paragraphs.\n" +
+    '- blocks: array of objects with these fields:\n' +
+    '  - text: string (the text content)\n' +
+    '  - x: number (top-left X in % of image width, 0-100)\n' +
+    '  - y: number (top-left Y in % of image height, 0-100)\n' +
+    '  - width: number (width in % of image width)\n' +
+    '  - height: number (height in % of image height)\n' +
+    '  - kind: "text"|"figure"|"stamp"|"signature"\n' +
+    '  - font_family: "sans"|"serif"|"mono"|"unknown" (best-effort classification)\n' +
+    '  - font_size: number (estimated font size in pixels, based on the text height in the image)\n' +
+    '  - color: string (CSS color value like "#000000", "#ff0000", "red", "blue" — only if text color is NOT black/default)\n' +
+    '  - bold: boolean (true if text appears bold/heavy)\n' +
+    '  - italic: boolean (true if text appears italic/slanted)\n' +
+    '  - underline: boolean (true if text has underline decoration)\n' +
+    '  - text_align: "left"|"center"|"right"|"justify" (only if NOT left-aligned)\n' +
+    "\nSTYLE DETECTION RULES (critical — make the editor match the image):\n" +
+    "- FONT SIZE: Estimate the font size in pixels by measuring the text height relative to the image. Larger headings should have larger font_size values.\n" +
+    "- COLOR: If text is colored (red, blue, green, etc.), set the color field. Black text should omit color or set it to null.\n" +
+    "- BOLD: Set bold=true for visually heavy/bold text. Headings are typically bold.\n" +
+    "- ITALIC: Set italic=true for slanted/italic text.\n" +
+    "- UNDERLINE: Set underline=true for underlined text.\n" +
+    "- TEXT ALIGN: Set text_align for centered, right-aligned, or justified text.\n" +
+    "- FONT FAMILY: 'sans' for Arial/Helvetica-like, 'serif' for Times-like, 'mono' for Courier-like.\n" +
+    "\nMARKDOWN: GFM tables for grids; apply VISUAL FORMATTING (bold/italic/u, alignment, text-indent, colors) when visible; do not flatten tables into plain paragraphs.\n" +
     "BOUNDING BOX RULES (critical):\n" +
     "- Coordinate system: origin TOP-LEFT of the image. x increases to the RIGHT, y increases DOWNWARD.\n" +
     "- x and y are the TOP-LEFT corner of the rectangle, in PERCENT of image width and height (0–100, decimals allowed).\n" +
