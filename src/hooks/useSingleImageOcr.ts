@@ -22,6 +22,7 @@ import {
   applyOcrFontSizesToHtml,
 } from "@/lib/ocrApplyFontSizes";
 import { formatTopSplitHeaderAsTable } from "@/lib/ocrSplitHeaderTable";
+import { applyStyledHeaderFromBlocks } from "@/lib/ocrRenderStyledHeaderFromBlocks";
 
 const OCR_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-vietnamese`;
 
@@ -180,6 +181,13 @@ export function useSingleImageOcr() {
             URL.revokeObjectURL(objectUrl);
           }
         }
+      }
+
+      if (normalizedBlocks.length > 0) {
+        mdOut = applyStyledHeaderFromBlocks({
+          markdown: mdOut,
+          blocks: normalizedBlocks,
+        });
       }
 
       mdOut = formatTopSplitHeaderAsTable(mdOut);

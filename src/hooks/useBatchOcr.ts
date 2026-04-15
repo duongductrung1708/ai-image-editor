@@ -9,6 +9,7 @@ import { normalizeBoundingBoxes } from "@/lib/bboxBlockHtml";
 import { fileToBase64 } from "@/lib/fileToBase64";
 import { svgPlaceholderPage } from "@/lib/batchWorkspaceUtils";
 import { formatTopSplitHeaderAsTable } from "@/lib/ocrSplitHeaderTable";
+import { applyStyledHeaderFromBlocks } from "@/lib/ocrRenderStyledHeaderFromBlocks";
 import {
   isOcrBatchSuccessResponse,
   isOcrErrorResponse,
@@ -203,7 +204,16 @@ export function useBatchOcr(files: File[]) {
 
       const normalizedPages = data.pages.map((p, idx) => ({
         ...p,
-        markdown: formatTopSplitHeaderAsTable(normalizeOcrText(p.markdown)),
+        markdown: (() => {
+          const blocks = Array.isArray(p.blocks)
+            ? normalizeBoundingBoxes(p.blocks as BoundingBox[], idx)
+            : [];
+          const base = normalizeOcrText(p.markdown);
+          const styled = blocks.length > 0
+            ? applyStyledHeaderFromBlocks({ markdown: base, blocks })
+            : base;
+          return formatTopSplitHeaderAsTable(styled);
+        })(),
         full_text: normalizeOcrText(p.full_text),
         blocks: Array.isArray(p.blocks)
           ? normalizeBoundingBoxes(p.blocks as BoundingBox[], idx)
@@ -211,7 +221,12 @@ export function useBatchOcr(files: File[]) {
       }));
       const normalizedData = {
         ...data,
-        markdown: formatTopSplitHeaderAsTable(normalizeOcrText(data.markdown)),
+        markdown: formatTopSplitHeaderAsTable(
+          applyStyledHeaderFromBlocks({
+            markdown: normalizeOcrText(data.markdown),
+            blocks: normalizedPages.flatMap((p) => p.blocks ?? []),
+          }),
+        ),
         full_text: normalizeOcrText(data.full_text),
         pages: normalizedPages,
       };
