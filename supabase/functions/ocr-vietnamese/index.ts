@@ -265,6 +265,12 @@ type OcrBlockNorm = {
   height: number;
   kind: OcrBlockKind;
   fontFamily?: OcrFontFamily;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontSize?: number;
+  textAlign?: "left" | "center" | "right" | "justify";
 };
 
 type ImageSizePx = { width: number; height: number };
