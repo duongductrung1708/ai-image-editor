@@ -736,8 +736,8 @@ function buildPrompt(
       "JSON must match fields exactly:\n" +
       "- markdown: string — properly formatted text with paragraphs joined (NOT one line per bbox). Use \\n\\n between paragraphs.\n" +
       "- full_text: string — same content as markdown\n" +
-      '- blocks: array of { text: string, box_2d: [number, number, number, number], kind: "text"|"figure"|"stamp"|"signature", font_family?: "sans"|"serif"|"mono"|"unknown" }.\n' +
-      '  - font_family: classify the text style family (best-effort). Use "sans" for sans-serif (Arial-like), "serif" for Times-like, "mono" for monospace, "unknown" if unsure.\n' +
+      '- blocks: array of { text, box_2d: [y_min, x_min, y_max, x_max], kind, font_family?, font_size?, color?, bold?, italic?, underline?, text_align? }.\n' +
+      '  - font_family: "sans"|"serif"|"mono"|"unknown". font_size: estimated px. color: CSS color if NOT black. bold/italic/underline: boolean. text_align: "center"|"right"|"justify" if not left.\n' +
       "\nIMPORTANT — 'markdown' field formatting:\n" +
       "- The 'markdown' field must contain well-formatted text where sentences in the same paragraph are joined on the same line.\n" +
       "- Do NOT split the markdown at every bounding box. Merge consecutive text blocks that belong to the same paragraph.\n" +
