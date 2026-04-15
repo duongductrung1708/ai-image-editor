@@ -7,6 +7,7 @@ import type { OcrHistoryEntry } from "@/components/ocr/OcrHistoryMobileDrawer";
 import type { BoundingBox } from "@/components/ImageViewer";
 import { normalizeBoundingBoxes } from "@/lib/bboxBlockHtml";
 import { fileToBase64 } from "@/lib/fileToBase64";
+import { downscaleImageFile } from "@/lib/downscaleImageFile";
 import { svgPlaceholderPage } from "@/lib/batchWorkspaceUtils";
 import { formatTopSplitHeaderAsTable } from "@/lib/ocrSplitHeaderTable";
 import { applyStyledHeaderFromBlocks } from "@/lib/ocrRenderStyledHeaderFromBlocks";
@@ -188,11 +189,20 @@ export function useBatchOcr(files: File[]) {
       }
 
       const images = await Promise.all(
-        files.map(async (f) => ({
-          name: f.name,
-          mimeType: f.type || "image/png",
-          imageBase64: await fileToBase64(f),
-        })),
+        files.map(async (f) => {
+          const maxSidePx = Number(import.meta.env.VITE_OCR_MAX_SIDE_PX) || 2000;
+          const quality = Number(import.meta.env.VITE_OCR_IMAGE_QUALITY) || 0.82;
+          const scaled = await downscaleImageFile(f, {
+            maxSidePx,
+            quality,
+            outputMimeType: "image/jpeg",
+          });
+          return {
+            name: f.name,
+            mimeType: scaled.type || f.type || "image/png",
+            imageBase64: await fileToBase64(scaled),
+          };
+        }),
       );
 
       const r = await fetch(`${OCR_FUNCTION_URL}/batch`, {

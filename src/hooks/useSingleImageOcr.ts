@@ -11,6 +11,7 @@ import {
 import { isVisualBboxKind } from "@/lib/bboxKinds";
 import { cropBoundingBoxToDataUrl } from "@/lib/cropBoundingBox";
 import { fileToBase64 } from "@/lib/fileToBase64";
+import { downscaleImageFile } from "@/lib/downscaleImageFile";
 import {
   isOcrErrorResponse,
   isOcrSuccessResponse,
@@ -83,11 +84,21 @@ export function useSingleImageOcr() {
     setJsonText("");
     setBoundingBoxes([]);
     let ok = false;
+    let historyRowId: string | null = null;
 
     try {
       setLoadingLabel("Đang mã hóa ảnh...");
       setLoadingProgress(25);
-      const base64 = await fileToBase64(file);
+      // Downscale để giảm khả năng Supabase worker bị RESOURCE_LIMIT (546)
+      const maxSidePx = Number(import.meta.env.VITE_OCR_MAX_SIDE_PX) || 2000;
+      const quality = Number(import.meta.env.VITE_OCR_IMAGE_QUALITY) || 0.82;
+      const liteFirst = String(import.meta.env.VITE_OCR_LITE_FIRST || "1") === "1";
+      const scaled = await downscaleImageFile(file, {
+        maxSidePx,
+        quality,
+        outputMimeType: "image/jpeg",
+      });
+      const base64 = await fileToBase64(scaled);
 
       if (ocrCancelRequestedRef.current || signal.aborted) {
         return false;
@@ -99,13 +110,18 @@ export function useSingleImageOcr() {
       if (!accessToken) {
         throw new Error("Missing Authorization header");
       }
+      const bodyBase = {
+        imageBase64: base64,
+        mimeType: scaled.type || file.type,
+      };
+
       const r = await fetch(OCR_FUNCTION_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
+        body: JSON.stringify(liteFirst ? { ...bodyBase, lite: true } : bodyBase),
         signal,
       });
 
@@ -217,18 +233,89 @@ export function useSingleImageOcr() {
 
       setBoundingBoxes(normalizedBlocks);
 
+      // Step 2 (background): fetch blocks with json-mode only when lite-first is enabled
+      if (liteFirst) {
+        try {
+          const r2 = await fetch(OCR_FUNCTION_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ ...bodyBase, blocksOnly: true }),
+            signal,
+          });
+          const data2: OcrApiResponse | null = await r2.json().catch(() => null);
+          if (r2.ok && data2 && isOcrSuccessResponse(data2)) {
+            const rawBlocks2: BoundingBox[] = Array.isArray(data2.blocks)
+              ? (data2.blocks as unknown as BoundingBox[])
+              : [];
+            const normalizedBlocks2 = normalizeBoundingBoxes(rawBlocks2);
+            setBoundingBoxes(normalizedBlocks2);
+
+            // Re-apply styled header if blocks are available
+            let mdOut2 = mdOut;
+            if (normalizedBlocks2.length > 0) {
+              mdOut2 = applyStyledHeaderFromBlocks({
+                markdown: mdOut2,
+                blocks: normalizedBlocks2,
+              });
+            }
+            mdOut2 = formatTopSplitHeaderAsTable(mdOut2);
+            if (mdOut2.trim().startsWith("<") && normalizedBlocks2.length > 0) {
+              mdOut2 = applyOcrFontSizesToHtml(mdOut2, normalizedBlocks2);
+              mdOut2 = applyOcrFontFamiliesToHtml(mdOut2, normalizedBlocks2);
+            }
+            if (mdOut2 !== mdOut) setMarkdownText(mdOut2);
+
+            setJsonText(
+              JSON.stringify(
+                {
+                  markdown: mdOut2,
+                  full_text: fullText,
+                  blocks: normalizedBlocks2,
+                  ...(typeof data2.warning === "string"
+                    ? { warning: data2.warning }
+                    : null),
+                },
+                null,
+                2,
+              ),
+            );
+
+            // Update history row with final blocks/text (best-effort)
+            if (historyRowId && !ocrCancelRequestedRef.current && !signal.aborted) {
+              await supabase
+                .from("ocr_history")
+                .update({
+                  extracted_text: mdOut2,
+                  bounding_boxes: normalizedBlocks2 as unknown as Json,
+                })
+                .eq("id", historyRowId);
+            }
+          }
+        } catch {
+          // ignore background blocks failure
+        }
+      }
+
       setLoadingLabel("Đang lưu lịch sử...");
       setLoadingProgress(92);
       if (ocrCancelRequestedRef.current || signal.aborted) {
         return false;
       }
-      await supabase.from("ocr_history").insert({
-        image_name: file.name,
-        extracted_text: mdOut,
-        bounding_boxes: normalizedBlocks as unknown as Json,
-        image_data: `data:${file.type};base64,${base64}`,
-        user_id: user?.id,
-      });
+      const { data: inserted, error: insertErr } = await supabase
+        .from("ocr_history")
+        .insert({
+          image_name: file.name,
+          extracted_text: mdOut,
+          bounding_boxes: normalizedBlocks as unknown as Json,
+          image_data: `data:${scaled.type || file.type};base64,${base64}`,
+          user_id: user?.id,
+        })
+        .select("id")
+        .single();
+      if (!insertErr && inserted?.id) historyRowId = String(inserted.id);
       setHistoryRefresh((p) => p + 1);
       setLoadingProgress(100);
       ok = true;

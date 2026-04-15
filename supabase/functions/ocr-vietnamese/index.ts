@@ -733,7 +733,14 @@ function buildPrompt(
     "- Do not invent bold/italic/underline if the scan does not show that styling.\n" +
     "\nTABLES (critical):\n" +
     "- If the image contains a table (rows/columns, grid lines, or aligned columns like STT | Họ tên | ...), output it as a GitHub-flavored Markdown pipe table: header row, | --- | --- | separator, then one row per line.\n" +
-    "- Do NOT merge tabular data into a single paragraph; keep table structure in markdown.\n";
+    "- Do NOT merge tabular data into a single paragraph; keep table structure in markdown.\n" +
+    "\nCOLUMNS / TWO-SIDED HEADERS (critical for official documents):\n" +
+    "- Many Vietnamese official documents have a two-sided header: LEFT (issuing org) and RIGHT (national header) aligned on the SAME horizontal band.\n" +
+    "- Do NOT concatenate left + right into a single sentence/paragraph.\n" +
+    "- Represent two-sided headers as a 2-column structure:\n" +
+    "  - Prefer an HTML table with 1 row and 2 cells (left cell = left header, right cell = right header), OR a GFM table if you can keep alignment.\n" +
+    "  - Keep each side's lines within its own cell (use <br/> for line breaks inside the cell).\n" +
+    "- If the page clearly has two columns for BODY text, keep columns separated; do not weave lines from different columns together.\n";
 
   const baseClean =
     baseRaw +
@@ -988,16 +995,22 @@ type OcrConfig = {
   markdownStyle: string;
 };
 
-function getOcrConfig(): OcrConfig {
+function getOcrConfig(overrideMode?: "markdown" | "json" | "both"): OcrConfig {
   const provider = (Deno.env.get("OCR_PROVIDER") || "gemini").toLowerCase();
   if (provider !== "gemini" && provider !== "openai") {
     throw new Error(
       `OCR_PROVIDER must be 'gemini' or 'openai', got: ${provider}`,
     );
   }
+  const modeRaw = (Deno.env.get("OCR_MODE") || "both").toLowerCase();
+  const mode =
+    overrideMode ??
+    (modeRaw === "markdown" || modeRaw === "json" || modeRaw === "both"
+      ? modeRaw
+      : "both");
   return {
     provider,
-    mode: (Deno.env.get("OCR_MODE") || "both").toLowerCase(),
+    mode,
     markdownStyle: (Deno.env.get("OCR_MARKDOWN_STYLE") || "raw").toLowerCase(),
   };
 }
@@ -1015,8 +1028,10 @@ async function fetchProviderContent(
   const timeoutMsRaw =
     (cfg.provider === "gemini"
       ? Deno.env.get("GEMINI_TIMEOUT_MS")
-      : Deno.env.get("OPENAI_TIMEOUT_MS")) || "60000";
-  const timeoutMs = Math.max(5_000, Math.floor(Number(timeoutMsRaw) || 60_000));
+      : Deno.env.get("OPENAI_TIMEOUT_MS")) ||
+    // Default: OpenAI calls can be slow; keep it shorter to avoid worker kill (546).
+    (cfg.provider === "openai" ? "60000" : "180000");
+  const timeoutMs = Math.max(5_000, Math.floor(Number(timeoutMsRaw) || 180_000));
 
   type HttpResult = { status: number; ok: boolean; text: string };
 
@@ -1161,6 +1176,7 @@ async function fetchProviderContent(
     }
   } else if (cfg.provider === "openai") {
     const model = Deno.env.get("OPENAI_MODEL") || "gpt-4o";
+    const fallbackModel = Deno.env.get("OPENAI_MODEL_FALLBACK") || "";
     const baseUrl = (
       Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1"
     ).replace(/\/+$/, "");
@@ -1169,42 +1185,60 @@ async function fetchProviderContent(
     if (!model) throw new Error("OPENAI_MODEL is not configured");
     if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
 
-    result = await fetchTextWithTimeout(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: prompt,
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Process the image exactly following the system instructions. Return only the requested output.",
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${normalized.mimeType};base64,${normalized.image}`,
+    const doOpenAi = async (chosenModel: string): Promise<HttpResult> => {
+      return await fetchTextWithTimeout(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: chosenModel,
+          messages: [
+            {
+              role: "system",
+              content: prompt,
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Process the image exactly following the system instructions. Return only the requested output.",
                 },
-              },
-            ],
-          },
-        ],
-        temperature: 0,
-        max_tokens: 4096,
-        ...(cfg.mode !== "markdown"
-          ? { response_format: { type: "json_object" } }
-          : {}),
-      }),
-    });
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:${normalized.mimeType};base64,${normalized.image}`,
+                  },
+                },
+              ],
+            },
+          ],
+          temperature: 0,
+          // Smaller token budget reduces time and memory pressure.
+          max_tokens: 2048,
+          ...(cfg.mode !== "markdown"
+            ? { response_format: { type: "json_object" } }
+            : {}),
+        }),
+      });
+    };
+
+    try {
+      result = await doOpenAi(model);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTimeout = msg.startsWith("PROVIDER_TIMEOUT_");
+      const canFallback =
+        isTimeout &&
+        typeof fallbackModel === "string" &&
+        fallbackModel.trim().length > 0 &&
+        fallbackModel.trim() !== model;
+      if (!canFallback) throw err;
+      console.warn(`[ocr-openai] timeout on ${model}; retrying fallback=${fallbackModel}`);
+      result = await doOpenAi(fallbackModel.trim());
+    }
   }
 
   if (!result.ok) {
@@ -1237,11 +1271,12 @@ async function fetchProviderContent(
 async function runSingleOcr(
   image: unknown,
   mimeType: unknown,
+  overrideMode?: "markdown" | "json" | "both",
 ): Promise<ParsedOcr> {
   const normalized = normalizeImageAndMimeType(image, mimeType);
   if (!normalized.image) throw new Error("imageBase64 is required");
 
-  const cfg = getOcrConfig();
+  const cfg = getOcrConfig(overrideMode);
   const prompt = buildOcrPrompt(cfg);
   const textOut = await fetchProviderContent(normalized, cfg, prompt);
   if (!textOut) throw new Error("OCR provider returned empty response");
@@ -1384,6 +1419,13 @@ serve(async (req) => {
 
     const url = new URL(req.url);
     const body = await req.json();
+    const lite = body?.lite === true;
+    const blocksOnly = body?.blocksOnly === true;
+    const overrideMode: "markdown" | "json" | "both" | undefined = lite
+      ? "markdown"
+      : blocksOnly
+      ? "json"
+      : undefined;
 
     const isBatchPath =
       url.pathname.endsWith("/ocr-vietnamese/batch") ||
@@ -1500,7 +1542,7 @@ serve(async (req) => {
           if (bytes > maxBytes) {
             throw new Error(`Image too large (${bytes} bytes > max ${maxBytes})`);
           }
-          const out = await runSingleOcr(task.image, task.mimeType);
+          const out = await runSingleOcr(task.image, task.mimeType, overrideMode);
           const imageSize = getImageSizePx(normalized.image, normalized.mimeType);
           return {
             index: task.index,
@@ -1604,7 +1646,7 @@ serve(async (req) => {
 
     let payload: ParsedOcr;
     try {
-      payload = await runSingleOcr(singleImage, body?.mimeType);
+      payload = await runSingleOcr(singleImage, body?.mimeType, overrideMode);
     } catch (err) {
       await refundCreditsBestEffort({
         userId: user.id,
@@ -1643,6 +1685,18 @@ serve(async (req) => {
         status: 413,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+    if (message.startsWith("PROVIDER_TIMEOUT_")) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "OCR provider timed out. Please try again with a smaller/cropped image.",
+        }),
+        {
+          status: 504,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
     const status = message.toLowerCase().includes("rate limit") ? 429 : 500;
     return new Response(
