@@ -414,9 +414,13 @@ function addFontSizesToBlocks(
   blocks: OcrBlockNorm[],
   imageSize: ImageSizePx | null,
 ): Array<OcrBlockNorm & { fontSizePx?: number }> {
-  if (!imageSize) return blocks;
   return blocks.map((b) => {
     if (b.kind !== "text") return b;
+    // Prefer model-provided fontSize, fall back to estimation from bbox height
+    if (b.fontSize && b.fontSize > 0) {
+      return { ...b, fontSizePx: b.fontSize };
+    }
+    if (!imageSize) return b;
     const lineHeightPx = (b.height / 100) * imageSize.height;
     return {
       ...b,
