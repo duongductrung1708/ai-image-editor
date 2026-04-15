@@ -21,6 +21,7 @@ import {
   applyOcrFontFamiliesToHtml,
   applyOcrFontSizesToHtml,
 } from "@/lib/ocrApplyFontSizes";
+import { formatTopSplitHeaderAsTable } from "@/lib/ocrSplitHeaderTable";
 
 const OCR_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-vietnamese`;
 
@@ -180,6 +181,8 @@ export function useSingleImageOcr() {
           }
         }
       }
+
+      mdOut = formatTopSplitHeaderAsTable(mdOut);
 
       // If OCR already returned HTML (<p style=...>...), inject per-line font-size
       // so TipTap can render closer to the original image.

@@ -998,20 +998,41 @@ async function fetchProviderContent(
       : Deno.env.get("OPENAI_TIMEOUT_MS")) || "60000";
   const timeoutMs = Math.max(5_000, Math.floor(Number(timeoutMsRaw) || 60_000));
 
-  const fetchWithTimeout = async (
+  type HttpResult = { status: number; ok: boolean; text: string };
+
+  const fetchTextWithTimeout = async (
     url: string,
     init: RequestInit,
-  ): Promise<Response> => {
+  ): Promise<HttpResult> => {
+    const start = Date.now();
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      return await fetch(url, { ...init, signal: controller.signal });
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      // Important: keep reading the body under the same timeout signal,
+      // otherwise the runtime may abort while parsing JSON (seen as TimeoutError).
+      const text = await res.text();
+      console.log(
+        `[ocr-fetch] ok provider=${cfg.provider} ms=${Date.now() - start} status=${res.status} bytes=${text.length}`,
+      );
+      return { status: res.status, ok: res.ok, text };
+    } catch (e) {
+      const ms = Date.now() - start;
+      const name = e instanceof Error ? e.name : "";
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(
+        `[ocr-fetch] fail provider=${cfg.provider} ms=${ms} timeoutMs=${timeoutMs} err=${name} ${msg}`,
+      );
+      if (name === "AbortError") {
+        throw new Error(`PROVIDER_TIMEOUT_${timeoutMs}`);
+      }
+      throw e;
     } finally {
       clearTimeout(id);
     }
   };
 
-  let response!: Response;
+  let result!: HttpResult;
   if (cfg.provider === "gemini") {
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const rawModel = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
@@ -1062,20 +1083,20 @@ async function fetchProviderContent(
       ],
     };
 
-    const doGeminiFetch = async (model: string): Promise<Response> => {
+    const doGeminiFetch = async (model: string): Promise<HttpResult> => {
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
-      return await fetchWithTimeout(geminiUrl, {
+      return await fetchTextWithTimeout(geminiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
     };
 
-    response = await doGeminiFetch(GEMINI_MODEL);
+    result = await doGeminiFetch(GEMINI_MODEL);
 
-    if (response.ok) {
+    if (result.ok) {
       // Handle special Gemini behavior: ok=true but empty due to finishReason=RECITATION.
-      const data = await response.json().catch(() => null);
+      const data = JSON.parse(result.text || "null");
       const text =
         data?.candidates?.[0]?.content?.parts?.find(
           (p: { text?: unknown }) => typeof p?.text === "string",
@@ -1128,7 +1149,7 @@ async function fetchProviderContent(
     if (!model) throw new Error("OPENAI_MODEL is not configured");
     if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
 
-    response = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
+    result = await fetchTextWithTimeout(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1166,25 +1187,25 @@ async function fetchProviderContent(
     });
   }
 
-  if (!response.ok) {
-    if (response.status === 429) {
+  if (!result.ok) {
+    if (result.status === 429) {
       throw new Error("Rate limit exceeded. Please try again later.");
     }
-    const t = await response.text();
-    console.error("OCR provider error:", response.status, t);
+    const t = result.text || "";
+    console.error("OCR provider error:", result.status, t);
     // Surface the actual provider error message for easier debugging
-    let detail = `OCR provider error: ${response.status}`;
+    let detail = `OCR provider error: ${result.status}`;
     try {
       const errJson = JSON.parse(t);
       const msg = errJson?.error?.message || errJson?.error || "";
-      if (msg) detail = `${cfg.provider} API ${response.status}: ${msg}`;
+      if (msg) detail = `${cfg.provider} API ${result.status}: ${msg}`;
     } catch {
       /* use generic */
     }
     throw new Error(detail);
   }
 
-  const data = await response.json();
+  const data = JSON.parse(result.text || "null");
   if (cfg.provider === "openai") {
     return typeof data?.choices?.[0]?.message?.content === "string"
       ? data.choices[0].message.content
@@ -1267,6 +1288,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
 
   try {
+    const t0 = Date.now();
     // Enforce allowlist in production.
     if (corsHeaders["Access-Control-Allow-Origin"] === "null") {
       return new Response(JSON.stringify({ error: "Origin not allowed" }), {
@@ -1311,6 +1333,7 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    console.log(`[ocr] authed user=${user.id} ms=${Date.now() - t0}`);
 
     const srvClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
@@ -1337,6 +1360,7 @@ serve(async (req) => {
       console.error("[rate-limit] enforce_rate_limit failed:", rlErr);
       // If rate limit fails, proceed (fail-open) to avoid breaking service due to DB transient issues.
     }
+    console.log(`[ocr] rate-limit ok ms=${Date.now() - t0}`);
 
     const url = new URL(req.url);
     const body = await req.json();
@@ -1418,6 +1442,7 @@ serve(async (req) => {
         }
         throw err;
       }
+      console.log(`[ocr] charged batch credits=${chargeAmount} ms=${Date.now() - t0}`);
 
       const pages = await runPool(tasks, concurrency, async (task) => {
         try {
@@ -1519,6 +1544,7 @@ serve(async (req) => {
       }
       throw err;
     }
+      console.log(`[ocr] charged single credits=${creditsPerImage} ms=${Date.now() - t0}`);
 
     let payload: ParsedOcr;
     try {
@@ -1532,6 +1558,7 @@ serve(async (req) => {
       });
       throw err;
     }
+      console.log(`[ocr] provider ok ms=${Date.now() - t0}`);
     const normalized = normalizeImageAndMimeType(singleImage, body?.mimeType);
     const imageSize = getImageSizePx(normalized.image, normalized.mimeType);
     // blocks are already normalized inside parseOcrPayload — do NOT call normalizeOcrBlocks again

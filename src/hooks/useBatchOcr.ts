@@ -8,6 +8,7 @@ import type { BoundingBox } from "@/components/ImageViewer";
 import { normalizeBoundingBoxes } from "@/lib/bboxBlockHtml";
 import { fileToBase64 } from "@/lib/fileToBase64";
 import { svgPlaceholderPage } from "@/lib/batchWorkspaceUtils";
+import { formatTopSplitHeaderAsTable } from "@/lib/ocrSplitHeaderTable";
 import {
   isOcrBatchSuccessResponse,
   isOcrErrorResponse,
@@ -202,7 +203,7 @@ export function useBatchOcr(files: File[]) {
 
       const normalizedPages = data.pages.map((p, idx) => ({
         ...p,
-        markdown: normalizeOcrText(p.markdown),
+        markdown: formatTopSplitHeaderAsTable(normalizeOcrText(p.markdown)),
         full_text: normalizeOcrText(p.full_text),
         blocks: Array.isArray(p.blocks)
           ? normalizeBoundingBoxes(p.blocks as BoundingBox[], idx)
@@ -210,7 +211,7 @@ export function useBatchOcr(files: File[]) {
       }));
       const normalizedData = {
         ...data,
-        markdown: normalizeOcrText(data.markdown),
+        markdown: formatTopSplitHeaderAsTable(normalizeOcrText(data.markdown)),
         full_text: normalizeOcrText(data.full_text),
         pages: normalizedPages,
       };
