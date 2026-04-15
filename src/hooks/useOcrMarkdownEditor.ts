@@ -43,80 +43,61 @@ function toEditorHtml(markdownText: string): string {
     ? trimmed.replace(/\\n/g, "\n")
     : trimmed;
 
-  if (normalized.startsWith("<")) {
-    // OCR/providers may return HTML like `<p>line1\nline2</p>`.
-    // HTML collapses newlines inside <p>, so convert '\n' -> '<br/>'.
-    const htmlWithBreaks = normalized.replace(/\r?\n/g, "<br/>");
-
-    // Some providers may put Markdown markers inside HTML paragraphs
-    // (e.g. `<p>**bold**</p>`). TipTap won't interpret `**` unless we
-    // convert it to real HTML tags first.
-    const htmlWithInlineMarkdown = htmlWithBreaks
-      .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*([\s\S]+?)\*/g, "<em>$1</em>")
-      .replace(/__([\s\S]+?)__/g, "<u>$1</u>");
-
-    // Support mixed HTML + markdown blocks like:
-    // `<p>...</p>\n\n### Heading`
-    // Since we are in the HTML branch, Markdown parser won't run, so we convert headings manually.
-    const htmlWithHeadings = htmlWithInlineMarkdown.replace(
-      /^\s*(#{1,6})\s+(.+?)\s*$/gm,
-      (_m, hashes: string, title: string) => {
-        const level = Math.min(6, Math.max(1, hashes.length));
-        return `<h${level}>${escapeHtml(title)}</h${level}>`;
-      },
-    );
-
-    // Support legacy HTML color tags too: `<font color="red">...</font>` -> `<span style="color:red">...</span>`
-    const htmlWithFontColors = htmlWithHeadings.replace(
-      /<font\s+color=["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/font>/gi,
-      (_m, color: string, inner: string) =>
-        `<span style="color:${color}">${inner}</span>`,
-    );
-
-    return DOMPurify.sanitize(htmlWithFontColors, {
-      ADD_ATTR: [
-        "data-bbox-id",
-        "data-bbox-kind",
-        "data-font-size-px",
-        "data-font-family",
-        "data-ocr-fontsize",
-        "class",
-        "src",
-        "alt",
-        "style",
-      ],
-      ADD_TAGS: [
-        "img",
-        "p",
-        "br",
-        "span",
-        "font",
-        "figure",
-        "strong",
-        "em",
-        "u",
-        "h1",
-        "h2",
-        "h3",
-        "h4",
-        "h5",
-        "h6",
-      ],
-    });
-  }
+  // NOTE: OCR output can be "mixed" HTML + Markdown (common when we inject styled headers).
+  // Always run the Markdown parser so headings like `### Tóm tắt` become <h3> instead of literal "###".
+  // Marked will keep raw HTML blocks as-is.
+  const withFontColors = normalized.replace(
+    /<font\s+color=["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/font>/gi,
+    (_m, color: string, inner: string) =>
+      `<span style="color:${color}">${inner}</span>`,
+  );
 
   try {
-    const html = marked.parse(normalized);
+    const html = marked.parse(withFontColors);
     if (typeof html === "string" && html.trim().length > 0) {
-      return html;
+      return DOMPurify.sanitize(html, {
+        ADD_ATTR: [
+          "data-bbox-id",
+          "data-bbox-kind",
+          "data-font-size-px",
+          "data-font-family",
+          "data-ocr-fontsize",
+          "class",
+          "src",
+          "alt",
+          "style",
+        ],
+        ADD_TAGS: [
+          "img",
+          "p",
+          "br",
+          "span",
+          "font",
+          "figure",
+          "strong",
+          "em",
+          "u",
+          "h1",
+          "h2",
+          "h3",
+          "h4",
+          "h5",
+          "h6",
+          "table",
+          "thead",
+          "tbody",
+          "tr",
+          "th",
+          "td",
+        ],
+      });
     }
   } catch {
     // Fallback below
   }
 
   // Guaranteed renderable fallback: keep text exactly as plain content.
-  return `<p>${escapeHtml(normalized).replace(/\n/g, "<br/>")}</p>`;
+  return `<p>${escapeHtml(withFontColors).replace(/\n/g, "<br/>")}</p>`;
 }
 
 /**

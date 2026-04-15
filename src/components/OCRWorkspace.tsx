@@ -18,6 +18,13 @@ import { useOcrQuota } from "@/hooks/useOcrQuota";
 import { useAuth } from "@/hooks/useAuth";
 import { enhanceFile } from "@/lib/imageProcessing";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { normalizeBoundingBoxes } from "@/lib/bboxBlockHtml";
+import { applyStyledHeaderFromBlocks } from "@/lib/ocrRenderStyledHeaderFromBlocks";
+import { formatTopSplitHeaderAsTable } from "@/lib/ocrSplitHeaderTable";
+import {
+  applyOcrFontFamiliesToHtml,
+  applyOcrFontSizesToHtml,
+} from "@/lib/ocrApplyFontSizes";
 
 interface OCRWorkspaceProps {
   imageFile: File;
@@ -359,14 +366,37 @@ const OCRWorkspace = ({
       const blocks: BoundingBox[] = Array.isArray(entry.bounding_boxes)
         ? (entry.bounding_boxes as unknown as BoundingBox[])
         : [];
-      setMarkdownText(entry.extracted_text);
-      setBoundingBoxes(blocks);
+      const normalizedBlocks = normalizeBoundingBoxes(blocks);
+      let mdOut = entry.extracted_text || "";
+
+      // If history already stores the final post-processed HTML/markdown, don't redo work.
+      const looksPostProcessed =
+        mdOut.includes("data-ocr-fontsize") ||
+        mdOut.includes("data-font-size-px") ||
+        mdOut.includes("data-font-family") ||
+        mdOut.trim().startsWith("<p");
+
+      if (!looksPostProcessed) {
+        if (normalizedBlocks.length > 0) {
+          mdOut = applyStyledHeaderFromBlocks({
+            markdown: mdOut,
+            blocks: normalizedBlocks,
+          });
+        }
+        mdOut = formatTopSplitHeaderAsTable(mdOut);
+        if (mdOut.trim().startsWith("<") && normalizedBlocks.length > 0) {
+          mdOut = applyOcrFontSizesToHtml(mdOut, normalizedBlocks);
+          mdOut = applyOcrFontFamiliesToHtml(mdOut, normalizedBlocks);
+        }
+      }
+      setMarkdownText(mdOut);
+      setBoundingBoxes(normalizedBlocks);
       setJsonText(
         JSON.stringify(
           {
-            markdown: entry.extracted_text,
+            markdown: mdOut,
             full_text: "",
-            blocks,
+            blocks: normalizedBlocks,
           },
           null,
           2,

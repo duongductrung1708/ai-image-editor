@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -54,6 +55,7 @@ function normalizeOcrText(value: string): string {
  */
 export function useSingleImageOcr() {
   const { user, session } = useAuth();
+  const qc = useQueryClient();
   const [markdownText, setMarkdownText] = useState("");
   const [jsonText, setJsonText] = useState("");
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>([]);
@@ -233,6 +235,32 @@ export function useSingleImageOcr() {
 
       setBoundingBoxes(normalizedBlocks);
 
+      // Save history ASAP (step 1 output). Step 2 will update this row.
+      setLoadingLabel("Đang lưu lịch sử...");
+      setLoadingProgress(92);
+      if (ocrCancelRequestedRef.current || signal.aborted) {
+        return false;
+      }
+      // IMPORTANT: Don't rely on `.select("id")` after insert because RLS may block SELECT
+      // even when INSERT is allowed. Generate id client-side so step 2 can always UPDATE.
+      const newHistoryId =
+        typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : null;
+      const { error: insertErr } = await supabase.from("ocr_history").insert({
+        ...(newHistoryId ? { id: newHistoryId } : null),
+        image_name: file.name,
+        extracted_text: mdOut,
+        bounding_boxes: normalizedBlocks as unknown as Json,
+        image_data: `data:${scaled.type || file.type};base64,${base64}`,
+        user_id: user?.id,
+      });
+      if (insertErr) {
+        console.error("[ocr-history] insert failed:", insertErr);
+        toast.error("Không thể lưu lịch sử OCR.");
+      } else if (newHistoryId) {
+        historyRowId = newHistoryId;
+      }
+      await qc.invalidateQueries({ queryKey: ["ocr_history"] });
+
       // Step 2 (background): fetch blocks with json-mode only when lite-first is enabled
       if (liteFirst) {
         try {
@@ -285,37 +313,23 @@ export function useSingleImageOcr() {
 
             // Update history row with final blocks/text (best-effort)
             if (historyRowId && !ocrCancelRequestedRef.current && !signal.aborted) {
-              await supabase
+              const { error: updateErr } = await supabase
                 .from("ocr_history")
                 .update({
                   extracted_text: mdOut2,
                   bounding_boxes: normalizedBlocks2 as unknown as Json,
                 })
                 .eq("id", historyRowId);
+              if (updateErr) {
+                console.error("[ocr-history] update failed:", updateErr);
+              }
+              await qc.invalidateQueries({ queryKey: ["ocr_history"] });
             }
           }
         } catch {
           // ignore background blocks failure
         }
       }
-
-      setLoadingLabel("Đang lưu lịch sử...");
-      setLoadingProgress(92);
-      if (ocrCancelRequestedRef.current || signal.aborted) {
-        return false;
-      }
-      const { data: inserted, error: insertErr } = await supabase
-        .from("ocr_history")
-        .insert({
-          image_name: file.name,
-          extracted_text: mdOut,
-          bounding_boxes: normalizedBlocks as unknown as Json,
-          image_data: `data:${scaled.type || file.type};base64,${base64}`,
-          user_id: user?.id,
-        })
-        .select("id")
-        .single();
-      if (!insertErr && inserted?.id) historyRowId = String(inserted.id);
       setHistoryRefresh((p) => p + 1);
       setLoadingProgress(100);
       ok = true;
@@ -342,7 +356,7 @@ export function useSingleImageOcr() {
     }
 
     return ok;
-  }, [session?.access_token, user]);
+  }, [qc, session?.access_token, user]);
 
   const cancelProcessing = useCallback(() => {
     ocrCancelRequestedRef.current = true;

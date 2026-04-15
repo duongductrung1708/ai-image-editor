@@ -1030,7 +1030,7 @@ async function fetchProviderContent(
       ? Deno.env.get("GEMINI_TIMEOUT_MS")
       : Deno.env.get("OPENAI_TIMEOUT_MS")) ||
     // Default: OpenAI calls can be slow; keep it shorter to avoid worker kill (546).
-    (cfg.provider === "openai" ? "60000" : "180000");
+    (cfg.provider === "openai" ? "180000" : "180000");
   const timeoutMs = Math.max(5_000, Math.floor(Number(timeoutMsRaw) || 180_000));
 
   type HttpResult = { status: number; ok: boolean; text: string };
