@@ -496,6 +496,7 @@ const ProfilePage = () => {
                       </Table>
                     </div>
                   )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
