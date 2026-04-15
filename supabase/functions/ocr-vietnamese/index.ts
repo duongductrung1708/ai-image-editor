@@ -659,6 +659,12 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
     height: row.height,
     kind: row.kind,
     ...(row.fontFamily ? { fontFamily: row.fontFamily } : {}),
+    ...(row.color ? { color: row.color } : {}),
+    ...(row.bold ? { bold: row.bold } : {}),
+    ...(row.italic ? { italic: row.italic } : {}),
+    ...(row.underline ? { underline: row.underline } : {}),
+    ...(row.fontSize ? { fontSize: row.fontSize } : {}),
+    ...(row.textAlign ? { textAlign: row.textAlign } : {}),
   }));
 }
 
