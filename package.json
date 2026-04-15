@@ -1,7 +1,8 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "monkey-ocr",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "MonkeyOCR - OCR tiếng Việt nhanh và chính xác.",
   "type": "module",
   "scripts": {
     "dev:ocr": "node server/ocr-server.mjs",

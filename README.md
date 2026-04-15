@@ -1,4 +1,4 @@
-# AI Image Editor (OCR)
+# MonkeyOCR
 
 ## Setup project (Supabase + frontend)
 
@@ -76,6 +76,8 @@ Set secrets on Supabase for the deployed function (or local env when using `supa
 - `OCR_PROVIDER` — `gemini` | `openai` (default in code: `gemini`)
 - `OCR_MODE` — `both` | `json` | `markdown` (default: `both`)
 - `OCR_MARKDOWN_STYLE` — `raw` | `clean`
+- `OCR_MAX_IMAGE_BYTES` — max size per image (decoded bytes) (default: `4000000`)
+- `OCR_BATCH_MAX_TOTAL_BYTES` — max total bytes per batch request (default: `20000000`)
 - `OCR_CREDITS_PER_IMAGE` — credits charged per image (default: `1`)
 - `ALLOWED_ORIGINS` — comma-separated CORS allowlist for production (empty = allow all, dev-only)
 - `REQUIRE_ALLOWED_ORIGINS` — set `1` to block requests when allowlist is empty (recommended in prod)

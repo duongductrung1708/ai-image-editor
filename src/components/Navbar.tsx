@@ -49,6 +49,24 @@ const Navbar = () => {
           >
             Bắt đầu OCR
           </Link>
+          <Link
+            to="/privacy"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Privacy
+          </Link>
+          <Link
+            to="/terms"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Terms
+          </Link>
+          <Link
+            to="/support"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Hỗ trợ
+          </Link>
 
           {user ? (
             <DropdownMenu>
@@ -185,6 +203,24 @@ const Navbar = () => {
                 </nav>
 
                 <Separator className="my-3" />
+
+                <nav className="mb-3 flex flex-col gap-0.5" aria-label="Pháp lý">
+                  <SheetClose asChild>
+                    <Link to="/privacy" className={cn(mobileNavLinkClass)}>
+                      Privacy Policy
+                    </Link>
+                  </SheetClose>
+                  <SheetClose asChild>
+                    <Link to="/terms" className={cn(mobileNavLinkClass)}>
+                      Terms of Service
+                    </Link>
+                  </SheetClose>
+                  <SheetClose asChild>
+                    <Link to="/support" className={cn(mobileNavLinkClass)}>
+                      Hỗ trợ & FAQ
+                    </Link>
+                  </SheetClose>
+                </nav>
 
                 {user ? (
                   <div className="flex flex-col gap-1.5">

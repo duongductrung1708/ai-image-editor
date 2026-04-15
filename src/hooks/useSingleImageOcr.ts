@@ -240,7 +240,11 @@ export function useSingleImageOcr() {
         return false;
       }
       console.error("OCR error:", err);
-      toast.error("Lỗi khi xử lý hình ảnh. Vui lòng thử lại.");
+      const msg =
+        err instanceof Error && err.message
+          ? err.message
+          : "Lỗi khi xử lý hình ảnh. Vui lòng thử lại.";
+      toast.error(msg);
     } finally {
       if (ocrAbortRef.current === controller) {
         ocrAbortRef.current = null;

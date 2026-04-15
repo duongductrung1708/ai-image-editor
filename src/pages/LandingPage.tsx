@@ -281,10 +281,21 @@ const LandingPage = () => {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8 text-center">
-        <p className="text-xs text-muted-foreground">
-          MonkeyOCR — Công cụ OCR tiếng Việt bằng AI
-        </p>
+      <footer className="border-t border-border bg-card/40">
+        <div className="mx-auto flex max-w-5xl flex-col gap-3 px-6 py-10 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <p>© {new Date().getFullYear()} MonkeyOCR</p>
+          <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 sm:justify-end">
+            <Link to="/support" className="hover:text-foreground transition-colors">
+              Hỗ trợ & FAQ
+            </Link>
+            <Link to="/privacy" className="hover:text-foreground transition-colors">
+              Privacy
+            </Link>
+            <Link to="/terms" className="hover:text-foreground transition-colors">
+              Terms
+            </Link>
+          </div>
+        </div>
       </footer>
     </div>
   );

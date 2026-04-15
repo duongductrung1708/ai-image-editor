@@ -169,6 +169,19 @@ export function useBatchOcr(files: File[]) {
     setHistoryPageImageDatas([]);
 
     try {
+      // Client-side limits (fast feedback)
+      const maxImages = 30;
+      if (files.length > maxImages) {
+        throw new Error(`Quá nhiều ảnh (tối đa ${maxImages}).`);
+      }
+      const maxBytesPerImage = 4_000_000;
+      const tooLarge = files.find((f) => f.size > maxBytesPerImage);
+      if (tooLarge) {
+        throw new Error(
+          `Ảnh quá lớn: "${tooLarge.name}" (${tooLarge.size} bytes). Tối đa ${maxBytesPerImage} bytes/ảnh.`,
+        );
+      }
+
       const accessToken = session?.access_token;
       if (!accessToken) {
         throw new Error("Missing Authorization header");

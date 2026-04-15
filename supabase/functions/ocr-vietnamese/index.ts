@@ -58,6 +58,26 @@ function getCreditsPerImage(): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
+function estimateBase64Bytes(b64: string): number {
+  const s = (b64 || "").trim();
+  if (!s) return 0;
+  const len = s.length;
+  const pad = s.endsWith("==") ? 2 : s.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((len * 3) / 4) - pad);
+}
+
+function getMaxImageBytes(): number {
+  const raw = Deno.env.get("OCR_MAX_IMAGE_BYTES") || "4000000";
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : 4_000_000;
+}
+
+function getBatchMaxTotalBytes(): number {
+  const raw = Deno.env.get("OCR_BATCH_MAX_TOTAL_BYTES") || "20000000";
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : 20_000_000;
+}
+
 function getClientIp(req: Request): string {
   // Supabase / edge proxies commonly set x-forwarded-for. Use first IP.
   const xff = req.headers.get("x-forwarded-for") || "";
@@ -1424,6 +1444,23 @@ serve(async (req) => {
         }),
       );
 
+      const maxTotal = getBatchMaxTotalBytes();
+      const totalBytes = tasks.reduce((sum, t) => {
+        const normalized = normalizeImageAndMimeType(t.image, t.mimeType);
+        return sum + estimateBase64Bytes(normalized.image);
+      }, 0);
+      if (totalBytes > maxTotal) {
+        return new Response(
+          JSON.stringify({
+            error: `Batch too large (total ${totalBytes} bytes > max ${maxTotal}). Please upload fewer/smaller images.`,
+          }),
+          {
+            status: 413,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
       const creditsPerImage = getCreditsPerImage();
       const chargeAmount = tasks.length * creditsPerImage;
       try {
@@ -1457,8 +1494,13 @@ serve(async (req) => {
               error: "Missing imageBase64",
             };
           }
-          const out = await runSingleOcr(task.image, task.mimeType);
           const normalized = normalizeImageAndMimeType(task.image, task.mimeType);
+          const bytes = estimateBase64Bytes(normalized.image);
+          const maxBytes = getMaxImageBytes();
+          if (bytes > maxBytes) {
+            throw new Error(`Image too large (${bytes} bytes > max ${maxBytes})`);
+          }
+          const out = await runSingleOcr(task.image, task.mimeType);
           const imageSize = getImageSizePx(normalized.image, normalized.mimeType);
           return {
             index: task.index,
@@ -1527,6 +1569,20 @@ serve(async (req) => {
     }
 
     const singleImage = body?.image ?? body?.imageBase64;
+    const normalizedSingle = normalizeImageAndMimeType(singleImage, body?.mimeType);
+    const bytes = estimateBase64Bytes(normalizedSingle.image);
+    const maxBytes = getMaxImageBytes();
+    if (bytes > maxBytes) {
+      return new Response(
+        JSON.stringify({
+          error: `Image too large (${bytes} bytes > max ${maxBytes}). Please compress/crop the image.`,
+        }),
+        {
+          status: 413,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
     const creditsPerImage = getCreditsPerImage();
     try {
       await chargeCreditsOrThrow({
