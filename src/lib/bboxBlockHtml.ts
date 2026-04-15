@@ -64,12 +64,22 @@ export function buildOcrHtmlFromBlocks(
     const fontSizeAttr =
       typeof b.fontSizePx === "number" && b.fontSizePx > 0
         ? ` data-font-size-px="${escapeHtml(String(Math.round(b.fontSizePx)))}"`
+        : typeof b.fontSize === "number" && b.fontSize > 0
+        ? ` data-font-size-px="${escapeHtml(String(Math.round(b.fontSize)))}"`
         : "";
     const alt = visualBboxAlt(kind) || "Hình";
 
+    // Build inline styles
+    const styles: string[] = [];
+    if (b.fontSize && b.fontSize > 0) styles.push(`font-size: ${Math.round(b.fontSize)}px`);
+    if (b.fontSizePx && b.fontSizePx > 0 && !b.fontSize) styles.push(`font-size: ${Math.round(b.fontSizePx)}px`);
+    if (b.color) styles.push(`color: ${b.color}`);
+    if (b.textAlign && b.textAlign !== "left") styles.push(`text-align: ${b.textAlign}`);
+    const styleAttr = styles.length > 0 ? ` style="${escapeHtml(styles.join("; "))}"` : "";
+
     if (isVisualBboxKind(kind) && crop) {
       parts.push(
-        `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"${fontSizeAttr}><img src="${escapeHtml(crop)}" alt="${escapeHtml(alt)}" class="max-w-full rounded-md border border-border" /></p>`,
+        `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"${fontSizeAttr}${styleAttr}><img src="${escapeHtml(crop)}" alt="${escapeHtml(alt)}" class="max-w-full rounded-md border border-border" /></p>`,
       );
       continue;
     }
@@ -77,14 +87,25 @@ export function buildOcrHtmlFromBlocks(
     const t = (b.text ?? "").trim();
     if (isVisualBboxKind(kind) && !crop) {
       parts.push(
-        `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"${fontSizeAttr}><span class="text-muted-foreground text-sm">(Không tải được ảnh vùng)</span></p>`,
+        `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"${fontSizeAttr}${styleAttr}><span class="text-muted-foreground text-sm">(Không tải được ảnh vùng)</span></p>`,
       );
       continue;
     }
 
-    const inner = t ? escapeHtml(t).replace(/\n/g, "<br/>") : "<br/>";
+    let inner = t ? escapeHtml(t).replace(/\n/g, "<br/>") : "<br/>";
+    
+    // Apply inline formatting
+    if (b.bold) inner = `<strong>${inner}</strong>`;
+    if (b.italic) inner = `<em>${inner}</em>`;
+    if (b.underline) inner = `<u>${inner}</u>`;
+    
+    // Wrap in color span if needed
+    if (b.color) {
+      inner = `<span style="color: ${escapeHtml(b.color)}">${inner}</span>`;
+    }
+
     parts.push(
-      `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"${fontSizeAttr}>${inner}</p>`,
+      `<p data-bbox-id="${escapeHtml(id)}" data-bbox-kind="${escapeHtml(kindAttr)}"${fontSizeAttr}${styleAttr}>${inner}</p>`,
     );
   }
 
