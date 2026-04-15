@@ -80,7 +80,7 @@ function getRateLimitOcrPerWindow(): number {
 async function chargeCreditsOrThrow(opts: {
   userId: string;
   amount: number;
-  srvClient: ReturnType<typeof createClient>;
+  srvClient: any;
 }): Promise<number> {
   const { userId, amount, srvClient } = opts;
   if (amount <= 0) return 0;
@@ -105,7 +105,7 @@ async function chargeCreditsOrThrow(opts: {
 async function refundCreditsBestEffort(opts: {
   userId: string;
   amount: number;
-  srvClient: ReturnType<typeof createClient>;
+  srvClient: any;
   reason: string;
 }) {
   const { userId, amount, srvClient, reason } = opts;
@@ -265,6 +265,12 @@ type OcrBlockNorm = {
   height: number;
   kind: OcrBlockKind;
   fontFamily?: OcrFontFamily;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontSize?: number;
+  textAlign?: "left" | "center" | "right" | "justify";
 };
 
 type ImageSizePx = { width: number; height: number };
@@ -408,9 +414,13 @@ function addFontSizesToBlocks(
   blocks: OcrBlockNorm[],
   imageSize: ImageSizePx | null,
 ): Array<OcrBlockNorm & { fontSizePx?: number }> {
-  if (!imageSize) return blocks;
   return blocks.map((b) => {
     if (b.kind !== "text") return b;
+    // Prefer model-provided fontSize, fall back to estimation from bbox height
+    if (b.fontSize && b.fontSize > 0) {
+      return { ...b, fontSizePx: b.fontSize };
+    }
+    if (!imageSize) return b;
     const lineHeightPx = (b.height / 100) * imageSize.height;
     return {
       ...b,
@@ -483,6 +493,12 @@ type OcrBlockRow = {
   height: number;
   kind: OcrBlockKind;
   fontFamily?: OcrFontFamily;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontSize?: number;
+  textAlign?: "left" | "center" | "right" | "justify";
   origId: string | null;
 };
 
@@ -499,8 +515,6 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
     let width = Number(b.width) || 0;
     let height = Number(b.height) || 0;
 
-    // Some models (incl. Qwen-style prompts) may output coordinates in 0..1000.
-    // Our UI expects 0..100 (%). If it looks like 0..1000, convert.
     const maxCoord = Math.max(x, y, width, height);
     if (maxCoord > 100 && maxCoord <= 1000) {
       x /= 10;
@@ -509,7 +523,6 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
       height /= 10;
     }
 
-    // HACK CHO GEMINI: Nếu nó trả về mảng box_2d gốc [ymin, xmin, ymax, xmax] hệ 1000
     if (Array.isArray(b.box_2d) && b.box_2d.length === 4) {
       const ymin = Number(b.box_2d[0]) / 10;
       const xmin = Number(b.box_2d[1]) / 10;
@@ -525,11 +538,30 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
     const kind = parseOcrBlockKind(b.kind, text);
     const fontFamily = parseOcrFontFamily(b.font_family ?? b.fontFamily);
     const origId = typeof b.id === "string" && b.id.trim() ? b.id.trim() : null;
+    
+    // Parse style attributes
+    const color = typeof b.color === "string" && b.color.trim() ? b.color.trim() : undefined;
+    const bold = b.bold === true || b.bold === "true";
+    const italic = b.italic === true || b.italic === "true";
+    const underline = b.underline === true || b.underline === "true";
+    const fontSize = typeof b.font_size === "number" && b.font_size > 0 ? Math.round(b.font_size) : 
+                     typeof b.font_size_px === "number" && b.font_size_px > 0 ? Math.round(b.font_size_px) :
+                     typeof b.fontSize === "number" && b.fontSize > 0 ? Math.round(b.fontSize) : undefined;
+    const rawAlign = typeof b.text_align === "string" ? b.text_align.toLowerCase().trim() : 
+                     typeof b.textAlign === "string" ? b.textAlign.toLowerCase().trim() : "";
+    const textAlign = (rawAlign === "center" || rawAlign === "right" || rawAlign === "justify") ? rawAlign as "center" | "right" | "justify" : undefined;
+
     return {
       text,
       ...refined,
       kind,
       ...(fontFamily !== "unknown" ? { fontFamily } : {}),
+      ...(color ? { color } : {}),
+      ...(bold ? { bold } : {}),
+      ...(italic ? { italic } : {}),
+      ...(underline ? { underline } : {}),
+      ...(fontSize ? { fontSize } : {}),
+      ...(textAlign ? { textAlign } : {}),
       origId,
     };
   });
@@ -631,6 +663,12 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
     height: row.height,
     kind: row.kind,
     ...(row.fontFamily ? { fontFamily: row.fontFamily } : {}),
+    ...(row.color ? { color: row.color } : {}),
+    ...(row.bold ? { bold: row.bold } : {}),
+    ...(row.italic ? { italic: row.italic } : {}),
+    ...(row.underline ? { underline: row.underline } : {}),
+    ...(row.fontSize ? { fontSize: row.fontSize } : {}),
+    ...(row.textAlign ? { textAlign: row.textAlign } : {}),
   }));
 }
 
@@ -702,8 +740,8 @@ function buildPrompt(
       "JSON must match fields exactly:\n" +
       "- markdown: string — properly formatted text with paragraphs joined (NOT one line per bbox). Use \\n\\n between paragraphs.\n" +
       "- full_text: string — same content as markdown\n" +
-      '- blocks: array of { text: string, box_2d: [number, number, number, number], kind: "text"|"figure"|"stamp"|"signature", font_family?: "sans"|"serif"|"mono"|"unknown" }.\n' +
-      '  - font_family: classify the text style family (best-effort). Use "sans" for sans-serif (Arial-like), "serif" for Times-like, "mono" for monospace, "unknown" if unsure.\n' +
+      '- blocks: array of { text, box_2d: [y_min, x_min, y_max, x_max], kind, font_family?, font_size?, color?, bold?, italic?, underline?, text_align? }.\n' +
+      '  - font_family: "sans"|"serif"|"mono"|"unknown". font_size: estimated px. color: CSS color if NOT black. bold/italic/underline: boolean. text_align: "center"|"right"|"justify" if not left.\n' +
       "\nIMPORTANT — 'markdown' field formatting:\n" +
       "- The 'markdown' field must contain well-formatted text where sentences in the same paragraph are joined on the same line.\n" +
       "- Do NOT split the markdown at every bounding box. Merge consecutive text blocks that belong to the same paragraph.\n" +
@@ -745,9 +783,29 @@ function buildPrompt(
     "JSON must match fields exactly:\n" +
     "- markdown: string\n" +
     "- full_text: string\n" +
-    '- blocks: array of { id?: string, text, x, y, width, height, kind: "text"|"figure"|"stamp"|"signature", font_family?: "sans"|"serif"|"mono"|"unknown" }.\n' +
-    '  - font_family: classify the text style family (best-effort). Use "sans" for sans-serif (Arial-like), "serif" for Times-like, "mono" for monospace, "unknown" if unsure.\n' +
-    "MARKDOWN: GFM tables for grids; apply VISUAL FORMATTING (bold/italic/u, alignment, text-indent) when visible; do not flatten tables into plain paragraphs.\n" +
+    '- blocks: array of objects with these fields:\n' +
+    '  - text: string (the text content)\n' +
+    '  - x: number (top-left X in % of image width, 0-100)\n' +
+    '  - y: number (top-left Y in % of image height, 0-100)\n' +
+    '  - width: number (width in % of image width)\n' +
+    '  - height: number (height in % of image height)\n' +
+    '  - kind: "text"|"figure"|"stamp"|"signature"\n' +
+    '  - font_family: "sans"|"serif"|"mono"|"unknown" (best-effort classification)\n' +
+    '  - font_size: number (estimated font size in pixels, based on the text height in the image)\n' +
+    '  - color: string (CSS color value like "#000000", "#ff0000", "red", "blue" — only if text color is NOT black/default)\n' +
+    '  - bold: boolean (true if text appears bold/heavy)\n' +
+    '  - italic: boolean (true if text appears italic/slanted)\n' +
+    '  - underline: boolean (true if text has underline decoration)\n' +
+    '  - text_align: "left"|"center"|"right"|"justify" (only if NOT left-aligned)\n' +
+    "\nSTYLE DETECTION RULES (critical — make the editor match the image):\n" +
+    "- FONT SIZE: Estimate the font size in pixels by measuring the text height relative to the image. Larger headings should have larger font_size values.\n" +
+    "- COLOR: If text is colored (red, blue, green, etc.), set the color field. Black text should omit color or set it to null.\n" +
+    "- BOLD: Set bold=true for visually heavy/bold text. Headings are typically bold.\n" +
+    "- ITALIC: Set italic=true for slanted/italic text.\n" +
+    "- UNDERLINE: Set underline=true for underlined text.\n" +
+    "- TEXT ALIGN: Set text_align for centered, right-aligned, or justified text.\n" +
+    "- FONT FAMILY: 'sans' for Arial/Helvetica-like, 'serif' for Times-like, 'mono' for Courier-like.\n" +
+    "\nMARKDOWN: GFM tables for grids; apply VISUAL FORMATTING (bold/italic/u, alignment, text-indent, colors) when visible; do not flatten tables into plain paragraphs.\n" +
     "BOUNDING BOX RULES (critical):\n" +
     "- Coordinate system: origin TOP-LEFT of the image. x increases to the RIGHT, y increases DOWNWARD.\n" +
     "- x and y are the TOP-LEFT corner of the rectangle, in PERCENT of image width and height (0–100, decimals allowed).\n" +

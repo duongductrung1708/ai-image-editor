@@ -210,7 +210,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      charge_credits: {
+        Args: { p_amount: number; p_reason?: string; p_user_id: string }
+        Returns: number
+      }
       deduct_credit: { Args: { p_user_id: string }; Returns: undefined }
+      enforce_rate_limit: {
+        Args: {
+          p_ip: string
+          p_max: number
+          p_scope: string
+          p_user_id: string
+          p_window_seconds: number
+        }
+        Returns: undefined
+      }
+      refund_credits: {
+        Args: { p_amount: number; p_reason?: string; p_user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
