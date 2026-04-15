@@ -445,6 +445,57 @@ const ProfilePage = () => {
                     </div>
                   ))}
                 </div>
+
+                {/* Transaction history */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                    <History className="h-4 w-4" />
+                    Lịch sử giao dịch
+                  </h3>
+                  {txLoading ? (
+                    <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang tải...
+                    </div>
+                  ) : transactions.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-muted-foreground">Chưa có giao dịch nào.</p>
+                  ) : (
+                    <div className="max-h-[300px] overflow-y-auto rounded-md border border-border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs">Thời gian</TableHead>
+                            <TableHead className="text-xs">Loại</TableHead>
+                            <TableHead className="text-xs">Mô tả</TableHead>
+                            <TableHead className="text-xs text-right">Số lượng</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {transactions.map((tx) => (
+                            <TableRow key={tx.id}>
+                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                {new Date(tx.created_at).toLocaleString("vi-VN")}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                  tx.type === "topup" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                  : tx.type === "refund" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                  : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                                }`}>
+                                  {tx.type === "topup" ? "Nạp" : tx.type === "refund" ? "Hoàn" : "Sử dụng"}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                                {tx.description || tx.vnpay_txn_ref || "—"}
+                              </TableCell>
+                              <TableCell className={`text-xs text-right font-medium ${tx.amount > 0 ? "text-green-600 dark:text-green-400" : "text-orange-600 dark:text-orange-400"}`}>
+                                {tx.amount > 0 ? "+" : ""}{tx.amount}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
               </CardContent>
             </Card>
           </TabsContent>
