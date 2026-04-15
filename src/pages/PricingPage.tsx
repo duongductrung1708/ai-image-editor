@@ -36,10 +36,10 @@ const PricingPage = () => {
       .mutateAsync(vnpayParams)
       .then((data) => {
         if (data?.success) {
-          toast.success(`Nạp thành công ${data.credits} credits!`);
+          toast.success(`Nạp thành công ${(data as any).credits} credits!`);
           refreshCredits();
         } else {
-          toast.error(data?.message || "Thanh toán không thành công.");
+          toast.error((data as any)?.message || "Thanh toán không thành công.");
         }
       })
       .catch(() => toast.error("Không thể xác minh thanh toán."))
