@@ -100,10 +100,31 @@ const ProfilePage = () => {
     created_at: string;
   }
 
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const { balance, loading: creditsLoading, refresh: refreshCredits } = useCredits();
+  const { balance, loading: creditsLoading } = useCredits();
   const createVnpayPayment = useCreateVnpayPayment();
+
+  // Transaction history
+  const [transactions, setTransactions] = useState<
+    { id: string; amount: number; type: string; description: string | null; created_at: string; vnpay_txn_ref: string | null }[]
+  >([]);
+  const [txLoading, setTxLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setTxLoading(true);
+    supabase
+      .from("credit_transactions")
+      .select("id, amount, type, description, created_at, vnpay_txn_ref")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        setTransactions(data ?? []);
+        setTxLoading(false);
+      });
+  }, [user]);
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
