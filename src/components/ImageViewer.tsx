@@ -2,20 +2,21 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { mergeBoxRectsPercent } from "@/lib/bboxTextMatch";
 
 export interface BoundingBox {
-  /** Cố định theo vùng OCR (vd. bbox-0, p1-bbox-2). */
   id?: string;
-  /** Văn bản hoặc rỗng nếu vùng là hình/biểu đồ. */
   text: string;
   x: number;
   y: number;
   width: number;
   height: number;
-  /** `figure`: ảnh/biểu đồ; `stamp`: con dấu; `signature`: chữ ký tay. */
   kind?: "text" | "figure" | "stamp" | "signature";
-  /** Cỡ chữ (px) ước lượng từ bbox + kích thước ảnh nguồn. */
   fontSizePx?: number;
-  /** Nhóm font (best-effort): sans/serif/mono/unknown */
   fontFamily?: "sans" | "serif" | "mono" | "unknown";
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontSize?: number;
+  textAlign?: "left" | "center" | "right" | "justify";
 }
 
 interface ImageViewerProps {
