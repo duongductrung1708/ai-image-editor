@@ -489,6 +489,12 @@ type OcrBlockRow = {
   height: number;
   kind: OcrBlockKind;
   fontFamily?: OcrFontFamily;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontSize?: number;
+  textAlign?: "left" | "center" | "right" | "justify";
   origId: string | null;
 };
 
@@ -505,8 +511,6 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
     let width = Number(b.width) || 0;
     let height = Number(b.height) || 0;
 
-    // Some models (incl. Qwen-style prompts) may output coordinates in 0..1000.
-    // Our UI expects 0..100 (%). If it looks like 0..1000, convert.
     const maxCoord = Math.max(x, y, width, height);
     if (maxCoord > 100 && maxCoord <= 1000) {
       x /= 10;
@@ -515,7 +519,6 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
       height /= 10;
     }
 
-    // HACK CHO GEMINI: Nếu nó trả về mảng box_2d gốc [ymin, xmin, ymax, xmax] hệ 1000
     if (Array.isArray(b.box_2d) && b.box_2d.length === 4) {
       const ymin = Number(b.box_2d[0]) / 10;
       const xmin = Number(b.box_2d[1]) / 10;
@@ -531,11 +534,30 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
     const kind = parseOcrBlockKind(b.kind, text);
     const fontFamily = parseOcrFontFamily(b.font_family ?? b.fontFamily);
     const origId = typeof b.id === "string" && b.id.trim() ? b.id.trim() : null;
+    
+    // Parse style attributes
+    const color = typeof b.color === "string" && b.color.trim() ? b.color.trim() : undefined;
+    const bold = b.bold === true || b.bold === "true";
+    const italic = b.italic === true || b.italic === "true";
+    const underline = b.underline === true || b.underline === "true";
+    const fontSize = typeof b.font_size === "number" && b.font_size > 0 ? Math.round(b.font_size) : 
+                     typeof b.font_size_px === "number" && b.font_size_px > 0 ? Math.round(b.font_size_px) :
+                     typeof b.fontSize === "number" && b.fontSize > 0 ? Math.round(b.fontSize) : undefined;
+    const rawAlign = typeof b.text_align === "string" ? b.text_align.toLowerCase().trim() : 
+                     typeof b.textAlign === "string" ? b.textAlign.toLowerCase().trim() : "";
+    const textAlign = (rawAlign === "center" || rawAlign === "right" || rawAlign === "justify") ? rawAlign as "center" | "right" | "justify" : undefined;
+
     return {
       text,
       ...refined,
       kind,
       ...(fontFamily !== "unknown" ? { fontFamily } : {}),
+      ...(color ? { color } : {}),
+      ...(bold ? { bold } : {}),
+      ...(italic ? { italic } : {}),
+      ...(underline ? { underline } : {}),
+      ...(fontSize ? { fontSize } : {}),
+      ...(textAlign ? { textAlign } : {}),
       origId,
     };
   });
