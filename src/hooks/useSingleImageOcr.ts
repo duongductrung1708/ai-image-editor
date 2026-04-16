@@ -27,6 +27,12 @@ import { formatTopSplitHeaderAsTable } from "@/lib/ocrSplitHeaderTable";
 import { applyStyledHeaderFromBlocks } from "@/lib/ocrRenderStyledHeaderFromBlocks";
 
 const OCR_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-vietnamese`;
+const OCR_JOB_START_URL = `${OCR_FUNCTION_URL}/job/start`;
+const OCR_JOB_GET_URL = `${OCR_FUNCTION_URL}/job`;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 function normalizeOcrText(value: string): string {
   if (!value) return "";
@@ -95,6 +101,8 @@ export function useSingleImageOcr() {
       const maxSidePx = Number(import.meta.env.VITE_OCR_MAX_SIDE_PX) || 2000;
       const quality = Number(import.meta.env.VITE_OCR_IMAGE_QUALITY) || 0.82;
       const liteFirst = String(import.meta.env.VITE_OCR_LITE_FIRST || "1") === "1";
+      const useAsyncJobs =
+        String(import.meta.env.VITE_OCR_ASYNC_JOBS || "0") === "1";
       const scaled = await downscaleImageFile(file, {
         maxSidePx,
         quality,
@@ -117,41 +125,123 @@ export function useSingleImageOcr() {
         mimeType: scaled.type || file.type,
       };
 
-      const r = await fetch(OCR_FUNCTION_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(liteFirst ? { ...bodyBase, lite: true } : bodyBase),
-        signal,
-      });
+      let data: OcrApiResponse | null = null;
+      let blocksFromProvider: BoundingBox[] = [];
+      let md = "";
+      let fullText = "";
 
-      setLoadingLabel("Đang phân tích kết quả...");
-      setLoadingProgress(80);
-      const data: OcrApiResponse | null = await r.json().catch(() => null);
-      if (!r.ok) {
-        const msg =
-          data && isOcrErrorResponse(data) ? data.error : "OCR failed";
-        throw new Error(msg);
-      }
+      if (useAsyncJobs) {
+        // Start job, return jobId quickly, then poll until done.
+        const r0 = await fetch(OCR_JOB_START_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(bodyBase),
+          signal,
+        });
+        const startData: { jobId?: string; error?: string } | null =
+          await r0.json().catch(() => null);
+        if (!r0.ok || !startData?.jobId) {
+          const msg = startData?.error || "Không thể tạo OCR job";
+          throw new Error(msg);
+        }
 
-      if (!data || !isOcrSuccessResponse(data)) {
-        throw new Error("OCR API returned unexpected response");
+        setLoadingLabel("Đang OCR (job)…");
+        setLoadingProgress(60);
+
+        const jobId = startData.jobId;
+        const pollStart = Date.now();
+        const POLL_TIMEOUT_MS = 10 * 60 * 1000;
+
+        for (;;) {
+          if (ocrCancelRequestedRef.current || signal.aborted) return false;
+          if (Date.now() - pollStart > POLL_TIMEOUT_MS) {
+            throw new Error("OCR job timed out");
+          }
+
+          const rj = await fetch(`${OCR_JOB_GET_URL}?id=${encodeURIComponent(jobId)}`, {
+            method: "GET",
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal,
+          });
+          const job:
+            | {
+                status?: string;
+                result?: {
+                  markdown?: string;
+                  full_text?: string;
+                  blocks?: BoundingBox[];
+                };
+                error?: string | null;
+              }
+            | null = await rj.json().catch(() => null);
+
+          if (!rj.ok) {
+            const msg = job?.error || "Không thể lấy trạng thái OCR job";
+            throw new Error(msg);
+          }
+
+          const status = String(job?.status || "");
+          if (status === "done") {
+            md = typeof job?.result?.markdown === "string"
+              ? normalizeOcrText(job!.result!.markdown!)
+              : "";
+            fullText = typeof job?.result?.full_text === "string"
+              ? normalizeOcrText(job!.result!.full_text!)
+              : "";
+            blocksFromProvider = Array.isArray(job?.result?.blocks)
+              ? (job!.result!.blocks as unknown as BoundingBox[])
+              : [];
+            break;
+          }
+          if (status === "failed") {
+            throw new Error(job?.error || "OCR job failed");
+          }
+
+          // progress pulse 60..85
+          setLoadingProgress((p) => Math.min(85, Math.max(60, p + 1)));
+          await sleep(1200);
+        }
+      } else {
+        const r = await fetch(OCR_FUNCTION_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(liteFirst ? { ...bodyBase, lite: true } : bodyBase),
+          signal,
+        });
+
+        setLoadingLabel("Đang phân tích kết quả...");
+        setLoadingProgress(80);
+        data = await r.json().catch(() => null);
+        if (!r.ok) {
+          const msg =
+            data && isOcrErrorResponse(data) ? data.error : "OCR failed";
+          throw new Error(msg);
+        }
+
+        if (!data || !isOcrSuccessResponse(data)) {
+          throw new Error("OCR API returned unexpected response");
+        }
+
+        md = data.markdown.length > 0 ? normalizeOcrText(data.markdown) : "";
+        fullText = data.full_text.length > 0
+          ? normalizeOcrText(data.full_text)
+          : "";
+        blocksFromProvider = Array.isArray(data.blocks)
+          ? (data.blocks as unknown as BoundingBox[])
+          : [];
       }
 
       if (ocrCancelRequestedRef.current || signal.aborted) {
         return false;
       }
 
-      const md = data.markdown.length > 0 ? normalizeOcrText(data.markdown) : "";
-      const fullText = data.full_text.length > 0
-        ? normalizeOcrText(data.full_text)
-        : "";
-      const rawBlocks: BoundingBox[] = Array.isArray(data.blocks)
-        ? (data.blocks as unknown as BoundingBox[])
-        : [];
-      const normalizedBlocks = normalizeBoundingBoxes(rawBlocks);
+      const normalizedBlocks = normalizeBoundingBoxes(blocksFromProvider);
 
       // Prefer real Markdown (e.g. pipe tables in full_text) over per-bbox <p> HTML;
       // otherwise the editor never renders GFM tables.
@@ -262,7 +352,7 @@ export function useSingleImageOcr() {
       await qc.invalidateQueries({ queryKey: ["ocr_history"] });
 
       // Step 2 (background): fetch blocks with json-mode only when lite-first is enabled
-      if (liteFirst) {
+      if (liteFirst && !useAsyncJobs) {
         try {
           const r2 = await fetch(OCR_FUNCTION_URL, {
             method: "POST",

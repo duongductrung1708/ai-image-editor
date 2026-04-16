@@ -39,7 +39,7 @@ function corsHeadersForRequest(req: Request): Record<string, string> {
 
   return {
     "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, idempotency-key, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
     ...(allowlist.length > 0 ? { Vary: "Origin" } : {}),
@@ -1418,7 +1418,41 @@ serve(async (req) => {
     console.log(`[ocr] rate-limit ok ms=${Date.now() - t0}`);
 
     const url = new URL(req.url);
-    const body = await req.json();
+    const isJobStartPath =
+      url.pathname.endsWith("/ocr-vietnamese/job/start") ||
+      url.pathname.endsWith("/api/ocr/job/start");
+    const isJobGetPath =
+      url.pathname.endsWith("/ocr-vietnamese/job") ||
+      url.pathname.endsWith("/api/ocr/job");
+
+    // GET /job?id=... -> read job status/result
+    if (req.method === "GET" && isJobGetPath) {
+      const jobId = url.searchParams.get("id") || "";
+      if (!jobId) {
+        return new Response(JSON.stringify({ error: "Missing job id" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data, error } = await srvClient
+        .from("ocr_jobs")
+        .select("id, status, result, error, created_at, updated_at")
+        .eq("id", jobId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        return new Response(JSON.stringify({ error: "Job not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const body = req.method === "GET" ? null : await req.json();
     const lite = body?.lite === true;
     const blocksOnly = body?.blocksOnly === true;
     const overrideMode: "markdown" | "json" | "both" | undefined = lite
@@ -1426,6 +1460,89 @@ serve(async (req) => {
       : blocksOnly
       ? "json"
       : undefined;
+
+    // POST /job/start -> create job and process OCR in background
+    if (req.method === "POST" && isJobStartPath) {
+      const singleImage = body?.image ?? body?.imageBase64;
+      const normalizedSingle = normalizeImageAndMimeType(singleImage, body?.mimeType);
+      const bytes = estimateBase64Bytes(normalizedSingle.image);
+      const maxBytes = getMaxImageBytes();
+      if (bytes > maxBytes) {
+        return new Response(
+          JSON.stringify({
+            error: `Image too large (${bytes} bytes > max ${maxBytes}). Please compress/crop the image.`,
+          }),
+          {
+            status: 413,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      const { data: inserted, error: insErr } = await srvClient
+        .from("ocr_jobs")
+        .insert({ user_id: user.id, status: "queued" })
+        .select("id")
+        .single();
+      if (insErr) throw insErr;
+
+      const jobId = inserted.id as string;
+
+      const runJob = async () => {
+        try {
+          await srvClient
+            .from("ocr_jobs")
+            .update({ status: "processing", error: null })
+            .eq("id", jobId)
+            .eq("user_id", user.id);
+
+          // Step 1: markdown-only (fast)
+          const p1 = await runSingleOcr(singleImage, body?.mimeType, "markdown");
+          // Step 2: blocks (json)
+          const p2 = await runSingleOcr(singleImage, body?.mimeType, "json");
+
+          const normalized = normalizeImageAndMimeType(singleImage, body?.mimeType);
+          const imageSize = getImageSizePx(normalized.image, normalized.mimeType);
+          const blocks = Array.isArray(p2.blocks)
+            ? addFontSizesToBlocks(p2.blocks as OcrBlockNorm[], imageSize)
+            : [];
+
+          const result = {
+            markdown: p2.markdown || p1.markdown || p2.full_text || p1.full_text || "",
+            full_text: p2.full_text || p1.full_text || "",
+            blocks,
+            ...(imageSize ? { imageSize } : {}),
+          };
+
+          await srvClient
+            .from("ocr_jobs")
+            .update({ status: "done", result, error: null })
+            .eq("id", jobId)
+            .eq("user_id", user.id);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          await srvClient
+            .from("ocr_jobs")
+            .update({ status: "failed", error: msg })
+            .eq("id", jobId)
+            .eq("user_id", user.id);
+        }
+      };
+
+      // Run after response (best-effort background work)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const er = (globalThis as any).EdgeRuntime;
+      if (er && typeof er.waitUntil === "function") {
+        er.waitUntil(runJob());
+      } else {
+        // Fallback: fire and forget (may still run but not guaranteed)
+        runJob();
+      }
+
+      return new Response(JSON.stringify({ jobId }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const isBatchPath =
       url.pathname.endsWith("/ocr-vietnamese/batch") ||
