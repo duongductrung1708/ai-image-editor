@@ -314,7 +314,7 @@ export function useSingleImageOcr() {
             markdown: mdOut,
             full_text: fullText,
             blocks: normalizedBlocks,
-            ...(typeof data.warning === "string"
+            ...(data && isOcrSuccessResponse(data) && typeof data.warning === "string"
               ? { warning: data.warning }
               : null),
           },
