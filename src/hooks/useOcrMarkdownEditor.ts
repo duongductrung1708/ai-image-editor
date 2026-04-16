@@ -10,8 +10,10 @@ import TextAlign from "@tiptap/extension-text-align";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { TableRow } from "@tiptap/extension-table-row";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableCell } from "@tiptap/extension-table-cell";
+import {
+  TableCellWithBorders,
+  TableHeaderWithBorders,
+} from "@/lib/tiptapTableBorders";
 import { marked } from "marked";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
@@ -140,8 +142,8 @@ export function useOcrMarkdownEditor(markdownText: string) {
       }),
       OcrTable.configure({ resizable: true }),
       TableRow,
-      TableHeader,
-      TableCell,
+      TableHeaderWithBorders,
+      TableCellWithBorders,
     ],
     [],
   );

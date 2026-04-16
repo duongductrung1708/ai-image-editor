@@ -22,6 +22,14 @@ import {
   CaseLower,
   CaseUpper,
   ChevronDown,
+  Square,
+  ArrowDown,
+  ArrowUp,
+  ArrowLeft,
+  ArrowRight,
+  Ban,
+  LayoutGrid,
+  Expand,
   Table2,
   TableColumnsSplit,
 } from "lucide-react";
@@ -35,6 +43,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { BoundingBox } from "@/components/ImageViewer";
 import { findMatchingBoxIndices } from "@/lib/bboxTextMatch";
 import {
@@ -134,6 +149,169 @@ const MarkdownEditor = ({
       ? `${base} border-primary/35 bg-primary/10 text-foreground`
       : `${base} border-transparent hover:border-border hover:bg-muted/60`;
   };
+
+  type TableBorderMode =
+    | "bottom"
+    | "top"
+    | "left"
+    | "right"
+    | "none"
+    | "all"
+    | "outside"
+    | "inside";
+
+  const applyTableBorders = useCallback(
+    (mode: TableBorderMode) => {
+      if (!editor) return;
+
+      const borderOn = "1px solid hsl(var(--border))";
+      const borderOff = "none";
+
+      const { state, view } = editor;
+      const { from, to } = state.selection;
+
+      type Cell = {
+        pos: number;
+        node: any;
+        row: number;
+        col: number;
+      };
+
+      const cells: Cell[] = [];
+
+      const collectCellsFromSelection = (start: number, end: number) => {
+        state.doc.nodesBetween(start, end, (node, pos) => {
+          const name = node?.type?.name;
+          if (name !== "tableCell" && name !== "tableHeader") return;
+
+          const domAt = view.domAtPos(pos);
+          let el = domAt.node instanceof HTMLElement ? domAt.node : domAt.node?.parentElement;
+          while (el && el instanceof HTMLElement && el.tagName !== "TD" && el.tagName !== "TH") {
+            el = el.parentElement;
+          }
+          if (!el || !(el instanceof HTMLElement)) return;
+
+          const table = el.closest("table");
+          if (!table) return;
+
+          const trEl = el.parentElement as HTMLTableRowElement | null;
+          if (!trEl) return;
+
+          const rows = Array.from(table.querySelectorAll("tr"));
+          const rowIdx = rows.indexOf(trEl);
+          if (rowIdx < 0) return;
+
+          const cellEls = Array.from(
+            trEl.querySelectorAll("td,th"),
+          ) as HTMLElement[];
+          const colIdx = cellEls.indexOf(el);
+          if (colIdx < 0) return;
+
+          cells.push({ pos, node, row: rowIdx, col: colIdx });
+        });
+      };
+
+      collectCellsFromSelection(from, to);
+
+      // If selection didn't include the full cell nodes, try around cursor.
+      if (cells.length === 0) {
+        const domAt = view.domAtPos(from);
+        let el = domAt.node instanceof HTMLElement ? domAt.node : domAt.node?.parentElement;
+        while (el && el instanceof HTMLElement && el.tagName !== "TD" && el.tagName !== "TH") {
+          el = el.parentElement;
+        }
+        if (el && el instanceof HTMLElement) {
+          const table = el.closest("table");
+          if (table) {
+            const trEl = el.parentElement as HTMLTableRowElement | null;
+            if (trEl) {
+              const rows = Array.from(table.querySelectorAll("tr"));
+              const rowIdx = rows.indexOf(trEl);
+              const cellEls = Array.from(
+                trEl.querySelectorAll("td,th"),
+              ) as HTMLElement[];
+              const colIdx = cellEls.indexOf(el);
+              if (rowIdx >= 0 && colIdx >= 0) {
+                // Fallback: apply to the first table cell found between cursor-1..cursor+1.
+                collectCellsFromSelection(Math.max(0, from - 1), Math.min(state.doc.content.size, to + 1));
+              }
+            }
+          }
+        }
+      }
+
+      if (cells.length === 0) return;
+
+      const minRow = Math.min(...cells.map((c) => c.row));
+      const maxRow = Math.max(...cells.map((c) => c.row));
+      const minCol = Math.min(...cells.map((c) => c.col));
+      const maxCol = Math.max(...cells.map((c) => c.col));
+
+      const sideValsFor = (cell: Cell) => {
+        let top: string = borderOff;
+        let right: string = borderOff;
+        let bottom: string = borderOff;
+        let left: string = borderOff;
+
+        const r = cell.row;
+        const c = cell.col;
+
+        switch (mode) {
+          case "none":
+            // all off
+            break;
+          case "all":
+            top = borderOn;
+            right = borderOn;
+            bottom = borderOn;
+            left = borderOn;
+            break;
+          case "top":
+            top = borderOn;
+            break;
+          case "bottom":
+            bottom = borderOn;
+            break;
+          case "left":
+            left = borderOn;
+            break;
+          case "right":
+            right = borderOn;
+            break;
+          case "outside":
+            top = r === minRow ? borderOn : borderOff;
+            bottom = r === maxRow ? borderOn : borderOff;
+            left = c === minCol ? borderOn : borderOff;
+            right = c === maxCol ? borderOn : borderOff;
+            break;
+          case "inside":
+            top = r > minRow ? borderOn : borderOff;
+            bottom = r < maxRow ? borderOn : borderOff;
+            left = c > minCol ? borderOn : borderOff;
+            right = c < maxCol ? borderOn : borderOff;
+            break;
+        }
+
+        return { top, right, bottom, left };
+      };
+
+      let tr = state.tr;
+      for (const cell of cells) {
+        const { top, right, bottom, left } = sideValsFor(cell);
+        tr = tr.setNodeMarkup(cell.pos, cell.node.type, {
+          ...cell.node.attrs,
+          borderTop: top,
+          borderRight: right,
+          borderBottom: bottom,
+          borderLeft: left,
+        });
+      }
+
+      view.dispatch(tr);
+      view.focus();
+    },
+    [editor],
+  );
 
   const insertTableWithOptions = useCallback(() => {
     if (!editor) return;
@@ -475,7 +653,12 @@ const MarkdownEditor = ({
     editor
       .chain()
       .focus()
-      .setMark("textStyle", { color: null, fontSize: null, fontFamily: null })
+      .setMark("textStyle", {
+        color: null,
+        fontSize: null,
+        fontFamily: null,
+        outline: null,
+      })
       .setFontFamily(null)
       .unsetHighlight()
       .run();
@@ -687,6 +870,8 @@ const MarkdownEditor = ({
             aria-label="Cỡ chữ"
             title="Cỡ chữ"
           >
+            <option value="10px">10</option>
+            <option value="11px">11</option>
             <option value="12px">12</option>
             <option value="14px">14</option>
             <option value="16px">16</option>
@@ -695,6 +880,12 @@ const MarkdownEditor = ({
             <option value="24px">24</option>
             <option value="28px">28</option>
             <option value="32px">32</option>
+            <option value="36px">36</option>
+            <option value="40px">40</option>
+            <option value="44px">44</option>
+            <option value="48px">48</option>
+            <option value="56px">56</option>
+            <option value="60px">60</option>
           </select>
         </label>
 
@@ -946,6 +1137,71 @@ const MarkdownEditor = ({
           <Grid3x3 className="h-3.5 w-3.5" />
           <span className="ml-1 text-[10px]">Gộp ô</span>
         </button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isProcessing || !editor}
+              className="h-7 gap-1.5 px-2"
+            >
+              <Square className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => applyTableBorders("bottom")}>
+              <span className="flex items-center gap-2">
+                <ArrowDown className="h-3.5 w-3.5" />
+                Viền dưới
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyTableBorders("top")}>
+              <span className="flex items-center gap-2">
+                <ArrowUp className="h-3.5 w-3.5" />
+                Viền trên
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyTableBorders("left")}>
+              <span className="flex items-center gap-2">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Viền trái
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyTableBorders("right")}>
+              <span className="flex items-center gap-2">
+                <ArrowRight className="h-3.5 w-3.5" />
+                Viền phải
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => applyTableBorders("none")}>
+              <span className="flex items-center gap-2">
+                <Ban className="h-3.5 w-3.5" />
+                Không viền
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyTableBorders("all")}>
+              <span className="flex items-center gap-2">
+                <Square className="h-3.5 w-3.5" />
+                Tất cả viền
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => applyTableBorders("outside")}>
+              <span className="flex items-center gap-2">
+                <Expand className="h-3.5 w-3.5" />
+                Viền ngoài
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyTableBorders("inside")}>
+              <span className="flex items-center gap-2">
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Viền trong
+              </span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <button
           type="button"
