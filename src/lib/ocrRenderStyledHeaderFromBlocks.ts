@@ -224,7 +224,7 @@ export function applyStyledHeaderFromBlocks(opts: {
   const { html, plainLines } = renderHeaderHtml(top);
   if (!html) return markdown;
 
-  const stripped = stripMatchingPrefix(markdown, plainLines);
+  const stripped = stripMatchingPrefix(markdown, plainLines, blocks);
   const out = `${html}\n\n${stripped}`.replace(/\n{3,}/g, "\n\n").trim();
   return out;
 }
