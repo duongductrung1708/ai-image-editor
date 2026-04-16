@@ -52,16 +52,15 @@ function lineToPlainText(blocks: BoundingBox[]): string {
     .trim();
 }
 
-function stripMatchingPrefix(original: string, headerLines: string[]): string {
+function stripMatchingPrefix(
+  original: string,
+  headerLines: string[],
+  blocks?: BoundingBox[],
+): string {
   const srcLines = original.replace(/\r\n/g, "\n").split("\n");
-  const out: string[] = [];
 
-  // Skip leading empty lines in original
-  let i = 0;
-  while (i < srcLines.length && !srcLines[i].trim()) i += 1;
-
-  const norm = (s: string) => {
-    const t = s
+  const norm = (s: string) =>
+    s
       .trim()
       .replace(/\s+/g, " ")
       .replace(/[*_`#]+/g, "")
@@ -70,33 +69,58 @@ function stripMatchingPrefix(original: string, headerLines: string[]): string {
       .replace(/[:：]/g, "")
       .trim()
       .toLowerCase();
-    return t;
-  };
 
-  const isEquivalentLine = (aRaw: string, bRaw: string): boolean => {
-    const a = norm(aRaw);
-    const b = norm(bRaw);
-    if (!a || !b) return false;
-    if (a === b) return true;
-    // Tolerate minor differences like extra words/tokens.
-    if (a.length >= 6 && b.length >= 6 && (a.includes(b) || b.includes(a))) {
-      return true;
+  // Build a set of all known header fragments (combined lines + individual block texts)
+  const headerNorms = new Set<string>();
+  for (const hl of headerLines) {
+    const n = norm(hl);
+    if (n) headerNorms.add(n);
+  }
+  if (blocks) {
+    for (const b of blocks) {
+      if ((b.y ?? 100) > 35) continue;
+      const n = norm(b.text || "");
+      if (n && n.length >= 4) headerNorms.add(n);
+    }
+  }
+
+  const isHeaderLine = (raw: string): boolean => {
+    const a = norm(raw);
+    if (!a) return false;
+    if (headerNorms.has(a)) return true;
+    for (const h of headerNorms) {
+      if (a.length >= 6 && h.length >= 6 && (a.includes(h) || h.includes(a))) {
+        return true;
+      }
     }
     return false;
   };
 
-  let h = 0;
-  while (h < headerLines.length && i < srcLines.length) {
-    if (isEquivalentLine(srcLines[i] || "", headerLines[h] || "")) {
+  // Strip matching lines from the top region (up to ~20 lines)
+  let i = 0;
+  while (i < srcLines.length && !srcLines[i].trim()) i += 1;
+
+  const scanLimit = Math.min(srcLines.length, i + 20);
+  const stripped = new Set<number>();
+
+  while (i < scanLimit) {
+    const line = srcLines[i];
+    if (!line.trim()) {
       i += 1;
-      h += 1;
-      while (i < srcLines.length && !srcLines[i].trim()) i += 1;
       continue;
     }
-    break;
+    if (isHeaderLine(line)) {
+      stripped.add(i);
+      i += 1;
+      continue;
+    }
+    break; // stop at first non-header, non-empty line
   }
 
-  for (; i < srcLines.length; i += 1) out.push(srcLines[i]);
+  const out: string[] = [];
+  for (let j = 0; j < srcLines.length; j += 1) {
+    if (!stripped.has(j)) out.push(srcLines[j]);
+  }
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trimStart();
 }
 
@@ -200,7 +224,7 @@ export function applyStyledHeaderFromBlocks(opts: {
   const { html, plainLines } = renderHeaderHtml(top);
   if (!html) return markdown;
 
-  const stripped = stripMatchingPrefix(markdown, plainLines);
+  const stripped = stripMatchingPrefix(markdown, plainLines, blocks);
   const out = `${html}\n\n${stripped}`.replace(/\n{3,}/g, "\n\n").trim();
   return out;
 }
