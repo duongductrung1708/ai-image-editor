@@ -92,9 +92,9 @@ function getRateLimitWindowSeconds(): number {
 }
 
 function getRateLimitOcrPerWindow(): number {
-  const raw = Deno.env.get("RATE_LIMIT_OCR_PER_WINDOW") || "20";
+  const raw = Deno.env.get("RATE_LIMIT_OCR_PER_WINDOW") || "60";
   const n = Math.floor(Number(raw));
-  return Number.isFinite(n) && n > 0 ? n : 20;
+  return Number.isFinite(n) && n > 0 ? n : 60;
 }
 
 async function chargeCreditsOrThrow(opts: {
