@@ -125,17 +125,29 @@ function isTwoColumnLine(blocks: BoundingBox[]): boolean {
   const left = blocks[0];
   const right = blocks[1];
   const gap = (right.x ?? 0) - ((left.x ?? 0) + (left.width ?? 0));
-  return gap >= 8; // percent gap
+  return gap >= 6; // percent gap
 }
 
 function renderSplitTable(groups: LineGroup[]): string {
+  // Need at least 1 two-column line to use split layout
+  const twoColCount = groups.filter((g) => isTwoColumnLine(g.blocks)).length;
+  if (twoColCount < 1) return "";
+
   const rows: string[] = [];
   for (const g of groups) {
-    if (!isTwoColumnLine(g.blocks)) return "";
-    const [l, r] = g.blocks;
-    rows.push(
-      `<tr><td>${blockInnerHtml(l)}</td><td>${blockInnerHtml(r)}</td></tr>`,
-    );
+    if (isTwoColumnLine(g.blocks)) {
+      const [l, r] = g.blocks;
+      rows.push(
+        `<tr><td>${blockInnerHtml(l)}</td><td>${blockInnerHtml(r)}</td></tr>`,
+      );
+    } else {
+      // Single-column line → span both columns
+      const inner = g.blocks.map(blockInnerHtml).join(" ");
+      const align =
+        g.blocks.find((b) => b.textAlign && b.textAlign !== "left")?.textAlign;
+      const style = align ? ` style="text-align:${align}"` : "";
+      rows.push(`<tr><td colspan="2"${style}>${inner}</td></tr>`);
+    }
   }
   return `<table data-layout="split"><tbody>${rows.join("")}</tbody></table>`;
 }

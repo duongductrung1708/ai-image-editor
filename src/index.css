@@ -171,6 +171,12 @@ body.ocr-workspace {
   white-space: nowrap;
 }
 
+.ProseMirror table[data-layout="split"] td[colspan="2"] {
+  text-align: center;
+  width: auto;
+  white-space: normal;
+}
+
 .ProseMirror {
   white-space: pre-wrap;
 }

@@ -76,7 +76,7 @@ export function formatTopSplitHeaderAsTable(markdownOrHtml: string): string {
     if (res) candidates.push({ index: i, left: res.left, right: res.right });
   }
 
-  if (candidates.length < 2) return text;
+  if (candidates.length < 1) return text;
 
   const firstIdx = candidates[0].index;
   const lastIdx = candidates[candidates.length - 1].index;
@@ -84,22 +84,32 @@ export function formatTopSplitHeaderAsTable(markdownOrHtml: string): string {
   // Only rewrite if the split block is reasonably compact near top.
   if (lastIdx - firstIdx > 10) return text;
 
-  const tableRows = candidates
-    .map(
-      (c) =>
-        `<tr><td>${escapeHtml(c.left)}</td><td>${escapeHtml(c.right)}</td></tr>`,
-    )
-    .join("");
+  const candidateSet = new Set(candidates.map((c) => c.index));
 
-  const table = `<table data-layout="split"><tbody>${tableRows}</tbody></table>`;
+  // Build table rows: 2-col lines as split, in-between lines as colspan
+  const tableRows: string[] = [];
+  for (let i = firstIdx; i <= lastIdx; i += 1) {
+    const c = candidates.find((x) => x.index === i);
+    if (c) {
+      tableRows.push(
+        `<tr><td>${escapeHtml(c.left)}</td><td>${escapeHtml(c.right)}</td></tr>`,
+      );
+    } else {
+      const lineText = (lines[i] || "").trim();
+      if (lineText) {
+        tableRows.push(
+          `<tr><td colspan="2">${escapeHtml(lineText)}</td></tr>`,
+        );
+      }
+    }
+  }
+
+  const table = `<table data-layout="split"><tbody>${tableRows.join("")}</tbody></table>`;
 
   const out: string[] = [];
   for (let i = 0; i < lines.length; i += 1) {
     if (i === firstIdx) out.push(table);
-    if (i >= firstIdx && i <= lastIdx) {
-      // Skip lines that were consumed by the split header.
-      if (candidates.some((c) => c.index === i)) continue;
-    }
+    if (i >= firstIdx && i <= lastIdx) continue; // consumed by table
     out.push(lines[i]);
   }
 
