@@ -29,9 +29,9 @@ function splitTwoColumns(line: string): { left: string; right: string } | null {
 
 function escapeHtml(s: string): string {
   return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+    .split("&").join("&amp;")
+    .split("<").join("&lt;")
+    .split(">").join("&gt;");
 }
 
 /**
