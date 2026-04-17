@@ -13,6 +13,9 @@ import { useOcrQuota } from "@/hooks/useOcrQuota";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 
 interface BatchOCRWorkspaceProps {
   files: File[];
@@ -41,6 +44,7 @@ const BatchOCRWorkspace = ({
   const {
     phase,
     markdownText,
+    setMarkdownText,
     jsonText,
     setJsonText,
     isProcessing,
@@ -49,6 +53,8 @@ const BatchOCRWorkspace = ({
     lastBatchMeta,
     batchPages,
     historyRefresh,
+    lastError,
+    setLastError,
     restoredFromHistory,
     sourcePreviewUrls,
     totalBytes,
@@ -61,7 +67,10 @@ const BatchOCRWorkspace = ({
     applyHistoryEntry,
   } = useBatchOcr(files);
 
-  const { editor, turndown } = useOcrMarkdownEditor(markdownText);
+  const { editor, turndown } = useOcrMarkdownEditor(markdownText, {
+    onMarkdownChange: setMarkdownText,
+    debounceMs: 250,
+  });
 
   const {
     copied,
@@ -189,6 +198,30 @@ const BatchOCRWorkspace = ({
         showPdf={phase === "result"}
         onCancelProcessing={phase === "processing" ? cancelBatch : undefined}
       />
+
+      {lastError && (
+        <div className="border-b border-border bg-card px-4 py-2">
+          <Alert variant="destructive" className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <AlertTitle>Lỗi OCR</AlertTitle>
+              <AlertDescription>
+                <p className="break-words">{lastError}</p>
+              </AlertDescription>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              onClick={() => setLastError(null)}
+              aria-label="Đóng thông báo lỗi"
+              title="Đóng"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </Alert>
+        </div>
+      )}
 
       {phase === "processing" && (
         <BatchProcessingView

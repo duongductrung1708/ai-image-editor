@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { BoundingBox } from "@/components/ImageViewer";
 import type { ImageCropperApi } from "@/components/ocr/ImageCropper";
@@ -16,6 +17,7 @@ import { useSingleImageOcr } from "@/hooks/useSingleImageOcr";
 import { useSingleImageExportActions } from "@/hooks/useSingleImageExportActions";
 import { useOcrQuota } from "@/hooks/useOcrQuota";
 import { useAuth } from "@/hooks/useAuth";
+import { useQueryClient } from "@tanstack/react-query";
 import { enhanceFile } from "@/lib/imageProcessing";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { normalizeBoundingBoxes } from "@/lib/bboxBlockHtml";
@@ -25,6 +27,9 @@ import {
   applyOcrFontFamiliesToHtml,
   applyOcrFontSizesToHtml,
 } from "@/lib/ocrApplyFontSizes";
+import { supabase } from "@/integrations/supabase/client";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { X } from "lucide-react";
 
 interface OCRWorkspaceProps {
   imageFile: File;
@@ -80,6 +85,10 @@ const OCRWorkspace = ({
     loadingLabel,
     loadingProgress,
     historyRefresh,
+    currentHistoryId,
+    setCurrentHistoryId,
+    lastError,
+    setLastError,
     runOcrOnFile,
     cancelProcessing,
     clearCancelRequest,
@@ -88,7 +97,14 @@ const OCRWorkspace = ({
     clearOcrLoadingUi,
   } = useSingleImageOcr();
 
-  const { editor, turndown } = useOcrMarkdownEditor(markdownText);
+  const qc = useQueryClient();
+  const lastAutosavedRef = useRef<string>("");
+  const autosaveTimerRef = useRef<number | null>(null);
+
+  const { editor, turndown } = useOcrMarkdownEditor(markdownText, {
+    onMarkdownChange: setMarkdownText,
+    debounceMs: 250,
+  });
 
   const { copied, copy, download, exportPdf, downloadDocx } =
     useSingleImageExportActions({
@@ -145,6 +161,52 @@ const OCRWorkspace = ({
     };
   }, []);
 
+  useEffect(() => {
+    // Auto-save editor changes to Supabase ocr_history (debounced).
+    // Only for result phase and when we know which history row is currently open.
+    if (phase !== "result") return;
+    if (!currentHistoryId) return;
+    if (!user?.id) return;
+
+    const next = markdownText.trim();
+    if (!next) return;
+    if (next === lastAutosavedRef.current) return;
+
+    if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const { error } = await supabase
+            .from("ocr_history")
+            .update({ extracted_text: next })
+            .eq("id", currentHistoryId);
+          if (error) throw error;
+
+          lastAutosavedRef.current = next;
+
+          // Update history caches immediately (avoid waiting for refetch).
+          const queries = qc.getQueriesData({ queryKey: ["ocr_history"] });
+          for (const [key, data] of queries) {
+            if (!Array.isArray(data)) continue;
+            qc.setQueryData(
+              key,
+              (data as Array<Record<string, unknown>>).map((row) =>
+                row?.id === currentHistoryId ? { ...row, extracted_text: next } : row,
+              ),
+            );
+          }
+        } catch (e) {
+          console.error("[ocr-history] autosave failed:", e);
+        }
+      })();
+    }, 1000);
+
+    return () => {
+      if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    };
+  }, [currentHistoryId, markdownText, phase, qc, user?.id]);
+
   const setOcrImageFromFile = useCallback((file: File) => {
     const url = URL.createObjectURL(file);
     if (lastOcrBlobUrlRef.current)
@@ -191,12 +253,7 @@ const OCRWorkspace = ({
     }
 
     try {
-      setShowHistory(false);
-      setActiveTab("markdown");
       clearCancelRequest();
-      setPhase("processing");
-      setOcrLoadingUi("Đang chuẩn bị ảnh...", 5);
-
       let fileForOcr = editFile;
 
       try {
@@ -233,6 +290,12 @@ const OCRWorkspace = ({
         clearOcrLoadingUi();
         return;
       }
+
+      // After we captured the crop, we can safely transition UI/layout.
+      setShowHistory(false);
+      setActiveTab("markdown");
+      setPhase("processing");
+      setOcrLoadingUi("Đang chuẩn bị ảnh...", 5);
 
       setOcrImageFromFile(fileForOcr);
       const ok = await runOcrOnFile(fileForOcr);
@@ -292,6 +355,7 @@ const OCRWorkspace = ({
       setActiveTab("markdown");
       setEnhance(false);
       cropperApiRef.current?.resetAll();
+      setCurrentHistoryId(null);
       return;
     }
     void startOcr();
@@ -303,6 +367,7 @@ const OCRWorkspace = ({
     setMarkdownText,
     setShowHistory,
     startOcr,
+    setCurrentHistoryId,
   ]);
 
   const handleToggleHistory = useCallback(() => {
@@ -320,6 +385,7 @@ const OCRWorkspace = ({
     }) => {
       setPhase("result");
       setEnhance(false);
+      setCurrentHistoryId(entry.id);
 
       if (lastOcrBlobUrlRef.current) {
         URL.revokeObjectURL(lastOcrBlobUrlRef.current);
@@ -422,7 +488,7 @@ const OCRWorkspace = ({
         }
       }
     },
-    [setBoundingBoxes, setJsonText, setMarkdownText],
+    [setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText],
   );
 
   useEffect(() => {
@@ -454,6 +520,30 @@ const OCRWorkspace = ({
       {ocrPipelineBusy && (
         <div className="border-b border-border bg-card px-4 py-2">
           <Progress value={loadingProgress} className="h-2" />
+        </div>
+      )}
+
+      {lastError && (
+        <div className="border-b border-border bg-card px-4 py-2">
+          <Alert variant="destructive" className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <AlertTitle>Lỗi OCR</AlertTitle>
+              <AlertDescription>
+                <p className="break-words">{lastError}</p>
+              </AlertDescription>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              onClick={() => setLastError(null)}
+              aria-label="Đóng thông báo lỗi"
+              title="Đóng"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </Alert>
         </div>
       )}
 

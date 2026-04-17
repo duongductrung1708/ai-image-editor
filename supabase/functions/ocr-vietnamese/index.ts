@@ -242,10 +242,78 @@ function postProcessMarkdown(markdown: string, style: string): string {
       return true;
     });
   }
-  return lines
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const normalized = normalizeGfmTables(lines.join("\n"));
+  return normalized.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function normalizeGfmTables(input: string): string {
+  // Normalize GFM tables where rows accidentally have different column counts
+  // (common with OCR outputs that insert extra pipes for merged headers).
+  const lines = input.split("\n");
+  const out: string[] = [];
+
+  const isTableLine = (l: string) => {
+    const t = l.trim();
+    if (!t) return false;
+    if (!t.includes("|")) return false;
+    // Separator row like: | --- | --- |
+    if (/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(t)) return true;
+    // Normal row must have at least 2 pipes.
+    return (t.match(/\|/g)?.length ?? 0) >= 2;
+  };
+
+  const splitCells = (l: string): string[] => {
+    let t = l.trim();
+    if (t.startsWith("|")) t = t.slice(1);
+    if (t.endsWith("|")) t = t.slice(0, -1);
+    return t.split("|").map((c) => c.trim());
+  };
+
+  const isSeparatorRow = (cells: string[]) =>
+    cells.length > 0 &&
+    cells.every((c) => /^:?-{3,}:?$/.test(c.trim()) || c.trim() === "");
+
+  let i = 0;
+  while (i < lines.length) {
+    if (!isTableLine(lines[i] ?? "")) {
+      out.push(lines[i] ?? "");
+      i += 1;
+      continue;
+    }
+
+    const block: string[] = [];
+    while (i < lines.length && isTableLine(lines[i] ?? "")) {
+      block.push(lines[i] ?? "");
+      i += 1;
+    }
+
+    const rows = block.map(splitCells);
+    const maxCols = Math.max(...rows.map((r) => r.length), 0);
+    if (maxCols <= 0) {
+      out.push(...block);
+      continue;
+    }
+
+    // Ensure there is a valid separator row at index 1.
+    const normalizedRows = rows.map((r) => {
+      const next = r.slice(0, maxCols);
+      while (next.length < maxCols) next.push("");
+      return next;
+    });
+
+    if (normalizedRows.length >= 2 && !isSeparatorRow(normalizedRows[1])) {
+      normalizedRows.splice(1, 0, new Array(maxCols).fill("---"));
+    } else if (normalizedRows.length >= 2 && isSeparatorRow(normalizedRows[1])) {
+      normalizedRows[1] = normalizedRows[1].map((c) => (c.trim() ? c.trim() : "---"));
+    } else if (normalizedRows.length === 1) {
+      normalizedRows.push(new Array(maxCols).fill("---"));
+    }
+
+    const renderRow = (cells: string[]) => `| ${cells.join(" | ")} |`;
+    out.push(...normalizedRows.map(renderRow));
+  }
+
+  return out.join("\n");
 }
 
 type OcrBlockKind = "text" | "figure" | "stamp" | "signature";

@@ -55,6 +55,7 @@ export function useBatchOcr(files: File[]) {
     null,
   );
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [lastError, setLastError] = useState<string | null>(null);
   const [restoredFromHistory, setRestoredFromHistory] = useState(false);
   const [historyFirstImageData, setHistoryFirstImageData] = useState<
     string | null
@@ -165,6 +166,7 @@ export function useBatchOcr(files: File[]) {
     setJsonText("");
     setLastBatchMeta(null);
     setBatchPages(null);
+    setLastError(null);
     setRestoredFromHistory(false);
     setHistoryFirstImageData(null);
     setHistoryPageImageDatas([]);
@@ -346,7 +348,9 @@ export function useBatchOcr(files: File[]) {
         return;
       }
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "Lỗi khi xử lý hàng loạt.");
+      const msg = e instanceof Error ? e.message : "Lỗi khi xử lý hàng loạt.";
+      toast.error(msg);
+      setLastError(msg);
       setPhase("ready");
     } finally {
       if (batchAbortRef.current === controller) {
@@ -423,6 +427,7 @@ export function useBatchOcr(files: File[]) {
   return {
     phase,
     markdownText,
+    setMarkdownText,
     jsonText,
     setJsonText,
     isProcessing,
@@ -431,6 +436,8 @@ export function useBatchOcr(files: File[]) {
     lastBatchMeta,
     batchPages,
     historyRefresh,
+    lastError,
+    setLastError,
     restoredFromHistory,
     sourcePreviewUrls,
     totalBytes,

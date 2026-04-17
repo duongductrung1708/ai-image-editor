@@ -69,6 +69,8 @@ export function useSingleImageOcr() {
   const [loadingLabel, setLoadingLabel] = useState("");
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const ocrAbortRef = useRef<AbortController | null>(null);
   const ocrCancelRequestedRef = useRef(false);
@@ -91,6 +93,8 @@ export function useSingleImageOcr() {
     setMarkdownText("");
     setJsonText("");
     setBoundingBoxes([]);
+    setCurrentHistoryId(null);
+    setLastError(null);
     let ok = false;
     let historyRowId: string | null = null;
 
@@ -346,8 +350,10 @@ export function useSingleImageOcr() {
       if (insertErr) {
         console.error("[ocr-history] insert failed:", insertErr);
         toast.error("Không thể lưu lịch sử OCR.");
+        setLastError("Không thể lưu lịch sử OCR.");
       } else if (newHistoryId) {
         historyRowId = newHistoryId;
+        setCurrentHistoryId(newHistoryId);
       }
       await qc.invalidateQueries({ queryKey: ["ocr_history"] });
 
@@ -436,6 +442,7 @@ export function useSingleImageOcr() {
           ? err.message
           : "Lỗi khi xử lý hình ảnh. Vui lòng thử lại.";
       toast.error(msg);
+      setLastError(msg);
     } finally {
       if (ocrAbortRef.current === controller) {
         ocrAbortRef.current = null;
@@ -484,6 +491,10 @@ export function useSingleImageOcr() {
     loadingLabel,
     loadingProgress,
     historyRefresh,
+    currentHistoryId,
+    setCurrentHistoryId,
+    lastError,
+    setLastError,
     runOcrOnFile,
     cancelProcessing,
     clearCancelRequest,

@@ -105,7 +105,10 @@ function toEditorHtml(markdownText: string): string {
 /**
  * TipTap + Turndown dùng chung cho OCR Markdown (1 ảnh & batch).
  */
-export function useOcrMarkdownEditor(markdownText: string) {
+export function useOcrMarkdownEditor(
+  markdownText: string,
+  opts?: { onMarkdownChange?: (next: string) => void; debounceMs?: number },
+) {
   const turndown = useMemo(() => {
     const td = new TurndownService({
       headingStyle: "atx",
@@ -161,6 +164,8 @@ export function useOcrMarkdownEditor(markdownText: string) {
 
   // Track the last markdown we pushed into the editor to avoid redundant updates
   const lastSetRef = useRef("");
+  const debounceTimerRef = useRef<number | null>(null);
+  const debounceMs = opts?.debounceMs ?? 250;
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
@@ -168,6 +173,19 @@ export function useOcrMarkdownEditor(markdownText: string) {
 
     // Skip if content hasn't actually changed
     if (trimmed === lastSetRef.current) return;
+
+    // If current editor content already matches, do not re-apply (prevents cursor jump
+    // when parent state is driven by editor updates).
+    try {
+      const currentMd = turndown.turndown(editor.getHTML() || "").trim();
+      if (currentMd === trimmed) {
+        lastSetRef.current = trimmed;
+        return;
+      }
+    } catch {
+      // ignore and fall back to setContent
+    }
+
     lastSetRef.current = trimmed;
 
     const nextHtml = toEditorHtml(trimmed);
@@ -177,7 +195,32 @@ export function useOcrMarkdownEditor(markdownText: string) {
       if (editor.isDestroyed) return;
       editor.commands.setContent(nextHtml || "");
     });
-  }, [editor, markdownText]);
+  }, [editor, markdownText, turndown]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    if (!opts?.onMarkdownChange) return;
+
+    const handler = () => {
+      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = window.setTimeout(() => {
+        if (editor.isDestroyed) return;
+        try {
+          const md = turndown.turndown(editor.getHTML() || "").trim();
+          opts.onMarkdownChange?.(md);
+        } catch {
+          // ignore
+        }
+      }, debounceMs);
+    };
+
+    editor.on("update", handler);
+    return () => {
+      editor.off("update", handler);
+      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    };
+  }, [debounceMs, editor, opts, turndown]);
 
   return { editor, turndown };
 }

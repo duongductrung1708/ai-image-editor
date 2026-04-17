@@ -27,8 +27,14 @@ const ImageCropper = ({
   const [ready, setReady] = useState(false);
   const cropperInstanceRef = useRef<CropperJS | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const disabledRef = useRef(disabled);
 
-  const syncCropperToContainer = (inst: CropperJS) => {
+  useEffect(() => {
+    disabledRef.current = disabled;
+  }, [disabled]);
+
+  const syncCropperToContainer = (inst: CropperJS, opts?: { adjustCropBox?: boolean }) => {
+    const adjustCropBox = opts?.adjustCropBox ?? true;
     const maybe = inst as unknown as { resize?: () => void };
     maybe.resize?.();
 
@@ -62,6 +68,8 @@ const ImageCropper = ({
       height: canvas.height,
     });
 
+    if (!adjustCropBox) return;
+
     // Clamp crop box inside container (keep size).
     const cb = inst.getCropBoxData();
     const w = Math.min(cb.width, container.width);
@@ -94,7 +102,7 @@ const ImageCropper = ({
         inst.rotate(deg);
         requestAnimationFrame(() => {
           try {
-            syncCropperToContainer(inst);
+            syncCropperToContainer(inst, { adjustCropBox: true });
           } catch {
             // Best-effort: some states may reject restoring, ignore.
           }
@@ -150,7 +158,9 @@ const ImageCropper = ({
     const ro = new ResizeObserver(() => {
       requestAnimationFrame(() => {
         try {
-          syncCropperToContainer(inst);
+          // While disabled (e.g. user clicked "Bắt đầu OCR"), avoid shifting the crop box.
+          // Only keep the canvas synced to prevent visual glitches.
+          syncCropperToContainer(inst, { adjustCropBox: !disabledRef.current });
         } catch {
           // ignore
         }

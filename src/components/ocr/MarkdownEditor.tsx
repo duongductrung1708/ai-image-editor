@@ -32,6 +32,8 @@ import {
   Expand,
   Table2,
   TableColumnsSplit,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -740,6 +742,28 @@ const MarkdownEditor = ({
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-1 border-b border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground">
         <span className="mr-1 text-[11px] font-medium">Định dạng nhanh:</span>
+
+        <button
+          type="button"
+          className={toolbarButtonClass(false)}
+          onClick={() => editor?.chain().focus().undo().run()}
+          disabled={isProcessing || !editor || !editor.can().undo()}
+          aria-label="Undo"
+          title="Undo"
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+        </button>
+
+        <button
+          type="button"
+          className={toolbarButtonClass(false)}
+          onClick={() => editor?.chain().focus().redo().run()}
+          disabled={isProcessing || !editor || !editor.can().redo()}
+          aria-label="Redo"
+          title="Redo"
+        >
+          <Redo2 className="h-3.5 w-3.5" />
+        </button>
 
         <button
           type="button"
