@@ -291,7 +291,7 @@ const OCRWorkspace = ({
       setBoundingBoxes([]);
       setActiveTab("markdown");
       setEnhance(false);
-      cropperApiRef.current?.reset();
+      cropperApiRef.current?.resetAll();
       return;
     }
     void startOcr();
@@ -499,7 +499,7 @@ const OCRWorkspace = ({
               onResetImage={() => {
                 setEditFile(imageFile);
                 setEnhance(false);
-                cropperApiRef.current?.reset();
+                cropperApiRef.current?.resetAll();
               }}
               onStartOcr={() => void startOcr()}
               quotaRemaining={quotaRemaining}

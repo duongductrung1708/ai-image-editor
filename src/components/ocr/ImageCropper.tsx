@@ -7,7 +7,10 @@ export type ImageCropperApi = {
   exportCroppedBlob: () => Promise<Blob>;
   rotate: (deg: number) => void;
   flipHorizontal: () => void;
-  reset: () => void;
+  /** Reset ALL transforms: rotate/flip/zoom + crop box. */
+  resetAll: () => void;
+  /** Reset ONLY crop box to cover the whole image. */
+  resetCropToFullImage: () => void;
 };
 
 interface ImageCropperProps {
@@ -53,7 +56,6 @@ const ImageCropper = ({
             maybe.resize?.();
 
             const container = inst.getContainerData();
-            const image = inst.getImageData();
 
             // Use real canvas size after rotation (more reliable than natural WxH).
             let canvas = inst.getCanvasData();
@@ -66,7 +68,8 @@ const ImageCropper = ({
               container.height / canvas.height,
             );
             if (scaleDown < 1) {
-              const currentRatio = typeof image.ratio === "number" ? image.ratio : 1;
+              const img = inst.getImageData() as unknown as { ratio?: number };
+              const currentRatio = typeof img.ratio === "number" ? img.ratio : 1;
               const nextRatio = currentRatio * scaleDown;
               if (Number.isFinite(nextRatio) && nextRatio > 0) {
                 inst.zoomTo(nextRatio);
@@ -107,8 +110,21 @@ const ImageCropper = ({
         const next = current === -1 ? 1 : -1;
         inst.scaleX(next);
       },
-      reset: () => {
+      resetAll: () => {
         cropperInstanceRef.current?.reset();
+      },
+      resetCropToFullImage: () => {
+        const inst = cropperInstanceRef.current;
+        if (!inst) return;
+        const img = inst.getImageData();
+        if (!img?.naturalWidth || !img?.naturalHeight) return;
+        // Use data in image coordinates; keeps current rotation/flip.
+        inst.setData({
+          x: 0,
+          y: 0,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        });
       },
     }),
     [],

@@ -1,6 +1,7 @@
 import { type MutableRefObject } from "react";
 import { Crop, FlipHorizontal, RotateCcw, RotateCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ImageCropper, {
   type ImageCropperApi,
 } from "@/components/ocr/ImageCropper";
@@ -77,36 +78,53 @@ const SingleImageEditPhase = ({
               Xoay ảnh
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void onRotate(-90)}
-                disabled={ocrPipelineBusy || isEditingBusy}
-                className="gap-1.5"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                Trái 90°
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void onRotate(90)}
-                disabled={ocrPipelineBusy || isEditingBusy}
-                className="gap-1.5"
-              >
-                <RotateCw className="h-3.5 w-3.5" />
-                Phải 90°
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => cropperApiRef.current?.flipHorizontal()}
-                disabled={ocrPipelineBusy || isEditingBusy}
-                className="gap-1.5"
-              >
-                <FlipHorizontal className="h-3.5 w-3.5" />
-                Đảo ảnh
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void onRotate(-90)}
+                    disabled={ocrPipelineBusy || isEditingBusy}
+                    className="gap-1.5"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Trái 90°
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Xoay ảnh sang trái 90°</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void onRotate(90)}
+                    disabled={ocrPipelineBusy || isEditingBusy}
+                    className="gap-1.5"
+                  >
+                    <RotateCw className="h-3.5 w-3.5" />
+                    Phải 90°
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Xoay ảnh sang phải 90°</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => cropperApiRef.current?.flipHorizontal()}
+                    disabled={ocrPipelineBusy || isEditingBusy}
+                    className="gap-1.5"
+                  >
+                    <FlipHorizontal className="h-3.5 w-3.5" />
+                    Đảo ảnh
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Lật gương ảnh (trái ↔ phải)</TooltipContent>
+              </Tooltip>
             </div>
           </div>
 
@@ -117,16 +135,23 @@ const SingleImageEditPhase = ({
               </span>
               Làm rõ ảnh
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void onToggleEnhance()}
-              disabled={ocrPipelineBusy || isEditingBusy}
-              className="w-full sm:w-auto"
-            >
-              <Sparkles className="mr-2 h-3.5 w-3.5" />
-              {enhance ? "Đang bật" : "Tăng tương phản nhẹ"}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void onToggleEnhance()}
+                  disabled={ocrPipelineBusy || isEditingBusy}
+                  className="w-full sm:w-auto"
+                >
+                  <Sparkles className="mr-2 h-3.5 w-3.5" />
+                  {enhance ? "Đang bật" : "Tăng tương phản nhẹ"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Tăng tương phản nhẹ để OCR dễ nhận diện hơn
+              </TooltipContent>
+            </Tooltip>
           </div>
 
           <div className="rounded-lg border border-border bg-card p-3">
@@ -138,14 +163,19 @@ const SingleImageEditPhase = ({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => cropperApiRef.current?.reset()}
-                disabled={ocrPipelineBusy || isEditingBusy}
-              >
-                Toàn ảnh
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => cropperApiRef.current?.resetCropToFullImage()}
+                    disabled={ocrPipelineBusy || isEditingBusy}
+                  >
+                    Toàn ảnh
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Đặt lại khung crop về toàn ảnh</TooltipContent>
+              </Tooltip>
             </div>
 
             {!quotaUnlimited && quotaRemaining !== undefined && (
@@ -163,21 +193,31 @@ const SingleImageEditPhase = ({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              onClick={onResetImage}
-              disabled={ocrPipelineBusy || isEditingBusy}
-            >
-              Reset ảnh
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="secondary"
+                  onClick={onResetImage}
+                  disabled={ocrPipelineBusy || isEditingBusy}
+                >
+                  Reset ảnh
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Hoàn tác các thay đổi (xoay/đảo/làm rõ/crop)</TooltipContent>
+            </Tooltip>
 
-            <Button
-              onClick={() => void onStartOcr()}
-              disabled={ocrPipelineBusy || isEditingBusy || !editImageUrl}
-              className="flex-1"
-            >
-              Bắt đầu OCR
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={() => void onStartOcr()}
+                  disabled={ocrPipelineBusy || isEditingBusy || !editImageUrl}
+                  className="flex-1"
+                >
+                  Bắt đầu OCR
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Chạy OCR với vùng đã crop</TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </div>

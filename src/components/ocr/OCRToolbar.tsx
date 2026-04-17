@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface OCRToolbarProps {
   fileName: string;
@@ -63,10 +64,15 @@ const OCRToolbar = ({
 }: OCRToolbarProps) => {
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-border bg-card px-4 py-3">
-      <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
-        <ArrowLeft className="h-4 w-4" />
-        Quay lại
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
+            <ArrowLeft className="h-4 w-4" />
+            Quay lại
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Quay lại trang trước</TooltipContent>
+      </Tooltip>
       <div className="h-5 w-px bg-border" />
       <span className="text-sm font-medium text-muted-foreground truncate max-w-full sm:max-w-[200px]">
         {fileName}
@@ -97,59 +103,86 @@ const OCRToolbar = ({
 
       <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
         {showReprocess ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onReprocess}
-            disabled={isProcessing}
-            className="gap-1.5"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Nhận diện lại
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onReprocess}
+                disabled={isProcessing}
+                className="gap-1.5"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Nhận diện lại
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Chạy OCR lại với ảnh hiện tại</TooltipContent>
+          </Tooltip>
         ) : null}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onPickAnother}
-          className="gap-1.5"
-        >
-          <ImagePlus className="h-3.5 w-3.5" />
-          Ảnh khác
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onToggleHistory}
-          className="gap-1.5"
-        >
-          <History className="h-3.5 w-3.5" />
-          Lịch sử
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onCopy}
-          disabled={!hasText || isProcessing}
-          className="gap-1.5"
-        >
-          {copied ? (
-            <Check className="h-3.5 w-3.5" />
-          ) : (
-            <Copy className="h-3.5 w-3.5" />
-          )}
-          {copied ? "Đã sao chép" : "Sao chép"}
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <Tooltip>
+          <TooltipTrigger asChild>
             <Button
+              variant="outline"
               size="sm"
+              onClick={onPickAnother}
+              className="gap-1.5"
+            >
+              <ImagePlus className="h-3.5 w-3.5" />
+              Ảnh khác
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Chọn ảnh khác để OCR</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onToggleHistory}
+              className="gap-1.5"
+            >
+              <History className="h-3.5 w-3.5" />
+              Lịch sử
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Mở/đóng lịch sử OCR</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCopy}
               disabled={!hasText || isProcessing}
               className="gap-1.5"
             >
-              <Download className="h-3.5 w-3.5" />
-              Tải
+              {copied ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              {copied ? "Đã sao chép" : "Sao chép"}
             </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Sao chép nội dung OCR</TooltipContent>
+        </Tooltip>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  disabled={!hasText || isProcessing}
+                  className="gap-1.5"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Tải
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Tải kết quả OCR</TooltipContent>
+            </Tooltip>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onDownloadMarkdown}>
