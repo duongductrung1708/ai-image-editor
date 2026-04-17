@@ -28,6 +28,49 @@ const ImageCropper = ({
   const cropperInstanceRef = useRef<CropperJS | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  const syncCropperToContainer = (inst: CropperJS) => {
+    const maybe = inst as unknown as { resize?: () => void };
+    maybe.resize?.();
+
+    const container = inst.getContainerData();
+    if (!container?.width || !container?.height) return;
+
+    let canvas = inst.getCanvasData();
+    if (!canvas?.width || !canvas?.height) return;
+
+    // If canvas exceeds container, scale down (never scale up).
+    const scaleDown = Math.min(
+      1,
+      container.width / canvas.width,
+      container.height / canvas.height,
+    );
+    if (scaleDown < 1) {
+      const img = inst.getImageData() as unknown as { ratio?: number };
+      const currentRatio = typeof img.ratio === "number" ? img.ratio : 1;
+      const nextRatio = currentRatio * scaleDown;
+      if (Number.isFinite(nextRatio) && nextRatio > 0) {
+        inst.zoomTo(nextRatio);
+        canvas = inst.getCanvasData();
+      }
+    }
+
+    // Center canvas.
+    inst.setCanvasData({
+      left: (container.width - canvas.width) / 2,
+      top: (container.height - canvas.height) / 2,
+      width: canvas.width,
+      height: canvas.height,
+    });
+
+    // Clamp crop box inside container (keep size).
+    const cb = inst.getCropBoxData();
+    const w = Math.min(cb.width, container.width);
+    const h = Math.min(cb.height, container.height);
+    const left = Math.max(0, Math.min(cb.left, container.width - w));
+    const top = Math.max(0, Math.min(cb.top, container.height - h));
+    inst.setCropBoxData({ left, top, width: w, height: h });
+  };
+
   const api = useMemo<ImageCropperApi>(
     () => ({
       exportCroppedBlob: () =>
@@ -46,57 +89,12 @@ const ImageCropper = ({
         const inst = cropperInstanceRef.current;
         if (!inst) return;
 
-        // Cropper.js may auto-adjust canvas after rotation (appears like zoom-in / shifted).
-        // Re-fit the image to the container WITHOUT resetting rotation.
-        const cropBox = inst.getCropBoxData();
+        // Cropper.js may auto-adjust canvas after rotation.
+        // After rotate, re-sync canvas/crop-box to the container size.
         inst.rotate(deg);
         requestAnimationFrame(() => {
           try {
-            const maybe = inst as unknown as { resize?: () => void };
-            maybe.resize?.();
-
-            const container = inst.getContainerData();
-
-            // Use real canvas size after rotation (more reliable than natural WxH).
-            let canvas = inst.getCanvasData();
-            if (!canvas.width || !canvas.height) return;
-
-            // If canvas exceeds container, scale down (never scale up).
-            const scaleDown = Math.min(
-              1,
-              container.width / canvas.width,
-              container.height / canvas.height,
-            );
-            if (scaleDown < 1) {
-              const img = inst.getImageData() as unknown as { ratio?: number };
-              const currentRatio = typeof img.ratio === "number" ? img.ratio : 1;
-              const nextRatio = currentRatio * scaleDown;
-              if (Number.isFinite(nextRatio) && nextRatio > 0) {
-                inst.zoomTo(nextRatio);
-                canvas = inst.getCanvasData();
-              }
-            }
-
-            // Center canvas within the visible container.
-            inst.setCanvasData({
-              left: (container.width - canvas.width) / 2,
-              top: (container.height - canvas.height) / 2,
-              width: canvas.width,
-              height: canvas.height,
-            });
-
-            // Keep crop-box SIZE but re-center it in the visible container.
-            // Restoring the old left/top (pre-rotate) often forces Cropper to shift the canvas.
-            const nextW = Math.min(cropBox.width, container.width);
-            const nextH = Math.min(cropBox.height, container.height);
-            const nextLeft = Math.max(0, (container.width - nextW) / 2);
-            const nextTop = Math.max(0, (container.height - nextH) / 2);
-            inst.setCropBoxData({
-              left: nextLeft,
-              top: nextTop,
-              width: nextW,
-              height: nextH,
-            });
+            syncCropperToContainer(inst);
           } catch {
             // Best-effort: some states may reject restoring, ignore.
           }
@@ -117,8 +115,6 @@ const ImageCropper = ({
         const inst = cropperInstanceRef.current;
         if (!inst) return;
         try {
-          const maybe = inst as unknown as { resize?: () => void };
-          maybe.resize?.();
           const canvas = inst.getCanvasData();
           if (!canvas?.width || !canvas?.height) return;
 
@@ -149,12 +145,15 @@ const ImageCropper = ({
     const inst = cropperInstanceRef.current;
     if (!el || !inst) return;
 
-    // Cropper.js sometimes does not react to parent resizes (e.g. when a split
-    // panel is dragged). Force a best-effort resize to keep canvas in sync.
+    // When the container resizes (history open/close, window resize, split drag),
+    // re-sync canvas + crop box to avoid visual glitches.
     const ro = new ResizeObserver(() => {
       requestAnimationFrame(() => {
-        const maybe = inst as unknown as { resize?: () => void };
-        maybe.resize?.();
+        try {
+          syncCropperToContainer(inst);
+        } catch {
+          // ignore
+        }
       });
     });
     ro.observe(el);
