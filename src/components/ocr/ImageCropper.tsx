@@ -116,15 +116,24 @@ const ImageCropper = ({
       resetCropToFullImage: () => {
         const inst = cropperInstanceRef.current;
         if (!inst) return;
-        const img = inst.getImageData();
-        if (!img?.naturalWidth || !img?.naturalHeight) return;
-        // Use data in image coordinates; keeps current rotation/flip.
-        inst.setData({
-          x: 0,
-          y: 0,
-          width: img.naturalWidth,
-          height: img.naturalHeight,
-        });
+        try {
+          const maybe = inst as unknown as { resize?: () => void };
+          maybe.resize?.();
+          const canvas = inst.getCanvasData();
+          if (!canvas?.width || !canvas?.height) return;
+
+          // Crop box coordinates are in the container coordinate space.
+          // Setting it to match the canvas ensures "full image" even when
+          // the source aspect ratio/rotation/zoom differs.
+          inst.setCropBoxData({
+            left: canvas.left,
+            top: canvas.top,
+            width: canvas.width,
+            height: canvas.height,
+          });
+        } catch {
+          // ignore
+        }
       },
     }),
     [],
