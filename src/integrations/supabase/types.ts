@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      daily_free_uses: {
+        Row: {
+          date: string
+          id: string
+          user_id: string
+          used: number
+        }
+        Insert: {
+          date?: string
+          id?: string
+          user_id: string
+          used?: number
+        }
+        Update: {
+          date?: string
+          id?: string
+          user_id?: string
+          used?: number
+        }
+        Relationships: []
+      }
       credit_transactions: {
         Row: {
           amount: number
@@ -215,6 +236,7 @@ export type Database = {
         Returns: number
       }
       deduct_credit: { Args: { p_user_id: string }; Returns: undefined }
+      deduct_daily_use: { Args: { p_user_id: string }; Returns: boolean }
       enforce_rate_limit: {
         Args: {
           p_ip: string
@@ -225,6 +247,8 @@ export type Database = {
         }
         Returns: undefined
       }
+      get_daily_free_uses: { Args: { p_user_id: string }; Returns: number }
+      get_remaining_free_uses: { Args: { p_user_id: string }; Returns: number }
       refund_credits: {
         Args: { p_amount: number; p_reason?: string; p_user_id: string }
         Returns: undefined

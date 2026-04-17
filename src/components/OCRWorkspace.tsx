@@ -221,6 +221,7 @@ const OCRWorkspace = ({
     isUnlimited: quotaUnlimited,
     loading: quotaLoading,
     refresh: refreshQuota,
+    deductCredit,
   } = useOcrQuota();
 
   const startOcr = useCallback(async () => {
@@ -307,13 +308,18 @@ const OCRWorkspace = ({
         return;
       }
       setPhase(ok ? "result" : "edit");
-      if (ok) refreshQuota();
+      if (ok) {
+        // Deduct from daily free uses or credits
+        await deductCredit();
+        refreshQuota();
+      }
     } finally {
       clearCancelRequest();
     }
   }, [
     clearCancelRequest,
     clearOcrLoadingUi,
+    deductCredit,
     editFile,
     enhance,
     isCancelRequested,
