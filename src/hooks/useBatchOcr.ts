@@ -42,6 +42,12 @@ function toVietnameseOcrError(raw: string): string {
   if (!msg) return "Đã xảy ra lỗi khi OCR. Vui lòng thử lại.";
 
   const lower = msg.toLowerCase();
+  if (lower.includes("gemini") && lower.includes("api 503")) {
+    return "Gemini đang quá tải (503). Vui lòng thử lại sau ít phút.";
+  }
+  if (lower.includes("high demand")) {
+    return "Hệ thống OCR đang quá tải. Vui lòng thử lại sau ít phút.";
+  }
   if (lower.includes("missing authorization")) return "Thiếu đăng nhập/phiên làm việc. Vui lòng đăng nhập lại.";
   if (lower.includes("timed out") || lower.includes("timeout")) return "OCR bị quá thời gian. Vui lòng thử lại.";
   if (lower.includes("resource_limit")) return "Hệ thống xử lý quá tải. Vui lòng thử lại sau.";
@@ -186,6 +192,46 @@ export function useBatchOcr(files: File[]) {
     setHistoryPageImageDatas([]);
 
     try {
+      const isRetryableGeminiOverload = (status: number, body: unknown): boolean => {
+        if (status === 503) return true;
+        const text =
+          typeof body === "string"
+            ? body
+            : body && typeof body === "object"
+              ? JSON.stringify(body)
+              : "";
+        const lower = text.toLowerCase();
+        return lower.includes("high demand") || lower.includes("overload") || lower.includes("rate limit");
+      };
+
+      const backoffDelayMs = (attempt: number) => {
+        const base = 800 * Math.pow(2, Math.max(0, attempt - 1));
+        const jitter = Math.floor(Math.random() * 250);
+        return Math.min(8000, base + jitter);
+      };
+
+      const fetchJsonWithRetry = async <T,>(
+        url: string,
+        init: RequestInit,
+        opts: { maxAttempts?: number },
+      ): Promise<{ res: Response; data: T | null }> => {
+        const maxAttempts = opts.maxAttempts ?? 4;
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          if (signal.aborted) throw new Error("AbortError");
+          const res = await fetch(url, init);
+          const data = (await res.json().catch(() => null)) as T | null;
+          if (res.ok) return { res, data };
+
+          if (attempt < maxAttempts && isRetryableGeminiOverload(res.status, data)) {
+            toast.info(`Hệ thống OCR đang quá tải, đang thử lại (${attempt + 1}/${maxAttempts})…`);
+            await sleep(backoffDelayMs(attempt));
+            continue;
+          }
+          return { res, data };
+        }
+        return { res: new Response(null, { status: 503 }), data: null };
+      };
+
       // Client-side limits (fast feedback)
       const maxImages = 30;
       if (files.length > maxImages) {
@@ -221,17 +267,20 @@ export function useBatchOcr(files: File[]) {
         }),
       );
 
-      const r = await fetch(`${OCR_FUNCTION_URL}/batch`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+      const { res: r, data } = await fetchJsonWithRetry<unknown>(
+        `${OCR_FUNCTION_URL}/batch`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ images }),
+          signal,
         },
-        body: JSON.stringify({ images }),
-        signal,
-      });
+        { maxAttempts: 4 },
+      );
 
-      const data: unknown = await r.json().catch(() => null);
       if (!r.ok) {
         const msg =
           data && isOcrErrorResponse(data) ? data.error : "OCR batch failed";

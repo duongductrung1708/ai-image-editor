@@ -61,6 +61,12 @@ function toVietnameseOcrError(raw: string): string {
   if (!msg) return "Đã xảy ra lỗi khi OCR. Vui lòng thử lại.";
 
   const lower = msg.toLowerCase();
+  if (lower.includes("gemini") && lower.includes("api 503")) {
+    return "Gemini đang quá tải (503). Vui lòng thử lại sau ít phút.";
+  }
+  if (lower.includes("high demand")) {
+    return "Hệ thống OCR đang quá tải. Vui lòng thử lại sau ít phút.";
+  }
   if (lower.includes("missing authorization")) return "Thiếu đăng nhập/phiên làm việc. Vui lòng đăng nhập lại.";
   if (lower.includes("insufficient_credits")) return "Bạn không đủ credits để thực hiện OCR.";
   if (lower.includes("timed out") || lower.includes("timeout")) return "OCR bị quá thời gian. Vui lòng thử lại.";
@@ -117,6 +123,51 @@ export function useSingleImageOcr() {
     let historyRowId: string | null = null;
 
     try {
+      const isRetryableGeminiOverload = (status: number, body: unknown): boolean => {
+        if (status === 503) return true;
+        const text =
+          typeof body === "string"
+            ? body
+            : body && typeof body === "object"
+              ? JSON.stringify(body)
+              : "";
+        const lower = text.toLowerCase();
+        return lower.includes("high demand") || lower.includes("overload") || lower.includes("rate limit");
+      };
+
+      const backoffDelayMs = (attempt: number) => {
+        const base = 800 * Math.pow(2, Math.max(0, attempt - 1));
+        const jitter = Math.floor(Math.random() * 250);
+        return Math.min(8000, base + jitter);
+      };
+
+      const fetchJsonWithRetry = async <T,>(
+        url: string,
+        init: RequestInit,
+        opts: { maxAttempts?: number; label?: string },
+      ): Promise<{ res: Response; data: T | null }> => {
+        const maxAttempts = opts.maxAttempts ?? 4;
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          if (ocrCancelRequestedRef.current || signal.aborted) {
+            throw new Error("AbortError");
+          }
+          const res = await fetch(url, init);
+          const data = (await res.json().catch(() => null)) as T | null;
+          if (res.ok) return { res, data };
+
+          if (attempt < maxAttempts && isRetryableGeminiOverload(res.status, data)) {
+            setLoadingLabel(
+              `${opts.label || "Đang OCR"} (quá tải, thử lại ${attempt + 1}/${maxAttempts})…`,
+            );
+            await sleep(backoffDelayMs(attempt));
+            continue;
+          }
+          return { res, data };
+        }
+        // Should not reach.
+        return { res: new Response(null, { status: 503 }), data: null };
+      };
+
       setLoadingLabel("Đang mã hóa ảnh...");
       setLoadingProgress(25);
       // Downscale để giảm khả năng Supabase worker bị RESOURCE_LIMIT (546)
@@ -154,7 +205,10 @@ export function useSingleImageOcr() {
 
       if (useAsyncJobs) {
         // Start job, return jobId quickly, then poll until done.
-        const r0 = await fetch(OCR_JOB_START_URL, {
+        const { res: r0, data: startData } = await fetchJsonWithRetry<{
+          jobId?: string;
+          error?: string;
+        }>(OCR_JOB_START_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -162,9 +216,7 @@ export function useSingleImageOcr() {
           },
           body: JSON.stringify(bodyBase),
           signal,
-        });
-        const startData: { jobId?: string; error?: string } | null =
-          await r0.json().catch(() => null);
+        }, { label: "Đang tạo OCR job" });
         if (!r0.ok || !startData?.jobId) {
           const msg = startData?.error || "Không thể tạo OCR job";
           throw new Error(msg);
@@ -183,23 +235,15 @@ export function useSingleImageOcr() {
             throw new Error("OCR job timed out");
           }
 
-          const rj = await fetch(`${OCR_JOB_GET_URL}?id=${encodeURIComponent(jobId)}`, {
-            method: "GET",
-            headers: { Authorization: `Bearer ${accessToken}` },
-            signal,
-          });
-          const job:
-            | {
-                status?: string;
-                result?: {
-                  markdown?: string;
-                  full_text?: string;
-                  blocks?: BoundingBox[];
-                };
-                error?: string | null;
-              }
-            | null = await rj.json().catch(() => null);
-
+          const { res: rj, data: job } = await fetchJsonWithRetry<{
+            status?: string;
+            result?: { markdown?: string; full_text?: string; blocks?: BoundingBox[] };
+            error?: string | null;
+          }>(
+            `${OCR_JOB_GET_URL}?id=${encodeURIComponent(jobId)}`,
+            { method: "GET", headers: { Authorization: `Bearer ${accessToken}` }, signal },
+            { maxAttempts: 3, label: "Đang lấy trạng thái OCR job" },
+          );
           if (!rj.ok) {
             const msg = job?.error || "Không thể lấy trạng thái OCR job";
             throw new Error(msg);
@@ -227,19 +271,23 @@ export function useSingleImageOcr() {
           await sleep(1200);
         }
       } else {
-        const r = await fetch(OCR_FUNCTION_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
+        const { res: r, data: dataOut } = await fetchJsonWithRetry<OcrApiResponse>(
+          OCR_FUNCTION_URL,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(liteFirst ? { ...bodyBase, lite: true } : bodyBase),
+            signal,
           },
-          body: JSON.stringify(liteFirst ? { ...bodyBase, lite: true } : bodyBase),
-          signal,
-        });
+          { label: "Đang OCR" },
+        );
 
         setLoadingLabel("Đang phân tích kết quả...");
         setLoadingProgress(80);
-        data = await r.json().catch(() => null);
+        data = dataOut;
         if (!r.ok) {
           const msg =
             data && isOcrErrorResponse(data) ? data.error : "OCR failed";
