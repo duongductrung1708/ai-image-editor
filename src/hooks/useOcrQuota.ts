@@ -18,26 +18,17 @@ export function useOcrQuota() {
       return;
     }
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const iso = startOfDay.toISOString();
+    // Call get_daily_free_uses to ensure today's record exists and get the count
+    const { data, error } = await supabase.rpc("get_daily_free_uses", {
+      p_user_id: user.id,
+    } as never);
 
-    const [singleRes, batchRes] = await Promise.all([
-      supabase
-        .from("ocr_history")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .gte("created_at", iso),
-      supabase
-        .from("ocr_batch_sessions")
-        .select("page_count")
-        .eq("user_id", user.id)
-        .gte("created_at", iso),
-    ]);
-
-    const singleCount = singleRes.count ?? 0;
-    const batchPageCount = (batchRes.data ?? []).reduce((s, r) => s + (r.page_count ?? 0), 0);
-    setTodayCount(singleCount + batchPageCount);
+    if (error) {
+      console.error("[v0] Error fetching daily uses:", error);
+      setTodayCount(0);
+    } else {
+      setTodayCount(data ?? 0);
+    }
     setLoading(false);
   }, [user]);
 
@@ -63,15 +54,29 @@ export function useOcrQuota() {
         ? balance + freeDailyRemaining
         : freeDailyRemaining;
 
-  /** Call after a successful OCR to deduct 1 credit if free daily is exhausted */
+  /** Call after a successful OCR to deduct 1 daily use. Returns true if free use was deducted, false if credit should be used */
   const deductCredit = useCallback(async () => {
     if (!user) return;
-    // Re-check: if today's count >= free limit, deduct a credit
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
 
-    // We just did an OCR so todayCount is stale; check if free was already used
-    if (todayCount >= FREE_DAILY_LIMIT && balance > 0) {
+    // Try to deduct from daily free uses
+    const { data: deducted, error } = await supabase.rpc("deduct_daily_use", {
+      p_user_id: user.id,
+    } as never);
+
+    if (error) {
+      console.error("[v0] Error deducting daily use:", error);
+      return;
+    }
+
+    // If deducted successfully (true), free use was consumed
+    if (deducted === true) {
+      // Refresh the quota display
+      fetchCount();
+      return;
+    }
+
+    // If deducted is false, free uses are exhausted, so deduct a credit instead
+    if (balance > 0) {
       await supabase.rpc("deduct_credit" as never, { p_user_id: user.id } as never).then(() => {
         // Also log the transaction
         supabase.from("credit_transactions").insert({
@@ -83,7 +88,7 @@ export function useOcrQuota() {
       });
       refreshCredits();
     }
-  }, [user, todayCount, balance, refreshCredits]);
+  }, [user, balance, refreshCredits, fetchCount]);
 
   return {
     todayCount,

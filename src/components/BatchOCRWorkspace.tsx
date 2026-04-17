@@ -104,6 +104,7 @@ const BatchOCRWorkspace = ({
     isUnlimited: quotaUnlimited,
     loading: quotaLoading,
     refresh: refreshQuota,
+    deductCredit,
   } = useOcrQuota();
 
   useEffect(() => {
@@ -156,9 +157,16 @@ const BatchOCRWorkspace = ({
       return;
     }
     void runBatch().then(() => {
+      // For batch OCR: deduct the number of pages that were successfully OCR'd
+      // We call deductCredit for each successfully processed page
+      if (lastBatchMeta?.okCount) {
+        for (let i = 0; i < lastBatchMeta.okCount; i++) {
+          void deductCredit();
+        }
+      }
       refreshQuota();
     });
-  }, [quotaCanUse, runBatch, refreshQuota, user]);
+  }, [quotaCanUse, runBatch, refreshQuota, deductCredit, lastBatchMeta, user]);
 
   const handleToolbarReprocess = useCallback(() => {
     if (phase === "result") guardedRunBatch();
