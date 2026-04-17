@@ -9,6 +9,7 @@ import {
   RefreshCw,
   XCircle,
 } from "lucide-react";
+import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,6 +19,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+const ToolbarTooltipButton = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<typeof Button> & { tooltip: string }
+>(({ tooltip, ...props }, ref) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button ref={ref} {...props} />
+    </TooltipTrigger>
+    <TooltipContent side="bottom">{tooltip}</TooltipContent>
+  </Tooltip>
+));
+ToolbarTooltipButton.displayName = "ToolbarTooltipButton";
 
 interface OCRToolbarProps {
   fileName: string;
@@ -170,19 +184,15 @@ const OCRToolbar = ({
         </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  disabled={!hasText || isProcessing}
-                  className="gap-1.5"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Tải
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Tải kết quả OCR</TooltipContent>
-            </Tooltip>
+            <ToolbarTooltipButton
+              size="sm"
+              disabled={!hasText || isProcessing}
+              className="gap-1.5"
+              tooltip="Tải kết quả OCR"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Tải
+            </ToolbarTooltipButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onDownloadMarkdown}>

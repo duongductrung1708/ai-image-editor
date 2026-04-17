@@ -7,6 +7,8 @@ export type ImageCropperApi = {
   exportCroppedBlob: () => Promise<Blob>;
   rotate: (deg: number) => void;
   flipHorizontal: () => void;
+  /** Freeze current crop/canvas against the next layout tick. */
+  freezeView: () => void;
   /** Reset ALL transforms: rotate/flip/zoom + crop box. */
   resetAll: () => void;
   /** Reset ONLY crop box to cover the whole image. */
@@ -115,6 +117,24 @@ const ImageCropper = ({
         const current = typeof img.scaleX === "number" ? img.scaleX : 1;
         const next = current === -1 ? 1 : -1;
         inst.scaleX(next);
+      },
+      freezeView: () => {
+        const inst = cropperInstanceRef.current;
+        if (!inst) return;
+        try {
+          const canvas = inst.getCanvasData();
+          const cropBox = inst.getCropBoxData();
+          requestAnimationFrame(() => {
+            try {
+              inst.setCanvasData(canvas);
+              inst.setCropBoxData(cropBox);
+            } catch {
+              // ignore
+            }
+          });
+        } catch {
+          // ignore
+        }
       },
       resetAll: () => {
         cropperInstanceRef.current?.reset();

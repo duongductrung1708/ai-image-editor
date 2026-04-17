@@ -292,6 +292,9 @@ const OCRWorkspace = ({
       }
 
       // After we captured the crop, we can safely transition UI/layout.
+      // Freeze crop view for the next layout tick (prevents tiny crop-box shifts
+      // when phase/toolbar/history changes cause Cropper reflow).
+      cropperApiRef.current?.freezeView();
       setShowHistory(false);
       setActiveTab("markdown");
       setPhase("processing");
@@ -517,15 +520,13 @@ const OCRWorkspace = ({
         showReprocess={phase === "result"}
         onCancelProcessing={ocrPipelineBusy ? cancelProcessing : undefined}
       />
-      {ocrPipelineBusy && (
-        <div className="border-b border-border bg-card px-4 py-2">
-          <Progress value={loadingProgress} className="h-2" />
-        </div>
-      )}
-
-      {lastError && (
-        <div className="border-b border-border bg-card px-4 py-2">
-          <Alert variant="destructive" className="flex items-start justify-between gap-3">
+      {/* Fixed-height status area to avoid layout shifts (Cropper/ImageViewer glitches) */}
+      <div className="border-b border-border bg-card px-4 py-2 min-h-[56px] flex items-center">
+        {lastError ? (
+          <Alert
+            variant="destructive"
+            className="w-full flex items-start justify-between gap-3"
+          >
             <div className="min-w-0">
               <AlertTitle>Lỗi OCR</AlertTitle>
               <AlertDescription>
@@ -544,8 +545,14 @@ const OCRWorkspace = ({
               <X className="h-4 w-4" />
             </Button>
           </Alert>
-        </div>
-      )}
+        ) : ocrPipelineBusy ? (
+          <div className="w-full">
+            <Progress value={loadingProgress} className="h-2" />
+          </div>
+        ) : (
+          <div className="w-full" />
+        )}
+      </div>
 
       {phase === "result" ? (
         <>

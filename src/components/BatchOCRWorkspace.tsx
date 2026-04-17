@@ -198,10 +198,13 @@ const BatchOCRWorkspace = ({
         showPdf={phase === "result"}
         onCancelProcessing={phase === "processing" ? cancelBatch : undefined}
       />
-
-      {lastError && (
-        <div className="border-b border-border bg-card px-4 py-2">
-          <Alert variant="destructive" className="flex items-start justify-between gap-3">
+      {/* Fixed-height status area to avoid layout shifts */}
+      <div className="border-b border-border bg-card px-4 py-2 min-h-[56px] flex items-center">
+        {lastError ? (
+          <Alert
+            variant="destructive"
+            className="w-full flex items-start justify-between gap-3"
+          >
             <div className="min-w-0">
               <AlertTitle>Lỗi OCR</AlertTitle>
               <AlertDescription>
@@ -220,8 +223,10 @@ const BatchOCRWorkspace = ({
               <X className="h-4 w-4" />
             </Button>
           </Alert>
-        </div>
-      )}
+        ) : (
+          <div className="w-full" />
+        )}
+      </div>
 
       {phase === "processing" && (
         <BatchProcessingView
