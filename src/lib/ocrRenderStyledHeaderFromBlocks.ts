@@ -64,7 +64,7 @@ function stripMatchingPrefix(
       .trim()
       .replace(/\s+/g, " ")
       .replace(/[*_`#]+/g, "")
-      .replace(/[\[\]]/g, "")
+      .replace(/\[|\]/g, "")
       .replace(/[()]/g, "")
       .replace(/[:：]/g, "")
       .trim()

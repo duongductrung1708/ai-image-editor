@@ -100,7 +100,7 @@ function getRateLimitOcrPerWindow(): number {
 async function chargeCreditsOrThrow(opts: {
   userId: string;
   amount: number;
-  srvClient: any;
+  srvClient: ReturnType<typeof createClient>;
 }): Promise<number> {
   const { userId, amount, srvClient } = opts;
   if (amount <= 0) return 0;
@@ -125,7 +125,7 @@ async function chargeCreditsOrThrow(opts: {
 async function refundCreditsBestEffort(opts: {
   userId: string;
   amount: number;
-  srvClient: any;
+  srvClient: ReturnType<typeof createClient>;
   reason: string;
 }) {
   const { userId, amount, srvClient, reason } = opts;

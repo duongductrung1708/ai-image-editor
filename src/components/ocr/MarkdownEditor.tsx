@@ -172,7 +172,7 @@ const MarkdownEditor = ({
 
       type Cell = {
         pos: number;
-        node: any;
+        node: { type?: { name?: string } };
         row: number;
         col: number;
       };
