@@ -54,29 +54,46 @@ const ImageCropper = ({
 
             const container = inst.getContainerData();
             const image = inst.getImageData();
-            const angle = (((image.rotate ?? 0) % 360) + 360) % 360;
-            const rotated = angle === 90 || angle === 270;
 
-            const naturalW = rotated ? image.naturalHeight : image.naturalWidth;
-            const naturalH = rotated ? image.naturalWidth : image.naturalHeight;
-            if (!naturalW || !naturalH) return;
+            // Use real canvas size after rotation (more reliable than natural WxH).
+            let canvas = inst.getCanvasData();
+            if (!canvas.width || !canvas.height) return;
 
-            // Fit to container while preserving aspect ratio.
-            const fitRatio = Math.min(container.width / naturalW, container.height / naturalH);
-            if (Number.isFinite(fitRatio) && fitRatio > 0) {
-              inst.zoomTo(fitRatio);
-              const canvasW = naturalW * fitRatio;
-              const canvasH = naturalH * fitRatio;
-              inst.setCanvasData({
-                left: (container.width - canvasW) / 2,
-                top: (container.height - canvasH) / 2,
-                width: canvasW,
-                height: canvasH,
-              });
+            // If canvas exceeds container, scale down (never scale up).
+            const scaleDown = Math.min(
+              1,
+              container.width / canvas.width,
+              container.height / canvas.height,
+            );
+            if (scaleDown < 1) {
+              const currentRatio = typeof image.ratio === "number" ? image.ratio : 1;
+              const nextRatio = currentRatio * scaleDown;
+              if (Number.isFinite(nextRatio) && nextRatio > 0) {
+                inst.zoomTo(nextRatio);
+                canvas = inst.getCanvasData();
+              }
             }
 
-            // Best-effort restore crop box position/size.
-            inst.setCropBoxData(cropBox);
+            // Center canvas within the visible container.
+            inst.setCanvasData({
+              left: (container.width - canvas.width) / 2,
+              top: (container.height - canvas.height) / 2,
+              width: canvas.width,
+              height: canvas.height,
+            });
+
+            // Keep crop-box SIZE but re-center it in the visible container.
+            // Restoring the old left/top (pre-rotate) often forces Cropper to shift the canvas.
+            const nextW = Math.min(cropBox.width, container.width);
+            const nextH = Math.min(cropBox.height, container.height);
+            const nextLeft = Math.max(0, (container.width - nextW) / 2);
+            const nextTop = Math.max(0, (container.height - nextH) / 2);
+            inst.setCropBoxData({
+              left: nextLeft,
+              top: nextTop,
+              width: nextW,
+              height: nextH,
+            });
           } catch {
             // Best-effort: some states may reject restoring, ignore.
           }
