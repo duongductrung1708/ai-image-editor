@@ -37,6 +37,20 @@ function normalizeOcrText(value: string): string {
   return out.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
 }
 
+function toVietnameseOcrError(raw: string): string {
+  const msg = (raw || "").trim();
+  if (!msg) return "Đã xảy ra lỗi khi OCR. Vui lòng thử lại.";
+
+  const lower = msg.toLowerCase();
+  if (lower.includes("missing authorization")) return "Thiếu đăng nhập/phiên làm việc. Vui lòng đăng nhập lại.";
+  if (lower.includes("timed out") || lower.includes("timeout")) return "OCR bị quá thời gian. Vui lòng thử lại.";
+  if (lower.includes("resource_limit")) return "Hệ thống xử lý quá tải. Vui lòng thử lại sau.";
+  if (lower === "ocr batch failed") return "OCR hàng loạt thất bại. Vui lòng thử lại.";
+  if (lower === "unexpected batch response") return "OCR hàng loạt trả về dữ liệu không đúng định dạng. Vui lòng thử lại.";
+
+  return msg;
+}
+
 export type BatchPhase = "ready" | "processing" | "result";
 
 export function useBatchOcr(files: File[]) {
@@ -348,7 +362,8 @@ export function useBatchOcr(files: File[]) {
         return;
       }
       console.error(e);
-      const msg = e instanceof Error ? e.message : "Lỗi khi xử lý hàng loạt.";
+      const msgRaw = e instanceof Error ? e.message : "Lỗi khi xử lý hàng loạt.";
+      const msg = toVietnameseOcrError(msgRaw);
       toast.error(msg);
       setLastError(msg);
       setPhase("ready");

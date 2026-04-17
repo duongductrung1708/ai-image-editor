@@ -56,6 +56,24 @@ function normalizeOcrText(value: string): string {
   return out;
 }
 
+function toVietnameseOcrError(raw: string): string {
+  const msg = (raw || "").trim();
+  if (!msg) return "Đã xảy ra lỗi khi OCR. Vui lòng thử lại.";
+
+  const lower = msg.toLowerCase();
+  if (lower.includes("missing authorization")) return "Thiếu đăng nhập/phiên làm việc. Vui lòng đăng nhập lại.";
+  if (lower.includes("insufficient_credits")) return "Bạn không đủ credits để thực hiện OCR.";
+  if (lower.includes("timed out") || lower.includes("timeout")) return "OCR bị quá thời gian. Vui lòng thử lại.";
+  if (lower.includes("resource_limit")) return "Hệ thống xử lý quá tải. Vui lòng thử lại sau.";
+  if (lower.includes("ocr api returned unexpected response")) return "OCR trả về dữ liệu không đúng định dạng. Vui lòng thử lại.";
+  if (lower === "ocr failed") return "OCR thất bại. Vui lòng thử lại.";
+  if (lower === "ocr job failed") return "OCR job thất bại. Vui lòng thử lại.";
+  if (lower === "ocr job timed out") return "OCR job bị quá thời gian. Vui lòng thử lại.";
+
+  // Default: keep original (some errors are already Vietnamese).
+  return msg;
+}
+
 /**
  * Gọi API OCR một ảnh, lưu lịch sử, hỗ trợ Abort / hủy.
  */
@@ -437,10 +455,11 @@ export function useSingleImageOcr() {
         return false;
       }
       console.error("OCR error:", err);
-      const msg =
+      const msgRaw =
         err instanceof Error && err.message
           ? err.message
           : "Lỗi khi xử lý hình ảnh. Vui lòng thử lại.";
+      const msg = toVietnameseOcrError(msgRaw);
       toast.error(msg);
       setLastError(msg);
     } finally {
