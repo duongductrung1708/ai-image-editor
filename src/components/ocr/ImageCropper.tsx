@@ -174,20 +174,40 @@ const ImageCropper = ({
     if (!el || !inst) return;
 
     // When the container resizes (history open/close, window resize, split drag),
-    // re-sync canvas + crop box to avoid visual glitches.
-    const ro = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
+    // do a *light* resize per tick, and debounce the heavy sync.
+    let rafId: number | null = null;
+    let tId: number | null = null;
+
+    const schedule = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
         try {
-          // While disabled (e.g. user clicked "Bắt đầu OCR"), avoid shifting the crop box.
-          // Only keep the canvas synced to prevent visual glitches.
-          syncCropperToContainer(inst, { adjustCropBox: !disabledRef.current });
+          // Light: let Cropper adapt without moving the crop box each frame.
+          const maybe = inst as unknown as { resize?: () => void };
+          maybe.resize?.();
         } catch {
           // ignore
         }
       });
-    });
+
+      if (tId) window.clearTimeout(tId);
+      tId = window.setTimeout(() => {
+        try {
+          // Heavy: after resizing settles, sync/center once.
+          syncCropperToContainer(inst, { adjustCropBox: !disabledRef.current });
+        } catch {
+          // ignore
+        }
+      }, 120);
+    };
+
+    const ro = new ResizeObserver(schedule);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (rafId) cancelAnimationFrame(rafId);
+      if (tId) window.clearTimeout(tId);
+    };
   }, [ready, src]);
 
   return (
