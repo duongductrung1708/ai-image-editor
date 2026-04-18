@@ -49,6 +49,12 @@ function toVietnameseOcrError(raw: string): string {
     return "Hệ thống OCR đang quá tải. Vui lòng thử lại sau ít phút.";
   }
   if (lower.includes("missing authorization")) return "Thiếu đăng nhập/phiên làm việc. Vui lòng đăng nhập lại.";
+  if (
+    lower.includes("insufficient_credits") ||
+    lower.includes("insufficient credits")
+  ) {
+    return "Bạn không đủ credits để thực hiện OCR.";
+  }
   if (lower.includes("timed out") || lower.includes("timeout")) return "OCR bị quá thời gian. Vui lòng thử lại.";
   if (lower.includes("resource_limit")) return "Hệ thống xử lý quá tải. Vui lòng thử lại sau.";
   if (lower === "ocr batch failed") return "OCR hàng loạt thất bại. Vui lòng thử lại.";
