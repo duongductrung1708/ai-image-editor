@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import DropZone from "@/components/DropZone";
 import OCRWorkspace from "@/components/OCRWorkspace";
@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import type { OcrHistoryEntry } from "@/components/ocr/OcrHistoryMobileDrawer";
 import {
   FileSearch,
   Files,
@@ -75,6 +76,117 @@ const AppPage = () => {
   } | null>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeBatchFiles, setResumeBatchFiles] = useState<File[] | null>(null);
+
+  const [inlineHistoryLoading, setInlineHistoryLoading] = useState(false);
+  const [inlineHistoryError, setInlineHistoryError] = useState<string | null>(null);
+  const [inlineHistoryEntry, setInlineHistoryEntry] = useState<OcrHistoryEntry | null>(null);
+  const [inlineSingleFile, setInlineSingleFile] = useState<File | null>(null);
+  const [inlineBatchFiles, setInlineBatchFiles] = useState<File[] | null>(null);
+  const hydrateNonceRef = useRef(0);
+
+  const isBatchEntry = useCallback((entry: { bounding_boxes: Json | null }) => {
+    const bb = entry.bounding_boxes;
+    return (
+      bb &&
+      typeof bb === "object" &&
+      !Array.isArray(bb) &&
+      (bb as { batch?: boolean }).batch === true
+    );
+  }, []);
+
+  const hydrateHistoryEntry = useCallback(async (entry: OcrHistoryEntry) => {
+    hydrateNonceRef.current += 1;
+    const nonce = hydrateNonceRef.current;
+
+    setInlineHistoryLoading(true);
+    setInlineHistoryError(null);
+    setInlineHistoryEntry(null);
+    setInlineSingleFile(null);
+    setInlineBatchFiles(null);
+
+    try {
+      if (isBatchEntry(entry)) {
+        const bb = entry.bounding_boxes as
+          | { batch_session_id?: string; pages?: Array<{ name?: string; image_data?: string | null }> }
+          | null;
+        const batchSessionId =
+          bb && typeof bb.batch_session_id === "string" ? bb.batch_session_id : null;
+
+        let pages: Array<{ file_name: string; image_data: string | null }> = [];
+        if (batchSessionId) {
+          const { data: pageRows } = await supabase
+            .from("ocr_batch_pages")
+            .select("file_name, image_data, page_index")
+            .eq("session_id", batchSessionId)
+            .order("page_index", { ascending: true });
+          pages = (pageRows ?? []).map((p) => ({
+            file_name: p.file_name,
+            image_data: p.image_data ?? null,
+          }));
+        }
+
+        if (pages.length === 0) {
+          const inlinePages = Array.isArray(bb?.pages) ? bb!.pages! : [];
+          pages = inlinePages.map((p, idx) => ({
+            file_name:
+              typeof p.name === "string" && p.name.trim() ? p.name : `Trang ${idx + 1}`,
+            image_data: p.image_data ?? null,
+          }));
+        }
+
+        const batchFiles = await Promise.all(
+          pages.map(async (p, idx) => {
+            if (p.image_data) {
+              const res = await fetch(p.image_data);
+              const blob = await res.blob();
+              const type = blob.type || "image/png";
+              return new File([blob], p.file_name || `page-${idx + 1}.png`, { type });
+            }
+            return new File([new Blob([])], p.file_name || `page-${idx + 1}.png`, {
+              type: "image/png",
+            });
+          }),
+        );
+
+        if (nonce !== hydrateNonceRef.current) return;
+        setInlineHistoryEntry(entry);
+        setInlineBatchFiles(batchFiles);
+        return;
+      }
+
+      // Single image entry
+      let file: File;
+      if (entry.image_data) {
+        const res = await fetch(entry.image_data);
+        const blob = await res.blob();
+        const type = blob.type || "image/png";
+        file = new File([blob], entry.image_name || "ocr-history.png", { type });
+      } else {
+        file = new File([new Blob([])], entry.image_name || "ocr-history.png", {
+          type: "image/png",
+        });
+      }
+
+      if (nonce !== hydrateNonceRef.current) return;
+      setInlineHistoryEntry(entry);
+      setInlineSingleFile(file);
+    } catch (e) {
+      if (nonce !== hydrateNonceRef.current) return;
+      const msg = e instanceof Error ? e.message : "Không thể mở bản ghi lịch sử.";
+      setInlineHistoryError(msg);
+    } finally {
+      if (nonce === hydrateNonceRef.current) setInlineHistoryLoading(false);
+    }
+  }, [isBatchEntry]);
+
+  const handleRequestOpenHistory = useCallback(
+    (entry: OcrHistoryEntry) => {
+      // Switching via sidebar should not mutate URL or require reload.
+      setFiles(null);
+      void hydrateHistoryEntry(entry);
+    },
+    [hydrateHistoryEntry],
+  );
 
   const handleFilesSelect = useCallback((picked: File[]) => {
     if (!picked.length) return;
@@ -147,67 +259,10 @@ const AppPage = () => {
         }
 
         if (cancelled) return;
-        const bb = entry.bounding_boxes;
-        const isBatch =
-          bb &&
-          typeof bb === "object" &&
-          !Array.isArray(bb) &&
-          (bb as { batch?: boolean }).batch === true;
-
-        if (isBatch) {
-          // Prefer loading pages from ocr_batch_pages (most reliable & includes image_data).
-          const batchSessionId =
-            typeof (bb as { batch_session_id?: string }).batch_session_id === "string"
-              ? (bb as { batch_session_id: string }).batch_session_id
-              : null;
-
-          let pages: Array<{ file_name: string; image_data: string | null }> = [];
-          if (batchSessionId) {
-            const { data: pageRows } = await supabase
-              .from("ocr_batch_pages")
-              .select("file_name, image_data, page_index")
-              .eq("session_id", batchSessionId)
-              .order("page_index", { ascending: true });
-            pages = (pageRows ?? []).map((p) => ({
-              file_name: p.file_name,
-              image_data: p.image_data ?? null,
-            }));
-          }
-
-          // Fallback: bounding_boxes.pages[] (older rows can still contain image_data here).
-          if (pages.length === 0) {
-            const inlinePages = Array.isArray((bb as { pages?: unknown }).pages)
-              ? ((bb as { pages?: Array<{ name?: string; image_data?: string | null }> }).pages ?? [])
-              : [];
-            pages = inlinePages.map((p, idx) => ({
-              file_name: typeof p.name === "string" && p.name.trim() ? p.name : `Trang ${idx + 1}`,
-              image_data: p.image_data ?? null,
-            }));
-          }
-
-          const batchFiles = await Promise.all(
-            pages.map(async (p, idx) => {
-              if (p.image_data) {
-                const res = await fetch(p.image_data);
-                const blob = await res.blob();
-                const type = blob.type || "image/png";
-                return new File([blob], p.file_name || `page-${idx + 1}.png`, { type });
-              }
-              return new File([new Blob([])], p.file_name || `page-${idx + 1}.png`, {
-                type: "image/png",
-              });
-            }),
-          );
-
-          if (cancelled) return;
-          setResumeEntry(entry);
-          setResumeBatchFiles(batchFiles.length > 0 ? batchFiles : [file]);
-          setResumeFile(null);
-          return;
+        // Deep link should hydrate into the same inline mechanism.
+        if (!cancelled) {
+          void hydrateHistoryEntry(entry as unknown as OcrHistoryEntry);
         }
-
-        setResumeEntry(entry);
-        setResumeFile(file);
       } catch (e: unknown) {
         if (cancelled) return;
         const msg =
@@ -251,41 +306,75 @@ const AppPage = () => {
       );
     }
 
-    if (resumeEntry && resumeBatchFiles && resumeBatchFiles.length > 0) {
-      return (
-        <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <BatchOCRWorkspace
-              files={resumeBatchFiles}
-              onBack={() => navigate("/app")}
-              onPickAnother={() => navigate("/app")}
-              initialHistoryEntry={resumeEntry}
-            />
+    // UI will be handled by the inline view below.
+  }
+
+  if (inlineHistoryLoading) {
+    return (
+      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+        <Navbar />
+        <div className="flex flex-1 items-center justify-center px-6">
+          <div className="text-sm text-muted-foreground">
+            Đang mở lịch sử OCR...
           </div>
         </div>
-      );
-    }
+      </div>
+    );
+  }
 
-    if (!resumeFile) {
-      return (
-        <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
-          <Navbar />
-          <div className="flex flex-1 items-center justify-center px-6">
-            <div className="text-sm text-muted-foreground">
-              Không thể tải ảnh từ lịch sử.
-            </div>
+  if (inlineHistoryError) {
+    return (
+      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+        <Navbar />
+        <div className="flex flex-1 items-center justify-center px-6">
+          <div className="max-w-md text-center">
+            <p className="text-sm text-destructive">{inlineHistoryError}</p>
           </div>
         </div>
-      );
-    }
+      </div>
+    );
+  }
 
+  if (inlineHistoryEntry && inlineBatchFiles && inlineBatchFiles.length > 0) {
+    return (
+      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <BatchOCRWorkspace
+            files={inlineBatchFiles}
+            onBack={() => {
+              setInlineHistoryEntry(null);
+              setInlineBatchFiles(null);
+              setInlineSingleFile(null);
+              navigate("/app");
+            }}
+            onPickAnother={() => {
+              setInlineHistoryEntry(null);
+              setInlineBatchFiles(null);
+              setInlineSingleFile(null);
+              navigate("/app");
+            }}
+            initialHistoryEntry={inlineHistoryEntry}
+            onRequestOpenHistory={handleRequestOpenHistory}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (inlineHistoryEntry && inlineSingleFile) {
     return (
       <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <OCRWorkspace
-            imageFile={resumeFile}
-            onBack={() => navigate("/app")}
-            initialHistoryEntry={resumeEntry}
+            imageFile={inlineSingleFile}
+            onBack={() => {
+              setInlineHistoryEntry(null);
+              setInlineBatchFiles(null);
+              setInlineSingleFile(null);
+              navigate("/app");
+            }}
+            initialHistoryEntry={inlineHistoryEntry}
+            onRequestOpenHistory={handleRequestOpenHistory}
           />
         </div>
       </div>
@@ -301,6 +390,7 @@ const AppPage = () => {
             files={files}
             onBack={clear}
             onPickAnother={clear}
+            onRequestOpenHistory={handleRequestOpenHistory}
           />
         </div>
       </div>
@@ -311,7 +401,11 @@ const AppPage = () => {
     return (
       <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <OCRWorkspace imageFile={files[0]} onBack={() => setFiles(null)} />
+          <OCRWorkspace
+            imageFile={files[0]}
+            onBack={() => setFiles(null)}
+            onRequestOpenHistory={handleRequestOpenHistory}
+          />
         </div>
       </div>
     );

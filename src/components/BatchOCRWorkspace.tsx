@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import type { OcrHistoryEntry } from "@/components/ocr/OcrHistoryMobileDrawer";
 import OCRToolbar from "@/components/ocr/OCRToolbar";
 import OcrHistoryMobileDrawer from "@/components/ocr/OcrHistoryMobileDrawer";
 import BatchProcessingView from "@/components/batch/BatchProcessingView";
@@ -23,6 +23,7 @@ interface BatchOCRWorkspaceProps {
   onBack: () => void;
   onPickAnother: () => void;
   initialHistoryEntry?: import("@/components/ocr/OcrHistoryMobileDrawer").OcrHistoryEntry | null;
+  onRequestOpenHistory?: (entry: OcrHistoryEntry) => void;
 }
 
 const BatchOCRWorkspace = ({
@@ -30,8 +31,8 @@ const BatchOCRWorkspace = ({
   onBack,
   onPickAnother,
   initialHistoryEntry = null,
+  onRequestOpenHistory,
 }: BatchOCRWorkspaceProps) => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const isLg = useIsLgScreen();
   const showHistory = useWorkspaceStore((s) => s.showHistory);
@@ -85,13 +86,12 @@ const BatchOCRWorkspace = ({
     (entry: import("@/components/ocr/OcrHistoryMobileDrawer").OcrHistoryEntry) => {
       setActiveHistoryId(entry.id);
       if (!isBatchHistoryEntry(entry)) {
-        // Switch to single-image workspace for single entries.
-        navigate(`/app?historyId=${entry.id}`);
+        onRequestOpenHistory?.(entry);
         return;
       }
       applyHistoryEntry(entry);
     },
-    [applyHistoryEntry, isBatchHistoryEntry, navigate],
+    [applyHistoryEntry, isBatchHistoryEntry, onRequestOpenHistory],
   );
 
   useEffect(() => {
@@ -100,9 +100,9 @@ const BatchOCRWorkspace = ({
     if (isBatchHistoryEntry(initialHistoryEntry)) {
       applyHistoryEntry(initialHistoryEntry);
     } else {
-      navigate(`/app?historyId=${initialHistoryEntry.id}`);
+      onRequestOpenHistory?.(initialHistoryEntry);
     }
-  }, [applyHistoryEntry, initialHistoryEntry, isBatchHistoryEntry, navigate]);
+  }, [applyHistoryEntry, initialHistoryEntry, isBatchHistoryEntry, onRequestOpenHistory]);
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText, {
     onMarkdownChange: setMarkdownText,

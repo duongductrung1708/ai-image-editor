@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import type { OcrHistoryEntry } from "@/components/ocr/OcrHistoryMobileDrawer";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -43,15 +43,16 @@ interface OCRWorkspaceProps {
     image_data: string | null;
     created_at: string;
   } | null;
+  onRequestOpenHistory?: (entry: OcrHistoryEntry) => void;
 }
 
 const OCRWorkspace = ({
   imageFile,
   onBack,
   initialHistoryEntry = null,
+  onRequestOpenHistory,
 }: OCRWorkspaceProps) => {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [imageUrl, setImageUrl] = useState("");
   const showHistory = useWorkspaceStore((s) => s.showHistory);
   const setShowHistory = useWorkspaceStore((s) => s.setShowHistory);
@@ -436,18 +437,11 @@ const OCRWorkspace = ({
   }, [toggleHistoryOpen]);
 
   const handleHistorySelect = useCallback(
-    (entry: {
-      id: string;
-      image_name: string;
-      extracted_text: string;
-      bounding_boxes: Json | null;
-      image_data: string | null;
-      created_at: string;
-    }) => {
+    (entry: OcrHistoryEntry) => {
       // If user selects a batch history entry while in single-image workspace,
       // switch to the batch workspace (AppPage will hydrate it).
       if (isBatchHistoryEntry(entry)) {
-        navigate(`/app?historyId=${entry.id}`);
+        onRequestOpenHistory?.(entry);
         return;
       }
 
@@ -460,16 +454,7 @@ const OCRWorkspace = ({
         lastOcrBlobUrlRef.current = null;
       }
 
-      const bbRaw = entry.bounding_boxes;
-      if (
-        bbRaw &&
-        typeof bbRaw === "object" &&
-        !Array.isArray(bbRaw) &&
-        (bbRaw as { batch?: boolean }).batch === true
-      ) {
-        // This branch is now handled above via navigate() for consistency.
-        return;
-      }
+      // entry is guaranteed non-batch here (handled above)
 
       const blocks: BoundingBox[] = Array.isArray(entry.bounding_boxes)
         ? (entry.bounding_boxes as unknown as BoundingBox[])
@@ -530,14 +515,7 @@ const OCRWorkspace = ({
         })();
       }
     },
-    [
-      isBatchHistoryEntry,
-      navigate,
-      setBoundingBoxes,
-      setCurrentHistoryId,
-      setJsonText,
-      setMarkdownText,
-    ],
+    [isBatchHistoryEntry, onRequestOpenHistory, setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText],
   );
 
   useEffect(() => {
