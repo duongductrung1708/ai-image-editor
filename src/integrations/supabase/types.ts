@@ -73,6 +73,7 @@ export type Database = {
           file_name: string
           full_text: string
           id: string
+          image_data: string | null
           markdown: string
           ok: boolean
           page_index: number
@@ -85,6 +86,7 @@ export type Database = {
           file_name?: string
           full_text?: string
           id?: string
+          image_data?: string | null
           markdown?: string
           ok?: boolean
           page_index: number
@@ -97,6 +99,7 @@ export type Database = {
           file_name?: string
           full_text?: string
           id?: string
+          image_data?: string | null
           markdown?: string
           ok?: boolean
           page_index?: number
