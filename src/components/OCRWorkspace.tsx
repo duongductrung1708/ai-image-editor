@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -50,6 +51,7 @@ const OCRWorkspace = ({
   initialHistoryEntry = null,
 }: OCRWorkspaceProps) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [imageUrl, setImageUrl] = useState("");
   const showHistory = useWorkspaceStore((s) => s.showHistory);
   const setShowHistory = useWorkspaceStore((s) => s.setShowHistory);
@@ -100,6 +102,16 @@ const OCRWorkspace = ({
   const qc = useQueryClient();
   const lastAutosavedRef = useRef<string>("");
   const autosaveTimerRef = useRef<number | null>(null);
+  const isBatchHistoryEntry = useCallback((entry: { bounding_boxes: Json | null }) => {
+    const bb = entry.bounding_boxes;
+    return (
+      bb &&
+      typeof bb === "object" &&
+      !Array.isArray(bb) &&
+      (bb as { batch?: boolean }).batch === true
+    );
+  }, []);
+
   const autosaveClearTimerRef = useRef<number | null>(null);
   const [autosaveUi, setAutosaveUi] = useState<
     | { state: "idle" }
@@ -432,6 +444,13 @@ const OCRWorkspace = ({
       image_data: string | null;
       created_at: string;
     }) => {
+      // If user selects a batch history entry while in single-image workspace,
+      // switch to the batch workspace (AppPage will hydrate it).
+      if (isBatchHistoryEntry(entry)) {
+        navigate(`/app?historyId=${entry.id}`);
+        return;
+      }
+
       setPhase("result");
       setEnhance(false);
       setCurrentHistoryId(entry.id);
@@ -448,32 +467,7 @@ const OCRWorkspace = ({
         !Array.isArray(bbRaw) &&
         (bbRaw as { batch?: boolean }).batch === true
       ) {
-        toast.info(
-          "Bản ghi OCR hàng loạt: hiển thị văn bản gộp; ảnh/bbox chỉ tương ứng trang đầu nếu có.",
-        );
-        setMarkdownText(entry.extracted_text);
-        setBoundingBoxes([]);
-        setJsonText(JSON.stringify(bbRaw, null, 2));
-        if (entry.image_data) {
-          setImageUrl(entry.image_data);
-          // Always fetch and update editFile to ensure ảnh changes when switching history
-          void (async () => {
-            try {
-              const res = await fetch(entry.image_data!);
-              const blob = await res.blob();
-              const type = blob.type || "image/png";
-              setEditFile(
-                new File([blob], entry.image_name || "ocr-history.png", {
-                  type,
-                }),
-              );
-            } catch {
-              // ignore
-            }
-          })();
-        } else {
-          setImageUrl("");
-        }
+        // This branch is now handled above via navigate() for consistency.
         return;
       }
 
@@ -536,7 +530,14 @@ const OCRWorkspace = ({
         })();
       }
     },
-    [setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText],
+    [
+      isBatchHistoryEntry,
+      navigate,
+      setBoundingBoxes,
+      setCurrentHistoryId,
+      setJsonText,
+      setMarkdownText,
+    ],
   );
 
   useEffect(() => {

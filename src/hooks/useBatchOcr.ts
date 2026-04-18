@@ -532,6 +532,37 @@ export function useBatchOcr(files: File[]) {
       Array.isArray((bb as { pages?: unknown }).pages)
     ) {
       const pages = (bb as { pages: OcrBatchPageResultWithImage[] }).pages;
+      const batchSessionId =
+        typeof (bb as { batch_session_id?: string }).batch_session_id === "string"
+          ? (bb as { batch_session_id: string }).batch_session_id
+          : null;
+
+      // Best-effort: enrich page previews from DB (some older rows might not
+      // have bounding_boxes.pages[].image_data).
+      if (batchSessionId) {
+        void (async () => {
+          try {
+            const { data } = await supabase
+              .from("ocr_batch_pages")
+              .select("page_index, image_data")
+              .eq("session_id", batchSessionId)
+              .order("page_index", { ascending: true });
+            const map = new Map<number, string | null>();
+            for (const row of data ?? []) {
+              map.set(row.page_index, row.image_data ?? null);
+            }
+            const merged = pages.map((p) => ({
+              ...p,
+              image_data: p.image_data ?? map.get(p.index) ?? null,
+            }));
+            setBatchPages(merged);
+            setHistoryPageImageDatas(merged.map((p) => p.image_data ?? null));
+          } catch {
+            // ignore (fallback to inline pages)
+          }
+        })();
+      }
+
       setBatchPages(pages);
       setMarkdownText(entry.extracted_text);
       setJsonText(

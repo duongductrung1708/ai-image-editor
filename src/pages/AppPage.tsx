@@ -86,6 +86,12 @@ const AppPage = () => {
 
   useEffect(() => {
     if (!historyId) return;
+    // If user navigates between different history items, clear any previously
+    // selected files so the history loader always takes precedence.
+    if (files && files.length > 0) {
+      setFiles(null);
+    }
+    // Wait for files to be cleared before continuing (prevents stale UI).
     if (files && files.length > 0) return;
 
     let cancelled = false;

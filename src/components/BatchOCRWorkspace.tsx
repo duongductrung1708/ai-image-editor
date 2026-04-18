@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import OCRToolbar from "@/components/ocr/OCRToolbar";
 import OcrHistoryMobileDrawer from "@/components/ocr/OcrHistoryMobileDrawer";
 import BatchProcessingView from "@/components/batch/BatchProcessingView";
@@ -30,6 +31,7 @@ const BatchOCRWorkspace = ({
   onPickAnother,
   initialHistoryEntry = null,
 }: BatchOCRWorkspaceProps) => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isLg = useIsLgScreen();
   const showHistory = useWorkspaceStore((s) => s.showHistory);
@@ -39,6 +41,15 @@ const BatchOCRWorkspace = ({
   const setBatchActiveTab = useWorkspaceStore((s) => s.setBatchActiveTab);
   const resetWorkspaceUi = useWorkspaceStore((s) => s.reset);
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const isBatchHistoryEntry = useCallback((entry: { bounding_boxes: unknown }) => {
+    const bb = entry.bounding_boxes;
+    return (
+      bb &&
+      typeof bb === "object" &&
+      !Array.isArray(bb) &&
+      (bb as { batch?: boolean }).batch === true
+    );
+  }, []);
   const [linkedBatchHighlight, setLinkedBatchHighlight] = useState<{
     pageIndex: number;
     indices: number[];
@@ -70,11 +81,28 @@ const BatchOCRWorkspace = ({
     applyHistoryEntry,
   } = useBatchOcr(files);
 
+  const selectHistory = useCallback(
+    (entry: import("@/components/ocr/OcrHistoryMobileDrawer").OcrHistoryEntry) => {
+      setActiveHistoryId(entry.id);
+      if (!isBatchHistoryEntry(entry)) {
+        // Switch to single-image workspace for single entries.
+        navigate(`/app?historyId=${entry.id}`);
+        return;
+      }
+      applyHistoryEntry(entry);
+    },
+    [applyHistoryEntry, isBatchHistoryEntry, navigate],
+  );
+
   useEffect(() => {
     if (!initialHistoryEntry) return;
     setActiveHistoryId(initialHistoryEntry.id);
-    applyHistoryEntry(initialHistoryEntry);
-  }, [applyHistoryEntry, initialHistoryEntry]);
+    if (isBatchHistoryEntry(initialHistoryEntry)) {
+      applyHistoryEntry(initialHistoryEntry);
+    } else {
+      navigate(`/app?historyId=${initialHistoryEntry.id}`);
+    }
+  }, [applyHistoryEntry, initialHistoryEntry, isBatchHistoryEntry, navigate]);
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText, {
     onMarkdownChange: setMarkdownText,
@@ -256,10 +284,10 @@ const BatchOCRWorkspace = ({
           showHistorySidebar={showHistory}
           isLg={isLg}
           onHistorySelect={(entry) => {
-            setActiveHistoryId(entry.id);
-            applyHistoryEntry(entry);
+            selectHistory(entry);
           }}
           historyRefresh={historyRefresh}
+          activeHistoryId={activeHistoryId}
         />
       )}
 
@@ -281,10 +309,7 @@ const BatchOCRWorkspace = ({
           {showHistory && isLg ? (
             <HistorySidebar
               isOpen={true}
-              onSelect={(entry) => {
-                setActiveHistoryId(entry.id);
-                applyHistoryEntry(entry);
-              }}
+              onSelect={selectHistory}
               refreshKey={historyRefresh}
               activeEntryId={activeHistoryId}
             />
@@ -313,8 +338,7 @@ const BatchOCRWorkspace = ({
           showHistory={showHistory}
           isLg={isLg}
           onHistorySelect={(entry) => {
-            setActiveHistoryId(entry.id);
-            applyHistoryEntry(entry);
+            selectHistory(entry);
           }}
           historyRefresh={historyRefresh}
           activeHistoryId={activeHistoryId}
@@ -328,10 +352,7 @@ const BatchOCRWorkspace = ({
           (phase === "ready" || phase === "processing" || phase === "result")
         }
         onClose={() => setShowHistory(false)}
-        onSelect={(entry) => {
-          setActiveHistoryId(entry.id);
-          applyHistoryEntry(entry);
-        }}
+        onSelect={selectHistory}
         refreshKey={historyRefresh}
         activeEntryId={activeHistoryId}
       />
