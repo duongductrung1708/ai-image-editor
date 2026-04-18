@@ -105,6 +105,8 @@ const BatchOCRWorkspace = ({
     loading: quotaLoading,
     refresh: refreshQuota,
     deductCredit,
+    balance,
+    freeDailyRemaining,
   } = useOcrQuota();
 
   useEffect(() => {
@@ -131,7 +133,12 @@ const BatchOCRWorkspace = ({
   }, [resetWorkspaceUi]);
 
   const guardedRunBatch = useCallback(() => {
-    if (!quotaCanUse) {
+    // Check if user has enough quota for ALL files in the batch
+    const totalQuotaNeeded = files.length;
+    const availableQuota = freeDailyRemaining + (balance > 0 ? balance : 0);
+    const hasEnoughQuota = availableQuota >= totalQuotaNeeded;
+
+    if (!hasEnoughQuota) {
       if (!user) {
         toast.error("Vui lòng đăng nhập để sử dụng OCR.", {
           action: {
@@ -144,7 +151,7 @@ const BatchOCRWorkspace = ({
         });
       } else {
         toast.error(
-          "Bạn đã hết lượt OCR miễn phí hôm nay. Nâng cấp Pro để không giới hạn.",
+          `Không đủ lượt OCR cho ${totalQuotaNeeded} ảnh. Bạn có ${freeDailyRemaining} lượt miễn phí${balance > 0 ? ` và ${balance} credits` : ""}.`,
           {
             action: {
               label: "Nâng cấp",
@@ -166,7 +173,7 @@ const BatchOCRWorkspace = ({
       }
       refreshQuota();
     });
-  }, [quotaCanUse, runBatch, refreshQuota, deductCredit, lastBatchMeta, user]);
+  }, [quotaCanUse, runBatch, refreshQuota, deductCredit, lastBatchMeta, user, freeDailyRemaining, balance, files]);
 
   const handleToolbarReprocess = useCallback(() => {
     if (phase === "result") guardedRunBatch();
