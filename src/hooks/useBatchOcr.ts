@@ -20,6 +20,10 @@ import {
 const OCR_FUNCTION_URL =
   `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-vietnamese`;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function normalizeOcrText(value: string): string {
   if (!value) return "";
   let out = value.trim();
@@ -57,6 +61,9 @@ function toVietnameseOcrError(raw: string): string {
   }
   if (lower.includes("timed out") || lower.includes("timeout")) return "OCR bị quá thời gian. Vui lòng thử lại.";
   if (lower.includes("resource_limit")) return "Hệ thống xử lý quá tải. Vui lòng thử lại sau.";
+  if (lower.includes("rate limit") || lower.includes("too many requests")) {
+    return "Bạn đã gửi quá nhiều yêu cầu OCR trong thời gian ngắn. Vui lòng đợi một lát rồi thử lại.";
+  }
   if (lower === "ocr batch failed") return "OCR hàng loạt thất bại. Vui lòng thử lại.";
   if (lower === "unexpected batch response") return "OCR hàng loạt trả về dữ liệu không đúng định dạng. Vui lòng thử lại.";
 
@@ -179,8 +186,8 @@ export function useBatchOcr(files: File[]) {
     );
   }, [batchPages]);
 
-  const runBatch = useCallback(async () => {
-    if (isProcessing || files.length === 0) return;
+  const runBatch = useCallback(async (): Promise<number> => {
+    if (isProcessing || files.length === 0) return 0;
     batchAbortRef.current?.abort();
     const controller = new AbortController();
     batchAbortRef.current = controller;
@@ -199,7 +206,7 @@ export function useBatchOcr(files: File[]) {
 
     try {
       const isRetryableGeminiOverload = (status: number, body: unknown): boolean => {
-        if (status === 503) return true;
+        if (status === 503 || status === 429) return true;
         const text =
           typeof body === "string"
             ? body
@@ -408,6 +415,8 @@ export function useBatchOcr(files: File[]) {
       } else {
         toast.success(`Đã OCR xong ${okCount} trang.`);
       }
+
+      return okCount;
     } catch (e) {
       const aborted =
         (e instanceof DOMException && e.name === "AbortError") ||
@@ -415,7 +424,7 @@ export function useBatchOcr(files: File[]) {
       if (aborted) {
         setPhase("ready");
         toast.info("Đã hủy OCR hàng loạt.");
-        return;
+        return 0;
       }
       console.error(e);
       const msgRaw = e instanceof Error ? e.message : "Lỗi khi xử lý hàng loạt.";
@@ -423,6 +432,7 @@ export function useBatchOcr(files: File[]) {
       toast.error(msg);
       setLastError(msg);
       setPhase("ready");
+      return 0;
     } finally {
       if (batchAbortRef.current === controller) {
         batchAbortRef.current = null;

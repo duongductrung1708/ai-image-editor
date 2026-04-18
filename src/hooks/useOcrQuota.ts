@@ -90,6 +90,29 @@ export function useOcrQuota() {
     }
   }, [user, balance, refreshCredits, fetchCount]);
 
+  /**
+   * After batch OCR: consume up to `maxSlots` daily free uses (one RPC each) until the DB reports none left.
+   * Paid pages are billed on the server via `charge_credits`; do not call `deduct_credit` here.
+   */
+  const deductDailyFreeUsesUpTo = useCallback(
+    async (maxSlots: number) => {
+      if (!user || maxSlots <= 0) return;
+      const cap = Math.min(Math.floor(maxSlots), 100);
+      for (let i = 0; i < cap; i += 1) {
+        const { data: deducted, error } = await supabase.rpc("deduct_daily_use", {
+          p_user_id: user.id,
+        } as never);
+        if (error) {
+          console.error("[v0] Error deducting daily use (batch):", error);
+          break;
+        }
+        if (deducted !== true) break;
+      }
+      await fetchCount();
+    },
+    [user, fetchCount],
+  );
+
   return {
     todayCount,
     remaining,
@@ -103,5 +126,6 @@ export function useOcrQuota() {
     ready,
     refresh: () => { fetchCount(); refreshCredits(); },
     deductCredit,
+    deductDailyFreeUsesUpTo,
   };
 }

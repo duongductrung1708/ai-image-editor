@@ -99,12 +99,11 @@ const BatchOCRWorkspace = ({
   );
 
   const {
-    canUse: quotaCanUse,
     remaining: quotaRemaining,
     isUnlimited: quotaUnlimited,
     loading: quotaLoading,
     refresh: refreshQuota,
-    deductCredit,
+    deductDailyFreeUsesUpTo,
     balance,
     freeDailyRemaining,
   } = useOcrQuota();
@@ -163,17 +162,15 @@ const BatchOCRWorkspace = ({
       }
       return;
     }
-    void runBatch().then(async () => {
-      // For batch OCR: deduct the number of pages that were successfully OCR'd
-      // We call deductCredit for each successfully processed page sequentially to avoid race conditions
-      if (lastBatchMeta?.okCount) {
-        for (let i = 0; i < lastBatchMeta.okCount; i++) {
-          await deductCredit();
-        }
-      }
+    void runBatch().then(async (okCount) => {
+      // Sync daily free uses with successful pages. `runBatch` resolves before React re-renders, so we must
+      // use the returned `okCount` — not `lastBatchMeta` from closure (it would still be stale/null).
+      // Credits for paid slots are charged in the Edge Function; only `deduct_daily_use` belongs here.
+      const n = typeof okCount === "number" ? okCount : 0;
+      if (n > 0) await deductDailyFreeUsesUpTo(n);
       refreshQuota();
     });
-  }, [quotaCanUse, runBatch, refreshQuota, deductCredit, lastBatchMeta, user, freeDailyRemaining, balance, files]);
+  }, [runBatch, refreshQuota, deductDailyFreeUsesUpTo, user, freeDailyRemaining, balance, files]);
 
   const handleToolbarReprocess = useCallback(() => {
     if (phase === "result") guardedRunBatch();

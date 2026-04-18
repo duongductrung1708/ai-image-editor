@@ -1704,6 +1704,8 @@ serve(async (req) => {
 
       const creditsPerImage = getCreditsPerImage();
       const remainingFree = Number(remainingFreeUses) || 0;
+      // First N pages (by index) are covered by daily free quota on this request; the rest were charged credits.
+      const freeSlotsForBatch = Math.min(tasks.length, remainingFree);
       // Number of images that need to be charged (after using up free uses)
       const imagesToCharge = Math.max(0, tasks.length - remainingFree);
       const chargeAmount = imagesToCharge * creditsPerImage;
@@ -1786,11 +1788,15 @@ serve(async (req) => {
         .map((p) => p.full_text || p.markdown)
         .join("\n\n");
 
-      const failCount = pages.filter((p) => !p.ok).length;
-      if (failCount > 0) {
+      // Only refund credits for failures in *paid* slots. Free-tier failures were never charged.
+      const paidFailureCount = pages.filter(
+        (p) => !p.ok && p.index >= freeSlotsForBatch,
+      ).length;
+      const refundAmount = paidFailureCount * creditsPerImage;
+      if (refundAmount > 0) {
         await refundCreditsBestEffort({
           userId: user.id,
-          amount: failCount * creditsPerImage,
+          amount: refundAmount,
           srvClient,
           reason: "batch_page_failed",
         });
@@ -1878,12 +1884,14 @@ serve(async (req) => {
     try {
       payload = await runSingleOcr(singleImage, body?.mimeType, overrideMode);
     } catch (err) {
-      await refundCreditsBestEffort({
-        userId: user.id,
-        amount: creditsPerImage,
-        srvClient,
-        reason: "single_ocr_failed",
-      });
+      if (chargeAmount > 0) {
+        await refundCreditsBestEffort({
+          userId: user.id,
+          amount: chargeAmount,
+          srvClient,
+          reason: "single_ocr_failed",
+        });
+      }
       throw err;
     }
       console.log(`[ocr] provider ok ms=${Date.now() - t0}`);

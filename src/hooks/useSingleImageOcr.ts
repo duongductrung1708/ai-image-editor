@@ -76,6 +76,9 @@ function toVietnameseOcrError(raw: string): string {
   }
   if (lower.includes("timed out") || lower.includes("timeout")) return "OCR bị quá thời gian. Vui lòng thử lại.";
   if (lower.includes("resource_limit")) return "Hệ thống xử lý quá tải. Vui lòng thử lại sau.";
+  if (lower.includes("rate limit") || lower.includes("too many requests")) {
+    return "Bạn đã gửi quá nhiều yêu cầu OCR trong thời gian ngắn. Vui lòng đợi một lát rồi thử lại.";
+  }
   if (lower.includes("ocr api returned unexpected response")) return "OCR trả về dữ liệu không đúng định dạng. Vui lòng thử lại.";
   if (lower === "ocr failed") return "OCR thất bại. Vui lòng thử lại.";
   if (lower === "ocr job failed") return "OCR job thất bại. Vui lòng thử lại.";
@@ -129,7 +132,7 @@ export function useSingleImageOcr() {
 
     try {
       const isRetryableGeminiOverload = (status: number, body: unknown): boolean => {
-        if (status === 503) return true;
+        if (status === 503 || status === 429) return true;
         const text =
           typeof body === "string"
             ? body
