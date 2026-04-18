@@ -15,6 +15,7 @@ interface OcrHistoryMobileDrawerProps {
   onClose: () => void;
   onSelect: (entry: OcrHistoryEntry) => void;
   refreshKey: number;
+  activeEntryId?: string | null;
 }
 
 /**
@@ -25,6 +26,7 @@ const OcrHistoryMobileDrawer = ({
   onClose,
   onSelect,
   refreshKey,
+  activeEntryId = null,
 }: OcrHistoryMobileDrawerProps) => {
   if (!open) return null;
 
@@ -46,6 +48,7 @@ const OcrHistoryMobileDrawer = ({
             onClose();
           }}
           refreshKey={refreshKey}
+          activeEntryId={activeEntryId}
         />
       </div>
     </div>

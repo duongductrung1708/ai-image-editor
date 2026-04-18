@@ -630,6 +630,7 @@ const OCRWorkspace = ({
             isLg={isLg}
             onHistorySelect={handleHistorySelect}
             historyRefresh={historyRefresh}
+            activeHistoryId={currentHistoryId}
           />
           <OcrHistoryMobileDrawer
             open={showHistory && !isLg}
@@ -668,6 +669,7 @@ const OCRWorkspace = ({
               isOpen={true}
               onSelect={handleHistorySelect}
               refreshKey={historyRefresh}
+              activeEntryId={currentHistoryId}
             />
           ) : null}
         </div>
@@ -678,6 +680,7 @@ const OCRWorkspace = ({
         onClose={() => setShowHistory(false)}
         onSelect={handleHistorySelect}
         refreshKey={historyRefresh}
+        activeEntryId={currentHistoryId}
       />
     </div>
   );

@@ -44,12 +44,14 @@ interface HistorySidebarProps {
   isOpen: boolean;
   onSelect: (entry: HistoryEntry) => void;
   refreshKey: number;
+  activeEntryId?: string | null;
 }
 
 const HistorySidebar = ({
   isOpen,
   onSelect,
   refreshKey,
+  activeEntryId = null,
 }: HistorySidebarProps) => {
   void refreshKey;
   const { entries, loading, deleteOne } = useOcrHistory(50);
@@ -288,12 +290,17 @@ const HistorySidebar = ({
             const isBatch = !!entry.batch_page_count;
             const isExpanded = expandedBatch === entry.id;
             const pages = batchPages[entry.id];
+            const isActive = Boolean(activeEntryId) && activeEntryId === entry.id;
 
             return (
               <div key={entry.id}>
                 <div
                   onClick={() => onSelect(entry)}
-                  className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 transition-colors hover:bg-secondary/50"
+                  className={`group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 transition-colors ${
+                    isActive
+                      ? "bg-secondary"
+                      : "hover:bg-secondary/50"
+                  }`}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">

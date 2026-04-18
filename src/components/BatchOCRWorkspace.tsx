@@ -38,6 +38,7 @@ const BatchOCRWorkspace = ({
   const batchActiveTab = useWorkspaceStore((s) => s.batchActiveTab);
   const setBatchActiveTab = useWorkspaceStore((s) => s.setBatchActiveTab);
   const resetWorkspaceUi = useWorkspaceStore((s) => s.reset);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [linkedBatchHighlight, setLinkedBatchHighlight] = useState<{
     pageIndex: number;
     indices: number[];
@@ -71,6 +72,7 @@ const BatchOCRWorkspace = ({
 
   useEffect(() => {
     if (!initialHistoryEntry) return;
+    setActiveHistoryId(initialHistoryEntry.id);
     applyHistoryEntry(initialHistoryEntry);
   }, [applyHistoryEntry, initialHistoryEntry]);
 
@@ -250,10 +252,13 @@ const BatchOCRWorkspace = ({
       {phase === "processing" && (
         <BatchProcessingView
           files={files}
-          sourcePreviewUrls={sourcePreviewUrls}
+          sourcePreviewUrls={effectivePreviewUrls}
           showHistorySidebar={showHistory}
           isLg={isLg}
-          onHistorySelect={applyHistoryEntry}
+          onHistorySelect={(entry) => {
+            setActiveHistoryId(entry.id);
+            applyHistoryEntry(entry);
+          }}
           historyRefresh={historyRefresh}
         />
       )}
@@ -263,7 +268,7 @@ const BatchOCRWorkspace = ({
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
             <BatchReadyView
               files={files}
-              sourcePreviewUrls={sourcePreviewUrls}
+              sourcePreviewUrls={effectivePreviewUrls}
               totalBytes={totalBytes}
               extensionSummary={extensionSummary}
               isProcessing={isProcessing}
@@ -276,8 +281,12 @@ const BatchOCRWorkspace = ({
           {showHistory && isLg ? (
             <HistorySidebar
               isOpen={true}
-              onSelect={applyHistoryEntry}
+              onSelect={(entry) => {
+                setActiveHistoryId(entry.id);
+                applyHistoryEntry(entry);
+              }}
               refreshKey={historyRefresh}
+              activeEntryId={activeHistoryId}
             />
           ) : null}
         </div>
@@ -303,8 +312,12 @@ const BatchOCRWorkspace = ({
           totalBoxCount={totalBoxCount}
           showHistory={showHistory}
           isLg={isLg}
-          onHistorySelect={applyHistoryEntry}
+          onHistorySelect={(entry) => {
+            setActiveHistoryId(entry.id);
+            applyHistoryEntry(entry);
+          }}
           historyRefresh={historyRefresh}
+          activeHistoryId={activeHistoryId}
         />
       )}
 
@@ -315,8 +328,12 @@ const BatchOCRWorkspace = ({
           (phase === "ready" || phase === "processing" || phase === "result")
         }
         onClose={() => setShowHistory(false)}
-        onSelect={applyHistoryEntry}
+        onSelect={(entry) => {
+          setActiveHistoryId(entry.id);
+          applyHistoryEntry(entry);
+        }}
         refreshKey={historyRefresh}
+        activeEntryId={activeHistoryId}
       />
 
       {/* Desktop (ready): history is rendered inline next to workspace above */}
