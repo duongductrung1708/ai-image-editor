@@ -416,22 +416,21 @@ const OCRWorkspace = ({
         setJsonText(JSON.stringify(bbRaw, null, 2));
         if (entry.image_data) {
           setImageUrl(entry.image_data);
-          if (entry.image_data.startsWith("data:")) {
-            void (async () => {
-              try {
-                const res = await fetch(entry.image_data!);
-                const blob = await res.blob();
-                const type = blob.type || "image/png";
-                setEditFile(
-                  new File([blob], entry.image_name || "ocr-history.png", {
-                    type,
-                  }),
-                );
-              } catch {
-                // ignore
-              }
-            })();
-          }
+          // Always fetch and update editFile to ensure ảnh changes when switching history
+          void (async () => {
+            try {
+              const res = await fetch(entry.image_data!);
+              const blob = await res.blob();
+              const type = blob.type || "image/png";
+              setEditFile(
+                new File([blob], entry.image_name || "ocr-history.png", {
+                  type,
+                }),
+              );
+            } catch {
+              // ignore
+            }
+          })();
         } else {
           setImageUrl("");
         }
@@ -479,22 +478,22 @@ const OCRWorkspace = ({
       );
       if (entry.image_data) {
         setImageUrl(entry.image_data);
-        if (entry.image_data.startsWith("data:")) {
-          void (async () => {
-            try {
-              const res = await fetch(entry.image_data!);
-              const blob = await res.blob();
-              const type = blob.type || "image/png";
-              setEditFile(
-                new File([blob], entry.image_name || "ocr-history.png", {
-                  type,
-                }),
-              );
-            } catch {
-              // ignore
-            }
-          })();
-        }
+        // Always fetch and update editFile from image_data (whether it's data URL or regular URL)
+        // This ensures ảnh and bbox change when switching between history entries
+        void (async () => {
+          try {
+            const res = await fetch(entry.image_data!);
+            const blob = await res.blob();
+            const type = blob.type || "image/png";
+            setEditFile(
+              new File([blob], entry.image_name || "ocr-history.png", {
+                type,
+              }),
+            );
+          } catch {
+            // ignore
+          }
+        })();
       }
     },
     [setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText],
