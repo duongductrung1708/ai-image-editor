@@ -156,12 +156,12 @@ const BatchOCRWorkspace = ({
       }
       return;
     }
-    void runBatch().then(() => {
+    void runBatch().then(async () => {
       // For batch OCR: deduct the number of pages that were successfully OCR'd
-      // We call deductCredit for each successfully processed page
+      // We call deductCredit for each successfully processed page sequentially to avoid race conditions
       if (lastBatchMeta?.okCount) {
         for (let i = 0; i < lastBatchMeta.okCount; i++) {
-          void deductCredit();
+          await deductCredit();
         }
       }
       refreshQuota();
