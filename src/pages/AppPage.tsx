@@ -74,6 +74,7 @@ const AppPage = () => {
     created_at: string;
   } | null>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumeBatchFiles, setResumeBatchFiles] = useState<File[] | null>(null);
 
   const handleFilesSelect = useCallback((picked: File[]) => {
     if (!picked.length) return;
@@ -93,6 +94,7 @@ const AppPage = () => {
       setResumeError(null);
       setResumeEntry(null);
       setResumeFile(null);
+      setResumeBatchFiles(null);
       try {
         const { data, error } = await supabase
           .from("ocr_history")
@@ -139,6 +141,65 @@ const AppPage = () => {
         }
 
         if (cancelled) return;
+        const bb = entry.bounding_boxes;
+        const isBatch =
+          bb &&
+          typeof bb === "object" &&
+          !Array.isArray(bb) &&
+          (bb as { batch?: boolean }).batch === true;
+
+        if (isBatch) {
+          // Prefer loading pages from ocr_batch_pages (most reliable & includes image_data).
+          const batchSessionId =
+            typeof (bb as { batch_session_id?: string }).batch_session_id === "string"
+              ? (bb as { batch_session_id: string }).batch_session_id
+              : null;
+
+          let pages: Array<{ file_name: string; image_data: string | null }> = [];
+          if (batchSessionId) {
+            const { data: pageRows } = await supabase
+              .from("ocr_batch_pages")
+              .select("file_name, image_data, page_index")
+              .eq("session_id", batchSessionId)
+              .order("page_index", { ascending: true });
+            pages = (pageRows ?? []).map((p) => ({
+              file_name: p.file_name,
+              image_data: p.image_data ?? null,
+            }));
+          }
+
+          // Fallback: bounding_boxes.pages[] (older rows can still contain image_data here).
+          if (pages.length === 0) {
+            const inlinePages = Array.isArray((bb as { pages?: unknown }).pages)
+              ? ((bb as { pages?: Array<{ name?: string; image_data?: string | null }> }).pages ?? [])
+              : [];
+            pages = inlinePages.map((p, idx) => ({
+              file_name: typeof p.name === "string" && p.name.trim() ? p.name : `Trang ${idx + 1}`,
+              image_data: p.image_data ?? null,
+            }));
+          }
+
+          const batchFiles = await Promise.all(
+            pages.map(async (p, idx) => {
+              if (p.image_data) {
+                const res = await fetch(p.image_data);
+                const blob = await res.blob();
+                const type = blob.type || "image/png";
+                return new File([blob], p.file_name || `page-${idx + 1}.png`, { type });
+              }
+              return new File([new Blob([])], p.file_name || `page-${idx + 1}.png`, {
+                type: "image/png",
+              });
+            }),
+          );
+
+          if (cancelled) return;
+          setResumeEntry(entry);
+          setResumeBatchFiles(batchFiles.length > 0 ? batchFiles : [file]);
+          setResumeFile(null);
+          return;
+        }
+
         setResumeEntry(entry);
         setResumeFile(file);
       } catch (e: unknown) {
@@ -158,7 +219,7 @@ const AppPage = () => {
   }, [files, historyId]);
 
   if (historyId && (resumeLoading || resumeEntry || resumeError)) {
-    if (resumeLoading || !resumeFile) {
+    if (resumeLoading) {
       return (
         <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
           <Navbar />
@@ -178,6 +239,34 @@ const AppPage = () => {
           <div className="flex flex-1 items-center justify-center px-6">
             <div className="max-w-md text-center">
               <p className="text-sm text-destructive">{resumeError}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (resumeEntry && resumeBatchFiles && resumeBatchFiles.length > 0) {
+      return (
+        <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <BatchOCRWorkspace
+              files={resumeBatchFiles}
+              onBack={() => navigate("/app")}
+              onPickAnother={() => navigate("/app")}
+              initialHistoryEntry={resumeEntry}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (!resumeFile) {
+      return (
+        <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+          <Navbar />
+          <div className="flex flex-1 items-center justify-center px-6">
+            <div className="text-sm text-muted-foreground">
+              Không thể tải ảnh từ lịch sử.
             </div>
           </div>
         </div>

@@ -29,7 +29,7 @@ import {
 } from "@/lib/ocrApplyFontSizes";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 interface OCRWorkspaceProps {
   imageFile: File;
@@ -100,6 +100,24 @@ const OCRWorkspace = ({
   const qc = useQueryClient();
   const lastAutosavedRef = useRef<string>("");
   const autosaveTimerRef = useRef<number | null>(null);
+  const autosaveClearTimerRef = useRef<number | null>(null);
+  const [autosaveUi, setAutosaveUi] = useState<
+    | { state: "idle" }
+    | { state: "pending" }
+    | { state: "saving" }
+    | { state: "saved" }
+    | { state: "error" }
+  >({ state: "idle" });
+
+  const clearAutosaveUiLater = useCallback((ms: number) => {
+    if (autosaveClearTimerRef.current) {
+      window.clearTimeout(autosaveClearTimerRef.current);
+    }
+    autosaveClearTimerRef.current = window.setTimeout(() => {
+      setAutosaveUi({ state: "idle" });
+      autosaveClearTimerRef.current = null;
+    }, ms);
+  }, []);
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText, {
     onMarkdownChange: setMarkdownText,
@@ -173,9 +191,11 @@ const OCRWorkspace = ({
     if (next === lastAutosavedRef.current) return;
 
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
+    setAutosaveUi({ state: "pending" });
     autosaveTimerRef.current = window.setTimeout(() => {
       void (async () => {
         try {
+          setAutosaveUi({ state: "saving" });
           const { error } = await supabase
             .from("ocr_history")
             .update({ extracted_text: next })
@@ -183,6 +203,8 @@ const OCRWorkspace = ({
           if (error) throw error;
 
           lastAutosavedRef.current = next;
+          setAutosaveUi({ state: "saved" });
+          clearAutosaveUiLater(1200);
 
           // Update history caches immediately (avoid waiting for refetch).
           const queries = qc.getQueriesData({ queryKey: ["ocr_history"] });
@@ -197,6 +219,8 @@ const OCRWorkspace = ({
           }
         } catch (e) {
           console.error("[ocr-history] autosave failed:", e);
+          setAutosaveUi({ state: "error" });
+          clearAutosaveUiLater(2500);
         }
       })();
     }, 1000);
@@ -205,7 +229,23 @@ const OCRWorkspace = ({
       if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
       autosaveTimerRef.current = null;
     };
-  }, [currentHistoryId, markdownText, phase, qc, user?.id]);
+  }, [
+    clearAutosaveUiLater,
+    currentHistoryId,
+    markdownText,
+    phase,
+    qc,
+    user?.id,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveClearTimerRef.current) {
+        window.clearTimeout(autosaveClearTimerRef.current);
+        autosaveClearTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const setOcrImageFromFile = useCallback((file: File) => {
     const url = URL.createObjectURL(file);
@@ -553,6 +593,20 @@ const OCRWorkspace = ({
         ) : ocrPipelineBusy ? (
           <div className="w-full">
             <Progress value={loadingProgress} className="h-2" />
+          </div>
+        ) : autosaveUi.state !== "idle" ? (
+          <div className="flex w-full items-center justify-end gap-2 text-[11px] text-muted-foreground">
+            {(autosaveUi.state === "pending" ||
+              autosaveUi.state === "saving") && (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Đang tự động lưu…</span>
+              </>
+            )}
+            {autosaveUi.state === "saved" && <span>Đã lưu</span>}
+            {autosaveUi.state === "error" && (
+              <span className="text-destructive">Lưu thất bại</span>
+            )}
           </div>
         ) : (
           <div className="w-full" />

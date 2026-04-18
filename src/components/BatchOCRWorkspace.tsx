@@ -21,12 +21,14 @@ interface BatchOCRWorkspaceProps {
   files: File[];
   onBack: () => void;
   onPickAnother: () => void;
+  initialHistoryEntry?: import("@/components/ocr/OcrHistoryMobileDrawer").OcrHistoryEntry | null;
 }
 
 const BatchOCRWorkspace = ({
   files,
   onBack,
   onPickAnother,
+  initialHistoryEntry = null,
 }: BatchOCRWorkspaceProps) => {
   const { user } = useAuth();
   const isLg = useIsLgScreen();
@@ -66,6 +68,11 @@ const BatchOCRWorkspace = ({
     cancelBatch,
     applyHistoryEntry,
   } = useBatchOcr(files);
+
+  useEffect(() => {
+    if (!initialHistoryEntry) return;
+    applyHistoryEntry(initialHistoryEntry);
+  }, [applyHistoryEntry, initialHistoryEntry]);
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText, {
     onMarkdownChange: setMarkdownText,
