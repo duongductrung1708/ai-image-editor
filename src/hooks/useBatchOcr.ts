@@ -356,7 +356,7 @@ export function useBatchOcr(files: File[]) {
 
         if (sessErr) throw sessErr;
 
-        // Insert batch pages
+        // Insert batch pages with image data for each page
         const pageRows = normalizedData.pages.map((p) => ({
           session_id: session.id,
           page_index: p.index,
@@ -366,6 +366,7 @@ export function useBatchOcr(files: File[]) {
           full_text: p.full_text,
           blocks: (p.blocks ?? []) as unknown as Json,
           error: p.error ?? null,
+          image_data: previewByIndex[p.index] ?? null,
         }));
         await supabase.from("ocr_batch_pages").insert(pageRows);
 
