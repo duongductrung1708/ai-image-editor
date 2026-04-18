@@ -1688,25 +1688,48 @@ serve(async (req) => {
         );
       }
 
-      const creditsPerImage = getCreditsPerImage();
-      const chargeAmount = tasks.length * creditsPerImage;
-      try {
-        await chargeCreditsOrThrow({
-          userId: user.id,
-          amount: chargeAmount,
-          srvClient,
+      // Get remaining free uses for today
+      const { data: remainingFreeUses, error: freUsesError } = await srvClient.rpc(
+        "get_remaining_free_uses",
+        { p_user_id: user.id },
+      );
+      
+      if (freUsesError) {
+        console.error("[ocr] get_remaining_free_uses failed:", freUsesError);
+        return new Response(JSON.stringify({ error: "Unable to check free uses" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg === "INSUFFICIENT_CREDITS") {
-          return new Response(JSON.stringify({ error: "Insufficient credits" }), {
-            status: 402,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        throw err;
       }
-      console.log(`[ocr] charged batch credits=${chargeAmount} ms=${Date.now() - t0}`);
+
+      const creditsPerImage = getCreditsPerImage();
+      const remainingFree = Number(remainingFreeUses) || 0;
+      // Number of images that need to be charged (after using up free uses)
+      const imagesToCharge = Math.max(0, tasks.length - remainingFree);
+      const chargeAmount = imagesToCharge * creditsPerImage;
+
+      // Only charge credits if there are images beyond free uses
+      if (chargeAmount > 0) {
+        try {
+          await chargeCreditsOrThrow({
+            userId: user.id,
+            amount: chargeAmount,
+            srvClient,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg === "INSUFFICIENT_CREDITS") {
+            return new Response(JSON.stringify({ error: "Insufficient credits" }), {
+              status: 402,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          throw err;
+        }
+        console.log(`[ocr] charged batch credits=${chargeAmount} ms=${Date.now() - t0}`);
+      } else {
+        console.log(`[ocr] batch using free uses only (remaining=${remainingFree}, images=${tasks.length}) ms=${Date.now() - t0}`);
+      }
 
       const pages = await runPool(tasks, concurrency, async (task) => {
         try {
@@ -1810,24 +1833,46 @@ serve(async (req) => {
         },
       );
     }
-    const creditsPerImage = getCreditsPerImage();
-    try {
-      await chargeCreditsOrThrow({
-        userId: user.id,
-        amount: creditsPerImage,
-        srvClient,
+    // Get remaining free uses for today
+    const { data: remainingFreeUses, error: freeUsesError } = await srvClient.rpc(
+      "get_remaining_free_uses",
+      { p_user_id: user.id },
+    );
+    
+    if (freeUsesError) {
+      console.error("[ocr] get_remaining_free_uses failed:", freeUsesError);
+      return new Response(JSON.stringify({ error: "Unable to check free uses" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg === "INSUFFICIENT_CREDITS") {
-        return new Response(JSON.stringify({ error: "Insufficient credits" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw err;
     }
-      console.log(`[ocr] charged single credits=${creditsPerImage} ms=${Date.now() - t0}`);
+
+    const creditsPerImage = getCreditsPerImage();
+    const remainingFree = Number(remainingFreeUses) || 0;
+    // Only charge credits if no free uses remaining
+    const chargeAmount = remainingFree > 0 ? 0 : creditsPerImage;
+
+    if (chargeAmount > 0) {
+      try {
+        await chargeCreditsOrThrow({
+          userId: user.id,
+          amount: chargeAmount,
+          srvClient,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === "INSUFFICIENT_CREDITS") {
+          return new Response(JSON.stringify({ error: "Insufficient credits" }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        throw err;
+      }
+      console.log(`[ocr] charged single credits=${chargeAmount} ms=${Date.now() - t0}`);
+    } else {
+      console.log(`[ocr] single using free use (remaining=${remainingFree}) ms=${Date.now() - t0}`);
+    }
 
     let payload: ParsedOcr;
     try {
