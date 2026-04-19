@@ -10,12 +10,19 @@ export function useOcrQuota() {
   const { balance, loading: creditsLoading, refresh: refreshCredits } = useCredits();
   const [todayCount, setTodayCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [lastFetchDate, setLastFetchDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   const fetchCount = useCallback(async () => {
     if (!user) {
       setTodayCount(0);
       setLoading(false);
       return;
+    }
+
+    // Check if date has changed - if so, reset the count
+    const today = new Date().toISOString().split('T')[0];
+    if (today !== lastFetchDate) {
+      setLastFetchDate(today);
     }
 
     // Call get_daily_free_uses to ensure today's record exists and get the count
@@ -30,11 +37,23 @@ export function useOcrQuota() {
       setTodayCount(data ?? 0);
     }
     setLoading(false);
-  }, [user]);
+  }, [user, lastFetchDate]);
 
   useEffect(() => {
     fetchCount();
   }, [fetchCount]);
+
+  // Check every minute if date has changed (for edge case when user keeps app open past midnight)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const today = new Date().toISOString().split('T')[0];
+      if (today !== lastFetchDate) {
+        fetchCount();
+      }
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [lastFetchDate, fetchCount]);
 
   const hasCredits = balance > 0;
   const freeDailyRemaining = Math.max(0, FREE_DAILY_LIMIT - todayCount);
