@@ -52,6 +52,7 @@ import {
   Eye,
 } from "lucide-react";
 import { useProfileStore } from "@/stores/profileStore";
+import { Badge } from "@/components/ui/badge";
 
 function toHistoryTextPreview(input: string): string {
   const raw = (input ?? "").trim();
@@ -183,6 +184,97 @@ const ProfilePage = () => {
   });
 
   const selectedHistory = filteredHistory.find((item) => item.id === selectedHistoryId) ?? null;
+  const [batchPagePreviews, setBatchPagePreviews] = useState<
+    Array<{ pageIndex: number; fileName: string; imageData: string | null }>
+  >([]);
+  const [batchPreviewLoading, setBatchPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      setBatchPagePreviews([]);
+      if (!selectedHistory) return;
+
+      const batchSessionId =
+        (selectedHistory as unknown as { batch_session_id?: string }).batch_session_id ?? null;
+
+      const bbPages =
+        (
+          selectedHistory.bounding_boxes as
+            | { pages?: Array<{ index?: number; name?: string; image_data?: string | null }> }
+            | null
+        )?.pages ?? [];
+      const bbImageByIndex = new Map<number, string | null>();
+      for (const p of bbPages) {
+        if (typeof p?.index === "number") {
+          bbImageByIndex.set(p.index, p.image_data ?? null);
+        }
+      }
+
+      const isBatch =
+        Boolean((selectedHistory as unknown as { batch_page_count?: number }).batch_page_count) ||
+        Boolean(batchSessionId) ||
+        (() => {
+          const bb = selectedHistory.bounding_boxes;
+          return (
+            bb &&
+            typeof bb === "object" &&
+            !Array.isArray(bb) &&
+            (bb as { batch?: boolean }).batch === true
+          );
+        })();
+
+      if (!isBatch) return;
+
+      setBatchPreviewLoading(true);
+      try {
+        if (batchSessionId) {
+          const { data, error } = await supabase
+            .from("ocr_batch_pages")
+            .select("page_index, file_name, image_data")
+            .eq("session_id", batchSessionId)
+            .order("page_index", { ascending: true });
+          if (error) throw error;
+
+          const rows = (data ?? []).map((p) => {
+            const pageIndex = p.page_index;
+            const dbImg = p.image_data ?? null;
+            const fallbackImg = bbImageByIndex.get(pageIndex) ?? null;
+            return {
+              pageIndex,
+              fileName: p.file_name,
+              imageData: dbImg ?? fallbackImg,
+            };
+          });
+          if (!cancelled) setBatchPagePreviews(rows);
+          return;
+        }
+
+        // Fallback: try to extract from bounding_boxes.pages[] (older rows)
+        const bb = selectedHistory.bounding_boxes as
+          | { pages?: Array<{ index?: number; name?: string; image_data?: string | null }> }
+          | null;
+        const pages = bb?.pages ?? [];
+        const rows = pages
+          .map((p, idx) => ({
+            pageIndex: typeof p.index === "number" ? p.index : idx,
+            fileName: typeof p.name === "string" ? p.name : `Trang ${idx + 1}`,
+            imageData: p.image_data ?? null,
+          }))
+          .sort((a, b) => a.pageIndex - b.pageIndex);
+        if (!cancelled) setBatchPagePreviews(rows);
+      } catch {
+        if (!cancelled) setBatchPagePreviews([]);
+      } finally {
+        if (!cancelled) setBatchPreviewLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedHistory]);
 
   const handleDeleteSelectedHistory = async () => {
     if (!selectedHistory || deletingHistory) return;
@@ -558,7 +650,53 @@ const ProfilePage = () => {
                               </Button>
                             </div>
                           </div>
-                          {selectedHistory.image_data ? (
+                          {batchPreviewLoading ? (
+                            <div className="flex items-center justify-center rounded border border-border bg-background p-6 text-xs text-muted-foreground">
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Đang tải ảnh từng trang...
+                            </div>
+                          ) : batchPagePreviews.length > 0 ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  Ảnh trong batch
+                                </p>
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {batchPagePreviews.length} trang
+                                </Badge>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {batchPagePreviews.map((p) => (
+                                  <button
+                                    key={`${selectedHistory.id}-${p.pageIndex}`}
+                                    type="button"
+                                    className="group overflow-hidden rounded border border-border bg-background text-left"
+                                    title="Mở batch trong OCR"
+                                    onClick={() => navigate(`/app?historyId=${selectedHistory.id}`)}
+                                  >
+                                    <div className="aspect-[4/3] w-full bg-muted/20">
+                                      {p.imageData ? (
+                                        <img
+                                          src={p.imageData}
+                                          alt={p.fileName}
+                                          className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+                                        />
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                                          (Không có ảnh)
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="px-2 py-1">
+                                      <p className="truncate text-[10px] text-muted-foreground">
+                                        {p.pageIndex + 1}. {p.fileName}
+                                      </p>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : selectedHistory.image_data ? (
                             <div className="w-full overflow-hidden rounded border border-border bg-background">
                               <img
                                 src={selectedHistory.image_data}

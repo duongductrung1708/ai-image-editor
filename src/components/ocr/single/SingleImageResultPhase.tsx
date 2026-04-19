@@ -29,6 +29,7 @@ interface SingleImageResultPhaseProps {
   isLg: boolean;
   onHistorySelect: (entry: OcrHistoryEntry) => void;
   historyRefresh: number;
+  activeHistoryId?: string | null;
 }
 
 /**
@@ -49,6 +50,7 @@ const SingleImageResultPhase = ({
   isLg,
   onHistorySelect,
   historyRefresh,
+  activeHistoryId = null,
 }: SingleImageResultPhaseProps) => {
   const [jumpToBox, setJumpToBox] = useState<JumpToBoxRequest | null>(null);
   const jumpNonceRef = useRef(0);
@@ -166,6 +168,7 @@ const SingleImageResultPhase = ({
               isOpen={true}
               onSelect={onHistorySelect}
               refreshKey={historyRefresh}
+              activeEntryId={activeHistoryId}
             />
           ) : null}
         </div>

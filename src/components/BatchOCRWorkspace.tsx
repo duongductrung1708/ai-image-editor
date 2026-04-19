@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { OcrHistoryEntry } from "@/components/ocr/OcrHistoryMobileDrawer";
 import OCRToolbar from "@/components/ocr/OCRToolbar";
 import OcrHistoryMobileDrawer from "@/components/ocr/OcrHistoryMobileDrawer";
 import BatchProcessingView from "@/components/batch/BatchProcessingView";
@@ -21,12 +22,16 @@ interface BatchOCRWorkspaceProps {
   files: File[];
   onBack: () => void;
   onPickAnother: () => void;
+  initialHistoryEntry?: import("@/components/ocr/OcrHistoryMobileDrawer").OcrHistoryEntry | null;
+  onRequestOpenHistory?: (entry: OcrHistoryEntry) => void;
 }
 
 const BatchOCRWorkspace = ({
   files,
   onBack,
   onPickAnother,
+  initialHistoryEntry = null,
+  onRequestOpenHistory,
 }: BatchOCRWorkspaceProps) => {
   const { user } = useAuth();
   const isLg = useIsLgScreen();
@@ -36,6 +41,16 @@ const BatchOCRWorkspace = ({
   const batchActiveTab = useWorkspaceStore((s) => s.batchActiveTab);
   const setBatchActiveTab = useWorkspaceStore((s) => s.setBatchActiveTab);
   const resetWorkspaceUi = useWorkspaceStore((s) => s.reset);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const isBatchHistoryEntry = useCallback((entry: { bounding_boxes: unknown }) => {
+    const bb = entry.bounding_boxes;
+    return (
+      bb &&
+      typeof bb === "object" &&
+      !Array.isArray(bb) &&
+      (bb as { batch?: boolean }).batch === true
+    );
+  }, []);
   const [linkedBatchHighlight, setLinkedBatchHighlight] = useState<{
     pageIndex: number;
     indices: number[];
@@ -66,6 +81,28 @@ const BatchOCRWorkspace = ({
     cancelBatch,
     applyHistoryEntry,
   } = useBatchOcr(files);
+
+  const selectHistory = useCallback(
+    (entry: import("@/components/ocr/OcrHistoryMobileDrawer").OcrHistoryEntry) => {
+      setActiveHistoryId(entry.id);
+      if (!isBatchHistoryEntry(entry)) {
+        onRequestOpenHistory?.(entry);
+        return;
+      }
+      applyHistoryEntry(entry);
+    },
+    [applyHistoryEntry, isBatchHistoryEntry, onRequestOpenHistory],
+  );
+
+  useEffect(() => {
+    if (!initialHistoryEntry) return;
+    setActiveHistoryId(initialHistoryEntry.id);
+    if (isBatchHistoryEntry(initialHistoryEntry)) {
+      applyHistoryEntry(initialHistoryEntry);
+    } else {
+      onRequestOpenHistory?.(initialHistoryEntry);
+    }
+  }, [applyHistoryEntry, initialHistoryEntry, isBatchHistoryEntry, onRequestOpenHistory]);
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText, {
     onMarkdownChange: setMarkdownText,
@@ -99,12 +136,11 @@ const BatchOCRWorkspace = ({
   );
 
   const {
-    canUse: quotaCanUse,
     remaining: quotaRemaining,
     isUnlimited: quotaUnlimited,
     loading: quotaLoading,
     refresh: refreshQuota,
-    deductCredit,
+    deductDailyFreeUsesUpTo,
     balance,
     freeDailyRemaining,
   } = useOcrQuota();
@@ -163,17 +199,15 @@ const BatchOCRWorkspace = ({
       }
       return;
     }
-    void runBatch().then(async () => {
-      // For batch OCR: deduct the number of pages that were successfully OCR'd
-      // We call deductCredit for each successfully processed page sequentially to avoid race conditions
-      if (lastBatchMeta?.okCount) {
-        for (let i = 0; i < lastBatchMeta.okCount; i++) {
-          await deductCredit();
-        }
-      }
+    void runBatch().then(async (okCount) => {
+      // Sync daily free uses with successful pages. `runBatch` resolves before React re-renders, so we must
+      // use the returned `okCount` — not `lastBatchMeta` from closure (it would still be stale/null).
+      // Credits for paid slots are charged in the Edge Function; only `deduct_daily_use` belongs here.
+      const n = typeof okCount === "number" ? okCount : 0;
+      if (n > 0) await deductDailyFreeUsesUpTo(n);
       refreshQuota();
     });
-  }, [quotaCanUse, runBatch, refreshQuota, deductCredit, lastBatchMeta, user, freeDailyRemaining, balance, files]);
+  }, [runBatch, refreshQuota, deductDailyFreeUsesUpTo, user, freeDailyRemaining, balance, files]);
 
   const handleToolbarReprocess = useCallback(() => {
     if (phase === "result") guardedRunBatch();
@@ -246,11 +280,14 @@ const BatchOCRWorkspace = ({
       {phase === "processing" && (
         <BatchProcessingView
           files={files}
-          sourcePreviewUrls={sourcePreviewUrls}
+          sourcePreviewUrls={effectivePreviewUrls}
           showHistorySidebar={showHistory}
           isLg={isLg}
-          onHistorySelect={applyHistoryEntry}
+          onHistorySelect={(entry) => {
+            selectHistory(entry);
+          }}
           historyRefresh={historyRefresh}
+          activeHistoryId={activeHistoryId}
         />
       )}
 
@@ -259,7 +296,7 @@ const BatchOCRWorkspace = ({
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
             <BatchReadyView
               files={files}
-              sourcePreviewUrls={sourcePreviewUrls}
+              sourcePreviewUrls={effectivePreviewUrls}
               totalBytes={totalBytes}
               extensionSummary={extensionSummary}
               isProcessing={isProcessing}
@@ -272,8 +309,9 @@ const BatchOCRWorkspace = ({
           {showHistory && isLg ? (
             <HistorySidebar
               isOpen={true}
-              onSelect={applyHistoryEntry}
+              onSelect={selectHistory}
               refreshKey={historyRefresh}
+              activeEntryId={activeHistoryId}
             />
           ) : null}
         </div>
@@ -299,8 +337,11 @@ const BatchOCRWorkspace = ({
           totalBoxCount={totalBoxCount}
           showHistory={showHistory}
           isLg={isLg}
-          onHistorySelect={applyHistoryEntry}
+          onHistorySelect={(entry) => {
+            selectHistory(entry);
+          }}
           historyRefresh={historyRefresh}
+          activeHistoryId={activeHistoryId}
         />
       )}
 
@@ -311,8 +352,9 @@ const BatchOCRWorkspace = ({
           (phase === "ready" || phase === "processing" || phase === "result")
         }
         onClose={() => setShowHistory(false)}
-        onSelect={applyHistoryEntry}
+        onSelect={selectHistory}
         refreshKey={historyRefresh}
+        activeEntryId={activeHistoryId}
       />
 
       {/* Desktop (ready): history is rendered inline next to workspace above */}

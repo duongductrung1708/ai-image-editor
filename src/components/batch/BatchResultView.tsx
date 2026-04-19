@@ -34,6 +34,7 @@ interface BatchResultViewProps {
   isLg: boolean;
   onHistorySelect: (entry: OcrHistoryEntry) => void;
   historyRefresh: number;
+  activeHistoryId?: string | null;
 }
 
 /**
@@ -57,6 +58,7 @@ const BatchResultView = ({
   isLg,
   onHistorySelect,
   historyRefresh,
+  activeHistoryId = null,
 }: BatchResultViewProps) => {
   const [jumpToBox, setJumpToBox] = useState<JumpToBoxRequest | null>(null);
   const jumpNonceRef = useRef(0);
@@ -206,6 +208,7 @@ const BatchResultView = ({
           isOpen={true}
           onSelect={onHistorySelect}
           refreshKey={historyRefresh}
+          activeEntryId={activeHistoryId}
         />
       )}
     </div>

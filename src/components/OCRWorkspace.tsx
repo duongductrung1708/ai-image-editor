@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import type { OcrHistoryEntry } from "@/components/ocr/OcrHistoryMobileDrawer";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -29,7 +30,7 @@ import {
 } from "@/lib/ocrApplyFontSizes";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 interface OCRWorkspaceProps {
   imageFile: File;
@@ -42,12 +43,14 @@ interface OCRWorkspaceProps {
     image_data: string | null;
     created_at: string;
   } | null;
+  onRequestOpenHistory?: (entry: OcrHistoryEntry) => void;
 }
 
 const OCRWorkspace = ({
   imageFile,
   onBack,
   initialHistoryEntry = null,
+  onRequestOpenHistory,
 }: OCRWorkspaceProps) => {
   const { user } = useAuth();
   const [imageUrl, setImageUrl] = useState("");
@@ -100,6 +103,34 @@ const OCRWorkspace = ({
   const qc = useQueryClient();
   const lastAutosavedRef = useRef<string>("");
   const autosaveTimerRef = useRef<number | null>(null);
+  const isBatchHistoryEntry = useCallback((entry: { bounding_boxes: Json | null }) => {
+    const bb = entry.bounding_boxes;
+    return (
+      bb &&
+      typeof bb === "object" &&
+      !Array.isArray(bb) &&
+      (bb as { batch?: boolean }).batch === true
+    );
+  }, []);
+
+  const autosaveClearTimerRef = useRef<number | null>(null);
+  const [autosaveUi, setAutosaveUi] = useState<
+    | { state: "idle" }
+    | { state: "pending" }
+    | { state: "saving" }
+    | { state: "saved" }
+    | { state: "error" }
+  >({ state: "idle" });
+
+  const clearAutosaveUiLater = useCallback((ms: number) => {
+    if (autosaveClearTimerRef.current) {
+      window.clearTimeout(autosaveClearTimerRef.current);
+    }
+    autosaveClearTimerRef.current = window.setTimeout(() => {
+      setAutosaveUi({ state: "idle" });
+      autosaveClearTimerRef.current = null;
+    }, ms);
+  }, []);
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText, {
     onMarkdownChange: setMarkdownText,
@@ -173,9 +204,11 @@ const OCRWorkspace = ({
     if (next === lastAutosavedRef.current) return;
 
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
+    setAutosaveUi({ state: "pending" });
     autosaveTimerRef.current = window.setTimeout(() => {
       void (async () => {
         try {
+          setAutosaveUi({ state: "saving" });
           const { error } = await supabase
             .from("ocr_history")
             .update({ extracted_text: next })
@@ -183,6 +216,8 @@ const OCRWorkspace = ({
           if (error) throw error;
 
           lastAutosavedRef.current = next;
+          setAutosaveUi({ state: "saved" });
+          clearAutosaveUiLater(1200);
 
           // Update history caches immediately (avoid waiting for refetch).
           const queries = qc.getQueriesData({ queryKey: ["ocr_history"] });
@@ -197,6 +232,8 @@ const OCRWorkspace = ({
           }
         } catch (e) {
           console.error("[ocr-history] autosave failed:", e);
+          setAutosaveUi({ state: "error" });
+          clearAutosaveUiLater(2500);
         }
       })();
     }, 1000);
@@ -205,7 +242,23 @@ const OCRWorkspace = ({
       if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
       autosaveTimerRef.current = null;
     };
-  }, [currentHistoryId, markdownText, phase, qc, user?.id]);
+  }, [
+    clearAutosaveUiLater,
+    currentHistoryId,
+    markdownText,
+    phase,
+    qc,
+    user?.id,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveClearTimerRef.current) {
+        window.clearTimeout(autosaveClearTimerRef.current);
+        autosaveClearTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const setOcrImageFromFile = useCallback((file: File) => {
     const url = URL.createObjectURL(file);
@@ -384,14 +437,14 @@ const OCRWorkspace = ({
   }, [toggleHistoryOpen]);
 
   const handleHistorySelect = useCallback(
-    (entry: {
-      id: string;
-      image_name: string;
-      extracted_text: string;
-      bounding_boxes: Json | null;
-      image_data: string | null;
-      created_at: string;
-    }) => {
+    (entry: OcrHistoryEntry) => {
+      // If user selects a batch history entry while in single-image workspace,
+      // switch to the batch workspace (AppPage will hydrate it).
+      if (isBatchHistoryEntry(entry)) {
+        onRequestOpenHistory?.(entry);
+        return;
+      }
+
       setPhase("result");
       setEnhance(false);
       setCurrentHistoryId(entry.id);
@@ -401,41 +454,7 @@ const OCRWorkspace = ({
         lastOcrBlobUrlRef.current = null;
       }
 
-      const bbRaw = entry.bounding_boxes;
-      if (
-        bbRaw &&
-        typeof bbRaw === "object" &&
-        !Array.isArray(bbRaw) &&
-        (bbRaw as { batch?: boolean }).batch === true
-      ) {
-        toast.info(
-          "Bản ghi OCR hàng loạt: hiển thị văn bản gộp; ảnh/bbox chỉ tương ứng trang đầu nếu có.",
-        );
-        setMarkdownText(entry.extracted_text);
-        setBoundingBoxes([]);
-        setJsonText(JSON.stringify(bbRaw, null, 2));
-        if (entry.image_data) {
-          setImageUrl(entry.image_data);
-          // Always fetch and update editFile to ensure ảnh changes when switching history
-          void (async () => {
-            try {
-              const res = await fetch(entry.image_data!);
-              const blob = await res.blob();
-              const type = blob.type || "image/png";
-              setEditFile(
-                new File([blob], entry.image_name || "ocr-history.png", {
-                  type,
-                }),
-              );
-            } catch {
-              // ignore
-            }
-          })();
-        } else {
-          setImageUrl("");
-        }
-        return;
-      }
+      // entry is guaranteed non-batch here (handled above)
 
       const blocks: BoundingBox[] = Array.isArray(entry.bounding_boxes)
         ? (entry.bounding_boxes as unknown as BoundingBox[])
@@ -496,7 +515,7 @@ const OCRWorkspace = ({
         })();
       }
     },
-    [setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText],
+    [isBatchHistoryEntry, onRequestOpenHistory, setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText],
   );
 
   useEffect(() => {
@@ -554,6 +573,20 @@ const OCRWorkspace = ({
           <div className="w-full">
             <Progress value={loadingProgress} className="h-2" />
           </div>
+        ) : autosaveUi.state !== "idle" ? (
+          <div className="flex w-full items-center justify-end gap-2 text-[11px] text-muted-foreground">
+            {(autosaveUi.state === "pending" ||
+              autosaveUi.state === "saving") && (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Đang tự động lưu…</span>
+              </>
+            )}
+            {autosaveUi.state === "saved" && <span>Đã lưu</span>}
+            {autosaveUi.state === "error" && (
+              <span className="text-destructive">Lưu thất bại</span>
+            )}
+          </div>
         ) : (
           <div className="w-full" />
         )}
@@ -576,6 +609,7 @@ const OCRWorkspace = ({
             isLg={isLg}
             onHistorySelect={handleHistorySelect}
             historyRefresh={historyRefresh}
+            activeHistoryId={currentHistoryId}
           />
           <OcrHistoryMobileDrawer
             open={showHistory && !isLg}
@@ -614,6 +648,7 @@ const OCRWorkspace = ({
               isOpen={true}
               onSelect={handleHistorySelect}
               refreshKey={historyRefresh}
+              activeEntryId={currentHistoryId}
             />
           ) : null}
         </div>
@@ -624,6 +659,7 @@ const OCRWorkspace = ({
         onClose={() => setShowHistory(false)}
         onSelect={handleHistorySelect}
         refreshKey={historyRefresh}
+        activeEntryId={currentHistoryId}
       />
     </div>
   );

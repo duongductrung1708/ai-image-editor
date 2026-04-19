@@ -17,6 +17,7 @@ interface BatchProcessingViewProps {
   isLg: boolean;
   onHistorySelect: (entry: OcrHistoryEntry) => void;
   historyRefresh: number;
+  activeHistoryId?: string | null;
 }
 
 const PROCESSING_STEPS = [
@@ -35,6 +36,7 @@ const BatchProcessingView = ({
   isLg,
   onHistorySelect,
   historyRefresh,
+  activeHistoryId = null,
 }: BatchProcessingViewProps) => {
   return (
     <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
@@ -181,6 +183,7 @@ const BatchProcessingView = ({
           isOpen={true}
           onSelect={onHistorySelect}
           refreshKey={historyRefresh}
+          activeEntryId={activeHistoryId}
         />
       )}
     </div>

@@ -20,6 +20,10 @@ import {
 const OCR_FUNCTION_URL =
   `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-vietnamese`;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function normalizeOcrText(value: string): string {
   if (!value) return "";
   let out = value.trim();
@@ -42,6 +46,9 @@ function toVietnameseOcrError(raw: string): string {
   if (!msg) return "Đã xảy ra lỗi khi OCR. Vui lòng thử lại.";
 
   const lower = msg.toLowerCase();
+  if (lower.includes("missing imagebase64")) {
+    return "Thiếu dữ liệu ảnh cho một hoặc nhiều trang. Vui lòng chọn lại ảnh từ máy hoặc mở bản lịch sử có lưu ảnh.";
+  }
   if (lower.includes("gemini") && lower.includes("api 503")) {
     return "Gemini đang quá tải (503). Vui lòng thử lại sau ít phút.";
   }
@@ -57,10 +64,34 @@ function toVietnameseOcrError(raw: string): string {
   }
   if (lower.includes("timed out") || lower.includes("timeout")) return "OCR bị quá thời gian. Vui lòng thử lại.";
   if (lower.includes("resource_limit")) return "Hệ thống xử lý quá tải. Vui lòng thử lại sau.";
+  if (lower.includes("rate limit") || lower.includes("too many requests")) {
+    return "Bạn đã gửi quá nhiều yêu cầu OCR trong thời gian ngắn. Vui lòng đợi một lát rồi thử lại.";
+  }
   if (lower === "ocr batch failed") return "OCR hàng loạt thất bại. Vui lòng thử lại.";
   if (lower === "unexpected batch response") return "OCR hàng loạt trả về dữ liệu không đúng định dạng. Vui lòng thử lại.";
 
   return msg;
+}
+
+/**
+ * Ảnh đã lưu trong lịch sử (data URL hoặc base64 thuần) → payload gửi OCR batch.
+ */
+function payloadFromStoredImagePreview(
+  stored: string | null | undefined,
+): { mimeType: string; imageBase64: string } | null {
+  if (!stored || typeof stored !== "string") return null;
+  const s = stored.trim();
+  if (!s) return null;
+  const dataUrl = /^data:([^;]+);base64,([\s\S]+)$/i.exec(s);
+  if (dataUrl) {
+    const mime = (dataUrl[1] || "image/jpeg").trim();
+    const b64 = (dataUrl[2] || "").replace(/\s+/g, "");
+    if (!b64) return null;
+    return { mimeType: mime, imageBase64: b64 };
+  }
+  const raw = s.replace(/\s+/g, "");
+  if (!raw) return null;
+  return { mimeType: "image/jpeg", imageBase64: raw };
 }
 
 export type BatchPhase = "ready" | "processing" | "result";
@@ -87,6 +118,12 @@ export function useBatchOcr(files: File[]) {
     string | null
   >(null);
   const [historyPageImageDatas, setHistoryPageImageDatas] = useState<
+    Array<string | null>
+  >([]);
+  const [resultFirstImageData, setResultFirstImageData] = useState<string | null>(
+    null,
+  );
+  const [resultPageImageDatas, setResultPageImageDatas] = useState<
     Array<string | null>
   >([]);
   const [sourcePreviewUrls, setSourcePreviewUrls] = useState<string[]>([]);
@@ -132,6 +169,12 @@ export function useBatchOcr(files: File[]) {
     const out: string[] = [];
     for (let i = 0; i < n; i++) {
       const title = batchPages?.[i]?.name ?? files[i]?.name ?? `Trang ${i + 1}`;
+      const resultImg = resultPageImageDatas[i];
+      if (resultImg) {
+        out.push(resultImg);
+        continue;
+      }
+
       if (restoredFromHistory) {
         const img = historyPageImageDatas[i];
         if (img) {
@@ -169,6 +212,7 @@ export function useBatchOcr(files: File[]) {
     sourcePreviewUrls,
     restoredFromHistory,
     historyPageImageDatas,
+    resultPageImageDatas,
   ]);
 
   const totalBoxCount = useMemo(() => {
@@ -179,8 +223,10 @@ export function useBatchOcr(files: File[]) {
     );
   }, [batchPages]);
 
-  const runBatch = useCallback(async () => {
-    if (isProcessing || files.length === 0) return;
+  const runBatch = useCallback(async (): Promise<number> => {
+    if (isProcessing || files.length === 0) return 0;
+    const snapshotPageImages = [...historyPageImageDatas];
+    const snapshotFirstPageImage = historyFirstImageData;
     batchAbortRef.current?.abort();
     const controller = new AbortController();
     batchAbortRef.current = controller;
@@ -193,13 +239,12 @@ export function useBatchOcr(files: File[]) {
     setLastBatchMeta(null);
     setBatchPages(null);
     setLastError(null);
-    setRestoredFromHistory(false);
-    setHistoryFirstImageData(null);
-    setHistoryPageImageDatas([]);
+    setResultFirstImageData(null);
+    setResultPageImageDatas([]);
 
     try {
       const isRetryableGeminiOverload = (status: number, body: unknown): boolean => {
-        if (status === 503) return true;
+        if (status === 503 || status === 429) return true;
         const text =
           typeof body === "string"
             ? body
@@ -256,22 +301,53 @@ export function useBatchOcr(files: File[]) {
         throw new Error("Missing Authorization header");
       }
 
+      const maxSidePx = Number(import.meta.env.VITE_OCR_MAX_SIDE_PX) || 2000;
+      const quality = Number(import.meta.env.VITE_OCR_IMAGE_QUALITY) || 0.82;
+
       const images = await Promise.all(
-        files.map(async (f) => {
-          const maxSidePx = Number(import.meta.env.VITE_OCR_MAX_SIDE_PX) || 2000;
-          const quality = Number(import.meta.env.VITE_OCR_IMAGE_QUALITY) || 0.82;
-          const scaled = await downscaleImageFile(f, {
-            maxSidePx,
-            quality,
-            outputMimeType: "image/jpeg",
-          });
+        files.map(async (f, idx) => {
+          let imageBase64 = "";
+          let mimeType = "image/jpeg";
+
+          if (f.size > 0) {
+            const scaled = await downscaleImageFile(f, {
+              maxSidePx,
+              quality,
+              outputMimeType: "image/jpeg",
+            });
+            imageBase64 = (await fileToBase64(scaled)).trim();
+            mimeType = scaled.type || f.type || "image/png";
+          }
+
+          if (!imageBase64) {
+            const stored =
+              snapshotPageImages[idx] ??
+              (idx === 0 ? snapshotFirstPageImage : null);
+            const fromStored = payloadFromStoredImagePreview(stored);
+            if (fromStored) {
+              imageBase64 = fromStored.imageBase64;
+              mimeType = fromStored.mimeType;
+            }
+          }
+
+          if (!imageBase64) {
+            throw new Error(
+              `Thiếu dữ liệu ảnh cho "${f.name}" (trang ${idx + 1}). Không thể nhận diện lại — vui lòng chọn lại ảnh từ máy hoặc mở bản ghi lịch sử có lưu ảnh.`,
+            );
+          }
+
           return {
             name: f.name,
-            mimeType: scaled.type || f.type || "image/png",
-            imageBase64: await fileToBase64(scaled),
+            mimeType,
+            imageBase64,
           };
         }),
       );
+      const previewByIndex = images.map(
+        (img) => `data:${img.mimeType};base64,${img.imageBase64}`,
+      );
+      setResultFirstImageData(previewByIndex[0] ?? null);
+      setResultPageImageDatas(previewByIndex);
 
       const { res: r, data } = await fetchJsonWithRetry<unknown>(
         `${OCR_FUNCTION_URL}/batch`,
@@ -340,9 +416,6 @@ export function useBatchOcr(files: File[]) {
       setPhase("result");
 
       try {
-        const previewByIndex = images.map(
-          (img) => `data:${img.mimeType};base64,${img.imageBase64}`,
-        );
         const preview_image_data = previewByIndex[0] ?? null;
 
         // Insert batch session
@@ -408,6 +481,8 @@ export function useBatchOcr(files: File[]) {
       } else {
         toast.success(`Đã OCR xong ${okCount} trang.`);
       }
+
+      return okCount;
     } catch (e) {
       const aborted =
         (e instanceof DOMException && e.name === "AbortError") ||
@@ -415,7 +490,7 @@ export function useBatchOcr(files: File[]) {
       if (aborted) {
         setPhase("ready");
         toast.info("Đã hủy OCR hàng loạt.");
-        return;
+        return 0;
       }
       console.error(e);
       const msgRaw = e instanceof Error ? e.message : "Lỗi khi xử lý hàng loạt.";
@@ -423,13 +498,21 @@ export function useBatchOcr(files: File[]) {
       toast.error(msg);
       setLastError(msg);
       setPhase("ready");
+      return 0;
     } finally {
       if (batchAbortRef.current === controller) {
         batchAbortRef.current = null;
       }
       setIsProcessing(false);
     }
-  }, [files, isProcessing, session?.access_token, user?.id]);
+  }, [
+    files,
+    historyFirstImageData,
+    historyPageImageDatas,
+    isProcessing,
+    session?.access_token,
+    user?.id,
+  ]);
 
   const cancelBatch = useCallback(() => {
     batchAbortRef.current?.abort();
@@ -449,6 +532,37 @@ export function useBatchOcr(files: File[]) {
       Array.isArray((bb as { pages?: unknown }).pages)
     ) {
       const pages = (bb as { pages: OcrBatchPageResultWithImage[] }).pages;
+      const batchSessionId =
+        typeof (bb as { batch_session_id?: string }).batch_session_id === "string"
+          ? (bb as { batch_session_id: string }).batch_session_id
+          : null;
+
+      // Best-effort: enrich page previews from DB (some older rows might not
+      // have bounding_boxes.pages[].image_data).
+      if (batchSessionId) {
+        void (async () => {
+          try {
+            const { data } = await supabase
+              .from("ocr_batch_pages")
+              .select("page_index, image_data")
+              .eq("session_id", batchSessionId)
+              .order("page_index", { ascending: true });
+            const map = new Map<number, string | null>();
+            for (const row of data ?? []) {
+              map.set(row.page_index, row.image_data ?? null);
+            }
+            const merged = pages.map((p) => ({
+              ...p,
+              image_data: p.image_data ?? map.get(p.index) ?? null,
+            }));
+            setBatchPages(merged);
+            setHistoryPageImageDatas(merged.map((p) => p.image_data ?? null));
+          } catch {
+            // ignore (fallback to inline pages)
+          }
+        })();
+      }
+
       setBatchPages(pages);
       setMarkdownText(entry.extracted_text);
       setJsonText(
