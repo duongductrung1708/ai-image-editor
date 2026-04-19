@@ -1,5 +1,6 @@
 import {
   FileStack,
+  GripVertical,
   HardDrive,
   Layers,
   ListOrdered,
@@ -25,6 +26,11 @@ interface BatchReadyViewProps {
   onStartBatch: () => void;
   quotaRemaining?: number;
   quotaUnlimited?: boolean;
+  draggedIndex?: number | null;
+  onDragStart?: (displayIndex: number) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (displayIndex: number) => void;
+  onDragEnd?: () => void;
 }
 
 /**
@@ -39,6 +45,11 @@ const BatchReadyView = ({
   onStartBatch,
   quotaRemaining,
   quotaUnlimited,
+  draggedIndex = null,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: BatchReadyViewProps) => {
   return (
     <div className="flex w-full min-w-0 flex-col bg-gradient-to-b from-primary/[0.06] via-background to-background pb-24 sm:pb-6">
@@ -53,9 +64,9 @@ const BatchReadyView = ({
               Danh sách tệp
             </h2>
             <p className="max-w-xl text-sm text-muted-foreground">
-              Ảnh được xử lý theo <strong>thứ tự tên tệp</strong>. Sau khi xong,
-              bạn gộp một lần sang Markdown hoặc Word — có thể đối chiếu song
-              song từng trang với văn bản.
+              Ảnh được OCR theo <strong>thứ tự dưới đây</strong> — kéo thả thẻ
+              để đổi thứ tự trước khi chạy. Sau khi xong, bạn gộp một lần sang
+              Markdown hoặc Word.
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -123,15 +134,31 @@ const BatchReadyView = ({
               Xem trước & thứ tự
             </CardTitle>
             <CardDescription>
-              Kéo danh sách nếu nhiều file — thứ tự dưới đây là thứ tự OCR.
+              Kéo thả từng thẻ để sắp xếp — thứ tự hiển thị là thứ tự gửi lên
+              máy chủ.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <ul className="grid gap-3 overflow-x-hidden p-4 sm:grid-cols-2 lg:grid-cols-3">
-                {files.map((f, i) => (
+              {files.map((f, i) => {
+                const dragging = draggedIndex === i;
+                return (
                   <li
                     key={`${f.name}-${f.size}-${f.lastModified}`}
-                    className="group relative overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-md"
+                    draggable={Boolean(onDragStart)}
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", String(i));
+                      onDragStart?.(i);
+                    }}
+                    onDragOver={onDragOver}
+                    onDrop={() => onDrop?.(i)}
+                    onDragEnd={onDragEnd}
+                    className={`group relative overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-md ${
+                      onDragStart
+                        ? "cursor-grab active:cursor-grabbing"
+                        : ""
+                    } ${dragging ? "opacity-60 ring-2 ring-primary/40" : ""}`}
                   >
                     <div className="relative aspect-[4/3] bg-muted">
                       {sourcePreviewUrls[i] ? (
@@ -148,6 +175,15 @@ const BatchReadyView = ({
                       <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-xs font-bold shadow-sm ring-1 ring-border">
                         {i + 1}
                       </span>
+                      {onDragStart ? (
+                        <span
+                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm ring-1 ring-border"
+                          title="Kéo để đổi thứ tự"
+                          aria-hidden
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </span>
+                      ) : null}
                     </div>
                     <div className="space-y-1 p-3">
                       <p
@@ -161,7 +197,8 @@ const BatchReadyView = ({
                       </p>
                     </div>
                   </li>
-                ))}
+                );
+              })}
             </ul>
           </CardContent>
         </Card>
@@ -173,11 +210,12 @@ const BatchReadyView = ({
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex gap-2">
               <span className="text-primary">1.</span>
-              Kiểm tra thứ tự tên file (vd.{" "}
+              Sắp xếp thứ tự bằng cách kéo thả thẻ ảnh, hoặc đặt tên file theo
+              thứ tự (vd.{" "}
               <code className="rounded bg-muted px-1 text-xs">
                 page_01
-              </code>,{" "}
-              <code className="rounded bg-muted px-1 text-xs">page_02</code>).
+              </code>
+              ).
             </li>
             <li className="flex gap-2">
               <span className="text-primary">2.</span>

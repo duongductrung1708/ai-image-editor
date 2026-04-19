@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { OcrHistoryEntry } from "@/components/ocr/OcrHistoryMobileDrawer";
 import OCRToolbar from "@/components/ocr/OCRToolbar";
 import OcrHistoryMobileDrawer from "@/components/ocr/OcrHistoryMobileDrawer";
@@ -60,6 +60,16 @@ const BatchOCRWorkspace = ({
   );
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
+  const orderedFiles = useMemo(() => {
+    if (
+      orderedFileIndices.length !== files.length ||
+      !orderedFileIndices.every((i) => i >= 0 && i < files.length)
+    ) {
+      return files;
+    }
+    return orderedFileIndices.map((idx) => files[idx]);
+  }, [files, orderedFileIndices]);
+
   const {
     phase,
     markdownText,
@@ -84,7 +94,7 @@ const BatchOCRWorkspace = ({
     runBatch,
     cancelBatch,
     applyHistoryEntry,
-  } = useBatchOcr(files);
+  } = useBatchOcr(orderedFiles);
 
   const selectHistory = useCallback(
     (entry: import("@/components/ocr/OcrHistoryMobileDrawer").OcrHistoryEntry) => {
@@ -108,10 +118,9 @@ const BatchOCRWorkspace = ({
     }
   }, [applyHistoryEntry, initialHistoryEntry, isBatchHistoryEntry, onRequestOpenHistory]);
 
-  // Sync orderedFileIndices when files change
   useEffect(() => {
     setOrderedFileIndices(files.map((_, i) => i));
-  }, [files.length]);
+  }, [files]);
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText, {
     onMarkdownChange: setMarkdownText,
@@ -211,17 +220,6 @@ const BatchOCRWorkspace = ({
     setDraggedIndex(null);
   }, []);
 
-  // Get reordered files based on orderedFileIndices
-  const getReorderedFiles = useCallback(() => {
-    return orderedFileIndices.map((idx) => files[idx]);
-  }, [orderedFileIndices, files]);
-
-  // Helper to check if arrays are equal
-  const arraysEqual = (a: number[], b: number[]): boolean => {
-    if (a.length !== b.length) return false;
-    return a.every((val, i) => val === b[i]);
-  };
-
   const guardedRunBatch = useCallback(() => {
     // Check if user has enough quota for ALL files in the batch
     const totalQuotaNeeded = files.length;
@@ -253,15 +251,7 @@ const BatchOCRWorkspace = ({
       }
       return;
     }
-    // Reorder files if user has changed the order
-    if (orderedFileIndices.length > 0 && !arraysEqual(orderedFileIndices, files.map((_, i) => i))) {
-      const reorderedFiles = getReorderedFiles();
-      // Update files in the OCR hook by calling with reordered files
-      // Note: This requires the OCR hook to support file reordering
-      // For now, we'll just run batch with current files as-is since useBatchOcr doesn't support reordering yet
-      // TODO: Implement file reordering in useBatchOcr hook
-    }
-    
+
     void runBatch().then(async (okCount) => {
       // Sync daily free uses with successful pages. `runBatch` resolves before React re-renders, so we must
       // use the returned `okCount` — not `lastBatchMeta` from closure (it would still be stale/null).
@@ -270,7 +260,7 @@ const BatchOCRWorkspace = ({
       if (n > 0) await deductDailyFreeUsesUpTo(n);
       refreshQuota();
     });
-  }, [runBatch, refreshQuota, deductDailyFreeUsesUpTo, user, freeDailyRemaining, balance, files, orderedFileIndices, getReorderedFiles]);
+  }, [runBatch, refreshQuota, deductDailyFreeUsesUpTo, user, freeDailyRemaining, balance, files.length]);
 
   const handleToolbarReprocess = useCallback(() => {
     if (phase === "result") guardedRunBatch();
@@ -342,7 +332,7 @@ const BatchOCRWorkspace = ({
 
       {phase === "processing" && (
         <BatchProcessingView
-          files={files}
+          files={orderedFiles}
           sourcePreviewUrls={effectivePreviewUrls}
           showHistorySidebar={showHistory}
           isLg={isLg}
@@ -358,14 +348,19 @@ const BatchOCRWorkspace = ({
         <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
             <BatchReadyView
-              files={files}
-              sourcePreviewUrls={effectivePreviewUrls}
+              files={orderedFiles}
+              sourcePreviewUrls={sourcePreviewUrls}
               totalBytes={totalBytes}
               extensionSummary={extensionSummary}
               isProcessing={isProcessing}
               onStartBatch={guardedRunBatch}
               quotaRemaining={quotaRemaining}
               quotaUnlimited={quotaUnlimited}
+              draggedIndex={draggedIndex}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
             />
           </div>
 
@@ -382,7 +377,7 @@ const BatchOCRWorkspace = ({
 
       {phase === "result" && (
         <BatchResultView
-          files={files}
+          files={orderedFiles}
           batchPages={batchPages}
           effectivePreviewUrls={effectivePreviewUrls}
           pageCount={pageCount}
@@ -405,12 +400,6 @@ const BatchOCRWorkspace = ({
           }}
           historyRefresh={historyRefresh}
           activeHistoryId={activeHistoryId}
-          orderedFileIndices={orderedFileIndices}
-          draggedIndex={draggedIndex}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onDragEnd={handleDragEnd}
         />
       )}
 

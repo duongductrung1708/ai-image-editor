@@ -35,12 +35,6 @@ interface BatchResultViewProps {
   onHistorySelect: (entry: OcrHistoryEntry) => void;
   historyRefresh: number;
   activeHistoryId?: string | null;
-  orderedFileIndices?: number[];
-  draggedIndex?: number | null;
-  onDragStart?: (index: number) => void;
-  onDragOver?: (e: React.DragEvent) => void;
-  onDrop?: (index: number) => void;
-  onDragEnd?: () => void;
 }
 
 /**
@@ -65,24 +59,21 @@ const BatchResultView = ({
   onHistorySelect,
   historyRefresh,
   activeHistoryId,
-  orderedFileIndices = [],
-  draggedIndex = null,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
 }: BatchResultViewProps) => {
   const [jumpToBox, setJumpToBox] = useState<JumpToBoxRequest | null>(null);
   const jumpNonceRef = useRef(0);
 
   const handleBatchImageBoxClick = useCallback(
-    (pageIndex: number, boxIndex: number) => {
+    (displayPageIndex: number, boxIndex: number) => {
       onActiveTabChange("markdown");
-      onBatchMarkdownHighlightChange({ pageIndex, indices: [boxIndex] });
+      onBatchMarkdownHighlightChange({
+        pageIndex: displayPageIndex,
+        indices: [boxIndex],
+      });
       jumpNonceRef.current += 1;
       setJumpToBox({
         kind: "batch",
-        pageIndex,
+        pageIndex: displayPageIndex,
         boxIndex,
         nonce: jumpNonceRef.current,
       });
@@ -111,24 +102,18 @@ const BatchResultView = ({
           </div>
           <ScrollArea className="min-h-0 w-full flex-1">
             <div className="space-y-4 p-3 pr-3">
-              {(orderedFileIndices.length > 0 ? orderedFileIndices : effectivePreviewUrls.map((_, i) => i)).map((originalIndex, displayIndex) => {
-                const url = effectivePreviewUrls[originalIndex];
+              {Array.from({ length: pageCount }, (_, displayIndex) => {
+                const url = effectivePreviewUrls[displayIndex];
                 const title =
-                  batchPages?.[originalIndex]?.name ?? files[originalIndex]?.name ?? `Trang ${originalIndex + 1}`;
-                const pageBoxes = (batchPages?.[originalIndex]?.blocks ??
+                  batchPages?.[displayIndex]?.name ??
+                  files[displayIndex]?.name ??
+                  `Trang ${displayIndex + 1}`;
+                const pageBoxes = (batchPages?.[displayIndex]?.blocks ??
                   []) as BoundingBox[];
-                const isDragging = draggedIndex === displayIndex;
                 return (
                   <figure
-                    key={`${url}-${originalIndex}`}
-                    draggable
-                    onDragStart={() => onDragStart?.(displayIndex)}
-                    onDragOver={onDragOver}
-                    onDrop={() => onDrop?.(displayIndex)}
-                    onDragEnd={onDragEnd}
-                    className={`overflow-hidden rounded-lg border border-border bg-card shadow-sm cursor-grab active:cursor-grabbing transition-opacity ${
-                      isDragging ? "opacity-50" : ""
-                    }`}
+                    key={`${url}-${displayIndex}-${title}`}
+                    className="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
                   >
                     <figcaption className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
                       <span className="truncate">
@@ -146,12 +131,12 @@ const BatchResultView = ({
                         boxes={pageBoxes}
                         isProcessing={false}
                         linkedHighlightIndices={
-                          linkedBatchHighlight?.pageIndex === originalIndex
+                          linkedBatchHighlight?.pageIndex === displayIndex
                             ? linkedBatchHighlight.indices
                             : null
                         }
                         onBoxClick={(boxIdx) =>
-                          handleBatchImageBoxClick(originalIndex, boxIdx)
+                          handleBatchImageBoxClick(displayIndex, boxIdx)
                         }
                       />
                     </div>
