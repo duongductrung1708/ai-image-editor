@@ -497,22 +497,58 @@ const OCRWorkspace = ({
       );
       if (entry.image_data) {
         setImageUrl(entry.image_data);
-        // Always fetch and update editFile from image_data (whether it's data URL or regular URL)
-        // This ensures ảnh and bbox change when switching between history entries
-        void (async () => {
+        // Convert data URL to File object synchronously to avoid flicker
+        // Data URL format: data:image/png;base64,... or data:image/jpeg;base64,...
+        if (entry.image_data.startsWith("data:")) {
           try {
-            const res = await fetch(entry.image_data!);
-            const blob = await res.blob();
-            const type = blob.type || "image/png";
+            const [header, data] = entry.image_data.split(",");
+            const mimeMatch = header.match(/data:([^;]+)/);
+            const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
+            const binaryString = atob(data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            const blob = new Blob([bytes], { type: mimeType });
             setEditFile(
               new File([blob], entry.image_name || "ocr-history.png", {
-                type,
+                type: mimeType,
               }),
             );
           } catch {
-            // ignore
+            // Fallback: fetch if sync conversion fails
+            void (async () => {
+              try {
+                const res = await fetch(entry.image_data!);
+                const blob = await res.blob();
+                const type = blob.type || "image/png";
+                setEditFile(
+                  new File([blob], entry.image_name || "ocr-history.png", {
+                    type,
+                  }),
+                );
+              } catch {
+                // ignore
+              }
+            })();
           }
-        })();
+        } else {
+          // For non-data URLs, fetch asynchronously
+          void (async () => {
+            try {
+              const res = await fetch(entry.image_data!);
+              const blob = await res.blob();
+              const type = blob.type || "image/png";
+              setEditFile(
+                new File([blob], entry.image_name || "ocr-history.png", {
+                  type,
+                }),
+              );
+            } catch {
+              // ignore
+            }
+          })();
+        }
       }
     },
     [isBatchHistoryEntry, onRequestOpenHistory, setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText],
