@@ -356,7 +356,7 @@ const BatchOCRWorkspace = ({
 
       {phase === "ready" && (
         <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
             <BatchReadyView
               files={files}
               sourcePreviewUrls={effectivePreviewUrls}

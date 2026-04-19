@@ -412,8 +412,11 @@ const AppPage = () => {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
-      <div className="pointer-events-none absolute inset-0">
+    <div className="relative min-h-screen overflow-x-hidden bg-background">
+      <div
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+        aria-hidden
+      >
         <div className="absolute -left-24 top-20 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute right-[-120px] top-1/3 h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute bottom-[-140px] left-1/3 h-80 w-80 rounded-full bg-primary/10 blur-3xl" />

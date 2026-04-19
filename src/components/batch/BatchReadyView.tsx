@@ -14,7 +14,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatBatchFileSize } from "@/lib/batchWorkspaceUtils";
 
 interface BatchReadyViewProps {
@@ -42,8 +41,8 @@ const BatchReadyView = ({
   quotaUnlimited,
 }: BatchReadyViewProps) => {
   return (
-    <div className="min-h-0 flex-1 overflow-auto bg-gradient-to-b from-primary/[0.06] via-background to-background pb-24 sm:pb-6">
-      <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-6 md:py-8">
+    <div className="flex w-full min-w-0 flex-col bg-gradient-to-b from-primary/[0.06] via-background to-background pb-24 sm:pb-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
@@ -128,8 +127,7 @@ const BatchReadyView = ({
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="h-[min(52vh,420px)]">
-              <ul className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="grid gap-3 overflow-x-hidden p-4 sm:grid-cols-2 lg:grid-cols-3">
                 {files.map((f, i) => (
                   <li
                     key={`${f.name}-${f.size}-${f.lastModified}`}
@@ -164,12 +162,11 @@ const BatchReadyView = ({
                     </div>
                   </li>
                 ))}
-              </ul>
-            </ScrollArea>
+            </ul>
           </CardContent>
         </Card>
 
-        <div className="rounded-xl border border-dashed border-primary/25 bg-primary/[0.04] p-4 md:p-5">
+        <div className="shrink-0 rounded-xl border border-dashed border-primary/25 bg-primary/[0.04] p-4 md:p-5">
           <p className="mb-3 text-sm font-medium text-foreground">
             Trước khi chạy
           </p>
