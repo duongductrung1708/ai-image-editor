@@ -93,7 +93,7 @@ const BatchResultView = ({
   return (
     <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <div className="flex min-h-[220px] w-full flex-col border-b border-border bg-muted/20 lg:min-h-0 lg:w-1/2 lg:border-b-0 lg:border-r">
+        <div className="flex min-h-[220px] w-full flex-1 flex-col overflow-hidden border-b border-border bg-muted/20 lg:min-h-0 lg:w-1/2 lg:border-b-0 lg:border-r">
           <div className="shrink-0 border-b border-border bg-card/80 px-3 py-2">
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Ảnh gốc · {pageCount} trang
@@ -109,7 +109,7 @@ const BatchResultView = ({
               </p>
             )}
           </div>
-          <ScrollArea className="h-full w-full flex-1">
+          <ScrollArea className="min-h-0 w-full flex-1">
             <div className="space-y-4 p-3 pr-3">
               {(orderedFileIndices.length > 0 ? orderedFileIndices : effectivePreviewUrls.map((_, i) => i)).map((originalIndex, displayIndex) => {
                 const url = effectivePreviewUrls[originalIndex];
