@@ -97,8 +97,8 @@ const BatchResultView = ({
               </p>
             )}
           </div>
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="space-y-4 p-3">
+          <ScrollArea className="h-full w-full flex-1">
+            <div className="space-y-4 p-3 pr-3">
               {effectivePreviewUrls.map((url, i) => {
                 const title =
                   batchPages?.[i]?.name ?? files[i]?.name ?? `Trang ${i + 1}`;
