@@ -35,6 +35,12 @@ interface BatchResultViewProps {
   onHistorySelect: (entry: OcrHistoryEntry) => void;
   historyRefresh: number;
   activeHistoryId?: string | null;
+  orderedFileIndices?: number[];
+  draggedIndex?: number | null;
+  onDragStart?: (index: number) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (index: number) => void;
+  onDragEnd?: () => void;
 }
 
 /**
@@ -58,7 +64,13 @@ const BatchResultView = ({
   isLg,
   onHistorySelect,
   historyRefresh,
-  activeHistoryId = null,
+  activeHistoryId,
+  orderedFileIndices = [],
+  draggedIndex = null,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: BatchResultViewProps) => {
   const [jumpToBox, setJumpToBox] = useState<JumpToBoxRequest | null>(null);
   const jumpNonceRef = useRef(0);
@@ -97,21 +109,30 @@ const BatchResultView = ({
               </p>
             )}
           </div>
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="space-y-4 p-3">
-              {effectivePreviewUrls.map((url, i) => {
+          <ScrollArea className="h-full w-full flex-1">
+            <div className="space-y-4 p-3 pr-3">
+              {(orderedFileIndices.length > 0 ? orderedFileIndices : effectivePreviewUrls.map((_, i) => i)).map((originalIndex, displayIndex) => {
+                const url = effectivePreviewUrls[originalIndex];
                 const title =
-                  batchPages?.[i]?.name ?? files[i]?.name ?? `Trang ${i + 1}`;
-                const pageBoxes = (batchPages?.[i]?.blocks ??
+                  batchPages?.[originalIndex]?.name ?? files[originalIndex]?.name ?? `Trang ${originalIndex + 1}`;
+                const pageBoxes = (batchPages?.[originalIndex]?.blocks ??
                   []) as BoundingBox[];
+                const isDragging = draggedIndex === displayIndex;
                 return (
                   <figure
-                    key={`${url}-${i}`}
-                    className="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+                    key={`${url}-${originalIndex}`}
+                    draggable
+                    onDragStart={() => onDragStart?.(displayIndex)}
+                    onDragOver={onDragOver}
+                    onDrop={() => onDrop?.(displayIndex)}
+                    onDragEnd={onDragEnd}
+                    className={`overflow-hidden rounded-lg border border-border bg-card shadow-sm cursor-grab active:cursor-grabbing transition-opacity ${
+                      isDragging ? "opacity-50" : ""
+                    }`}
                   >
                     <figcaption className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
                       <span className="truncate">
-                        {i + 1}. {title}
+                        {displayIndex + 1}. {title}
                       </span>
                       {pageBoxes.length > 0 && (
                         <span className="shrink-0 text-[10px] text-accent">
@@ -125,12 +146,12 @@ const BatchResultView = ({
                         boxes={pageBoxes}
                         isProcessing={false}
                         linkedHighlightIndices={
-                          linkedBatchHighlight?.pageIndex === i
+                          linkedBatchHighlight?.pageIndex === originalIndex
                             ? linkedBatchHighlight.indices
                             : null
                         }
                         onBoxClick={(boxIdx) =>
-                          handleBatchImageBoxClick(i, boxIdx)
+                          handleBatchImageBoxClick(originalIndex, boxIdx)
                         }
                       />
                     </div>

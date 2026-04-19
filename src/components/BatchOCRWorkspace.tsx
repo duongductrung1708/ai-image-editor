@@ -55,6 +55,10 @@ const BatchOCRWorkspace = ({
     pageIndex: number;
     indices: number[];
   } | null>(null);
+  const [orderedFileIndices, setOrderedFileIndices] = useState<number[]>(
+    files.map((_, i) => i),
+  );
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   const {
     phase,
@@ -103,6 +107,11 @@ const BatchOCRWorkspace = ({
       onRequestOpenHistory?.(initialHistoryEntry);
     }
   }, [applyHistoryEntry, initialHistoryEntry, isBatchHistoryEntry, onRequestOpenHistory]);
+
+  // Sync orderedFileIndices when files change
+  useEffect(() => {
+    setOrderedFileIndices(files.map((_, i) => i));
+  }, [files.length]);
 
   const { editor, turndown } = useOcrMarkdownEditor(markdownText, {
     onMarkdownChange: setMarkdownText,
@@ -168,6 +177,51 @@ const BatchOCRWorkspace = ({
     resetWorkspaceUi();
   }, [resetWorkspaceUi]);
 
+  const handleDragStart = useCallback((index: number) => {
+    setDraggedIndex(index);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const handleDrop = useCallback(
+    (dropIndex: number) => {
+      if (draggedIndex === null || draggedIndex === dropIndex) {
+        setDraggedIndex(null);
+        return;
+      }
+
+      const newIndices = [...orderedFileIndices];
+      const draggedOriginalIndex = newIndices[draggedIndex];
+      
+      // Remove dragged item
+      newIndices.splice(draggedIndex, 1);
+      // Insert at new position
+      newIndices.splice(dropIndex, 0, draggedOriginalIndex);
+      
+      setOrderedFileIndices(newIndices);
+      setDraggedIndex(null);
+    },
+    [draggedIndex, orderedFileIndices],
+  );
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedIndex(null);
+  }, []);
+
+  // Get reordered files based on orderedFileIndices
+  const getReorderedFiles = useCallback(() => {
+    return orderedFileIndices.map((idx) => files[idx]);
+  }, [orderedFileIndices, files]);
+
+  // Helper to check if arrays are equal
+  const arraysEqual = (a: number[], b: number[]): boolean => {
+    if (a.length !== b.length) return false;
+    return a.every((val, i) => val === b[i]);
+  };
+
   const guardedRunBatch = useCallback(() => {
     // Check if user has enough quota for ALL files in the batch
     const totalQuotaNeeded = files.length;
@@ -199,6 +253,15 @@ const BatchOCRWorkspace = ({
       }
       return;
     }
+    // Reorder files if user has changed the order
+    if (orderedFileIndices.length > 0 && !arraysEqual(orderedFileIndices, files.map((_, i) => i))) {
+      const reorderedFiles = getReorderedFiles();
+      // Update files in the OCR hook by calling with reordered files
+      // Note: This requires the OCR hook to support file reordering
+      // For now, we'll just run batch with current files as-is since useBatchOcr doesn't support reordering yet
+      // TODO: Implement file reordering in useBatchOcr hook
+    }
+    
     void runBatch().then(async (okCount) => {
       // Sync daily free uses with successful pages. `runBatch` resolves before React re-renders, so we must
       // use the returned `okCount` — not `lastBatchMeta` from closure (it would still be stale/null).
@@ -207,7 +270,7 @@ const BatchOCRWorkspace = ({
       if (n > 0) await deductDailyFreeUsesUpTo(n);
       refreshQuota();
     });
-  }, [runBatch, refreshQuota, deductDailyFreeUsesUpTo, user, freeDailyRemaining, balance, files]);
+  }, [runBatch, refreshQuota, deductDailyFreeUsesUpTo, user, freeDailyRemaining, balance, files, orderedFileIndices, getReorderedFiles]);
 
   const handleToolbarReprocess = useCallback(() => {
     if (phase === "result") guardedRunBatch();
@@ -342,6 +405,12 @@ const BatchOCRWorkspace = ({
           }}
           historyRefresh={historyRefresh}
           activeHistoryId={activeHistoryId}
+          orderedFileIndices={orderedFileIndices}
+          draggedIndex={draggedIndex}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onDragEnd={handleDragEnd}
         />
       )}
 
