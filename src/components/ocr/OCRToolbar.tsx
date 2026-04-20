@@ -55,6 +55,8 @@ interface OCRToolbarProps {
   showPdf?: boolean;
   /** Hiện nút hủy khi đang OCR (gọi abort / dừng pipeline). */
   onCancelProcessing?: () => void;
+  /** Switch to batch OCR mode */
+  onSwitchToBatch?: () => void;
 }
 
 const OCRToolbar = ({
@@ -75,6 +77,7 @@ const OCRToolbar = ({
   showReprocess = true,
   showPdf = true,
   onCancelProcessing,
+  onSwitchToBatch,
 }: OCRToolbarProps) => {
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-border bg-card px-4 py-3">
@@ -133,6 +136,23 @@ const OCRToolbar = ({
             <TooltipContent side="bottom">Chạy OCR lại với ảnh hiện tại</TooltipContent>
           </Tooltip>
         ) : null}
+        {onSwitchToBatch && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onSwitchToBatch}
+                disabled={isProcessing}
+                className="gap-1.5"
+              >
+                <ImagePlus className="h-3.5 w-3.5" />
+                Thêm ảnh để batch
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Thêm ảnh khác để OCR hàng loạt</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

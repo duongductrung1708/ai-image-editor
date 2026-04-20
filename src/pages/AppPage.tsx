@@ -405,6 +405,7 @@ const AppPage = () => {
             imageFile={files[0]}
             onBack={() => setFiles(null)}
             onRequestOpenHistory={handleRequestOpenHistory}
+            onSwitchToBatch={(file) => setFiles([files[0], file])}
           />
         </div>
       </div>

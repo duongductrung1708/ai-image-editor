@@ -44,6 +44,7 @@ interface OCRWorkspaceProps {
     created_at: string;
   } | null;
   onRequestOpenHistory?: (entry: OcrHistoryEntry) => void;
+  onSwitchToBatch?: (file: File) => void;
 }
 
 const OCRWorkspace = ({
@@ -51,6 +52,7 @@ const OCRWorkspace = ({
   onBack,
   initialHistoryEntry = null,
   onRequestOpenHistory,
+  onSwitchToBatch,
 }: OCRWorkspaceProps) => {
   const { user } = useAuth();
   const [imageUrl, setImageUrl] = useState("");
@@ -587,6 +589,7 @@ const OCRWorkspace = ({
         onDownloadDocx={downloadDocx}
         showReprocess={phase === "result"}
         onCancelProcessing={ocrPipelineBusy ? cancelProcessing : undefined}
+        onSwitchToBatch={onSwitchToBatch ? () => onSwitchToBatch(imageFile) : undefined}
       />
       {/* Fixed-height status area to avoid layout shifts (Cropper/ImageViewer glitches) */}
       <div className="border-b border-border bg-card px-4 py-1.5 min-h-[40px] flex items-center">
