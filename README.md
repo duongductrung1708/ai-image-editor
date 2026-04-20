@@ -1,25 +1,30 @@
 # MonkeyOCR
 
-## Setup project (Supabase + frontend)
+## Tổng quan / Overview
 
-### Prerequisites
+- **VI**: Ứng dụng OCR tiếng Việt (1 ảnh + hàng loạt) với lịch sử, credits và thanh toán VNPAY (hiện repo cấu hình theo môi trường test).
+- **EN**: Vietnamese OCR app (single + batch) with history, credits, and VNPAY payments (this repo is currently set up for test environment).
 
-- **Node.js** (recommend LTS) + **npm**
-- **Supabase CLI** (for local dev & migrations)
+## Cài đặt dự án / Setup project (Supabase + frontend)
 
-### 1) Install dependencies
+### Yêu cầu / Prerequisites
+
+- **Node.js** (khuyến nghị LTS / recommend LTS) + **npm**
+- **Supabase CLI** (dev local, migrations / local dev & migrations)
+
+### 1) Cài dependencies / Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2) Start Supabase locally (recommended for dev)
+### 2) Chạy Supabase local (khuyến nghị cho dev) / Start Supabase locally (recommended for dev)
 
 ```bash
 supabase start
 ```
 
-Apply DB schema (single baseline migration):
+Áp migrations (repo có baseline migration) / Apply DB schema (baseline migration):
 
 ```bash
 supabase db reset
@@ -29,7 +34,7 @@ Notes:
 - This repo uses a **single consolidated migration**: `supabase/migrations/20260414000000_init.sql`.
 - `supabase db reset` will recreate the local DB and apply migrations from scratch.
 
-### 3) Configure frontend env
+### 3) Cấu hình env frontend / Configure frontend env
 
 Create `.env` at project root (or copy from `.env.example` if you have one) and set:
 
@@ -38,19 +43,19 @@ VITE_SUPABASE_URL="http://127.0.0.1:54321"
 VITE_SUPABASE_ANON_KEY="<local-anon-key>"
 ```
 
-Get local keys:
+Lấy local keys / Get local keys:
 
 ```bash
 supabase status
 ```
 
-### 4) Run the app
+### 4) Chạy app / Run the app
 
 ```bash
 npm run dev
 ```
 
-### Optional: link to a remote Supabase project (staging/prod)
+### Tuỳ chọn: link Supabase remote (staging/prod) / Optional: link to a remote Supabase project (staging/prod)
 
 If you want to use a remote project instead of local:
 
@@ -62,7 +67,7 @@ supabase db push
 
 Then update `.env` to your remote `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
-## OCR providers (Supabase Edge Function)
+## Nhà cung cấp OCR / OCR providers (Supabase Edge Function)
 
 The app calls **`supabase/functions/v1/ocr-vietnamese`**. Supported providers:
 
@@ -111,3 +116,7 @@ supabase secrets set OCR_PROVIDER=gemini GEMINI_API_KEY=... GEMINI_MODEL=gemini-
 ### Model doesn’t return JSON (JSON tab empty)
 
 Some models ignore “JSON only” instructions. The function can fall back to raw text and return a warning.
+
+## Bàn giao dự án / Handover
+
+- Xem tài liệu bàn giao (song ngữ): `docs/HANDOVER.md`

@@ -111,6 +111,10 @@ const ProfilePage = () => {
     { id: string; amount: number; type: string; description: string | null; created_at: string; vnpay_txn_ref: string | null }[]
   >([]);
   const [txLoading, setTxLoading] = useState(false);
+  const [freeUsesHistory, setFreeUsesHistory] = useState<
+    { id: string; date: string; used: number }[]
+  >([]);
+  const [freeUsesLoading, setFreeUsesLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -124,6 +128,21 @@ const ProfilePage = () => {
       .then(({ data }) => {
         setTransactions(data ?? []);
         setTxLoading(false);
+      });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    setFreeUsesLoading(true);
+    supabase
+      .from("daily_free_uses")
+      .select("id, date, used")
+      .eq("user_id", user.id)
+      .order("date", { ascending: false })
+      .limit(30)
+      .then(({ data }) => {
+        setFreeUsesHistory((data ?? []) as { id: string; date: string; used: number }[]);
+        setFreeUsesLoading(false);
       });
   }, [user]);
   const [displayName, setDisplayName] = useState("");
@@ -580,50 +599,119 @@ const ProfilePage = () => {
                     <History className="h-4 w-4" />
                     Lịch sử giao dịch
                   </h3>
-                  {txLoading ? (
-                    <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang tải...
-                    </div>
-                  ) : transactions.length === 0 ? (
-                    <p className="py-6 text-center text-sm text-muted-foreground">Chưa có giao dịch nào.</p>
-                  ) : (
-                    <div className="max-h-[300px] overflow-y-auto rounded-md border border-border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-xs">Thời gian</TableHead>
-                            <TableHead className="text-xs">Loại</TableHead>
-                            <TableHead className="text-xs">Mô tả</TableHead>
-                            <TableHead className="text-xs text-right">Số lượng</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {transactions.map((tx) => (
-                            <TableRow key={tx.id}>
-                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                                {new Date(tx.created_at).toLocaleString("vi-VN")}
-                              </TableCell>
-                              <TableCell className="text-xs">
-                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                                  tx.type === "topup" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                  : tx.type === "refund" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                  : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
-                                }`}>
-                                  {tx.type === "topup" ? "Nạp" : tx.type === "refund" ? "Hoàn" : "Sử dụng"}
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                                {tx.description || tx.vnpay_txn_ref || "—"}
-                              </TableCell>
-                              <TableCell className={`text-xs text-right font-medium ${tx.amount > 0 ? "text-green-600 dark:text-green-400" : "text-orange-600 dark:text-orange-400"}`}>
-                                {tx.amount > 0 ? "+" : ""}{tx.amount}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
+                  <Tabs defaultValue="credits" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="credits">Credits</TabsTrigger>
+                      <TabsTrigger value="free">Lượt miễn phí</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="credits" className="mt-3">
+                      {txLoading ? (
+                        <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang tải...
+                        </div>
+                      ) : transactions.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-muted-foreground">
+                          Chưa có giao dịch nào.
+                        </p>
+                      ) : (
+                        <div className="max-h-[300px] overflow-y-auto rounded-md border border-border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-xs">Thời gian</TableHead>
+                                <TableHead className="text-xs">Loại</TableHead>
+                                <TableHead className="text-xs">Mô tả</TableHead>
+                                <TableHead className="text-xs text-right">Số lượng</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {transactions.map((tx) => (
+                                <TableRow key={tx.id}>
+                                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                    {new Date(tx.created_at).toLocaleString("vi-VN")}
+                                  </TableCell>
+                                  <TableCell className="text-xs">
+                                    <span
+                                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                        tx.type === "topup"
+                                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                          : tx.type === "refund"
+                                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                            : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                                      }`}
+                                    >
+                                      {tx.type === "topup"
+                                        ? "Nạp"
+                                        : tx.type === "refund"
+                                          ? "Hoàn"
+                                          : "Sử dụng"}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                                    {tx.description || tx.vnpay_txn_ref || "—"}
+                                  </TableCell>
+                                  <TableCell
+                                    className={`text-xs text-right font-medium ${
+                                      tx.amount > 0
+                                        ? "text-green-600 dark:text-green-400"
+                                        : "text-orange-600 dark:text-orange-400"
+                                    }`}
+                                  >
+                                    {tx.amount > 0 ? "+" : ""}
+                                    {tx.amount}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="free" className="mt-3">
+                      {freeUsesLoading ? (
+                        <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang tải...
+                        </div>
+                      ) : freeUsesHistory.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-muted-foreground">
+                          Chưa có dữ liệu lượt miễn phí.
+                        </p>
+                      ) : (
+                        <div className="max-h-[300px] overflow-y-auto rounded-md border border-border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-xs">Ngày</TableHead>
+                                <TableHead className="text-xs text-right">Đã dùng</TableHead>
+                                <TableHead className="text-xs text-right">Còn lại</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {freeUsesHistory.map((r) => {
+                                const used = typeof r.used === "number" ? r.used : 0;
+                                const remaining = Math.max(0, 5 - used);
+                                return (
+                                  <TableRow key={r.id}>
+                                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                      {new Date(r.date).toLocaleDateString("vi-VN")}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-right font-medium">
+                                      {used}/5
+                                    </TableCell>
+                                    <TableCell className="text-xs text-right text-muted-foreground">
+                                      {remaining}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </TabsContent>
+                  </Tabs>
                 </div>
               </CardContent>
             </Card>
