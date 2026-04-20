@@ -438,6 +438,14 @@ const OCRWorkspace = ({
 
   const handleHistorySelect = useCallback(
     (entry: OcrHistoryEntry) => {
+      // Don't allow history selection while OCR is loading
+      if (phase === "loading") {
+        toast.error("Vui lòng chờ OCR hoàn thành trước khi chuyển lịch sử", {
+          duration: 3000,
+        });
+        return;
+      }
+
       // If user selects a batch history entry while in single-image workspace,
       // switch to the batch workspace (AppPage will hydrate it).
       if (isBatchHistoryEntry(entry)) {
@@ -551,7 +559,7 @@ const OCRWorkspace = ({
         }
       }
     },
-    [isBatchHistoryEntry, onRequestOpenHistory, setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText],
+    [isBatchHistoryEntry, onRequestOpenHistory, setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText, phase],
   );
 
   useEffect(() => {
