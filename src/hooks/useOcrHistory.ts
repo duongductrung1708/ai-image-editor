@@ -105,7 +105,11 @@ export function useOcrHistory(limit = 50) {
 
   const deleteAll = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("ocr_history").delete().neq("id", "");
+      // Supabase requires a non-empty filter for DELETE. Using a "always true" predicate.
+      const { error } = await supabase
+        .from("ocr_history")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
       if (error) throw error;
     },
     onMutate: async () => {
