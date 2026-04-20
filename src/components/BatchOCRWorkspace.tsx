@@ -100,7 +100,13 @@ const BatchOCRWorkspace = ({
     (entry: import("@/components/ocr/OcrHistoryMobileDrawer").OcrHistoryEntry) => {
       setActiveHistoryId(entry.id);
       if (!isBatchHistoryEntry(entry)) {
-        onRequestOpenHistory?.(entry);
+        if (onRequestOpenHistory) {
+          onRequestOpenHistory(entry);
+        } else {
+          // Fallback for callers that don't provide a handler (e.g. LandingPage):
+          // deep-link to /app so AppPage can hydrate either single or batch entries.
+          window.location.href = `/app?historyId=${encodeURIComponent(entry.id)}`;
+        }
         return;
       }
       applyHistoryEntry(entry);
