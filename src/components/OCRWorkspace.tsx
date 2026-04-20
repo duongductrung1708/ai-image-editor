@@ -76,6 +76,9 @@ const OCRWorkspace = ({
 
   const lastOcrBlobUrlRef = useRef<string | null>(null);
   const cropperApiRef = useRef<ImageCropperApi | null>(null);
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const appliedInitialHistoryIdRef = useRef<string | null>(null);
 
   const ocrPipelineBusy = phase === "processing";
 
@@ -264,10 +267,12 @@ const OCRWorkspace = ({
 
   const setOcrImageFromFile = useCallback((file: File) => {
     const url = URL.createObjectURL(file);
-    if (lastOcrBlobUrlRef.current)
-      URL.revokeObjectURL(lastOcrBlobUrlRef.current);
+    const prev = lastOcrBlobUrlRef.current;
     lastOcrBlobUrlRef.current = url;
     setImageUrl(url);
+    if (prev) {
+      requestAnimationFrame(() => URL.revokeObjectURL(prev));
+    }
   }, []);
 
   const {
@@ -410,9 +415,11 @@ const OCRWorkspace = ({
   }, [isEditingBusy, phase]);
 
   const handleReprocess = useCallback(() => {
+    if (phase === "processing") return;
+    setShowHistory(false);
     if (phase === "result") {
+      setImageUrl((u) => (u.startsWith("blob:") ? "" : u));
       setPhase("edit");
-      setShowHistory(false);
       setMarkdownText("");
       setJsonText("");
       setBoundingBoxes([]);
@@ -440,9 +447,8 @@ const OCRWorkspace = ({
 
   const handleHistorySelect = useCallback(
     (entry: OcrHistoryEntry) => {
-      // Don't allow history selection while OCR is loading
-      if (phase === "loading") {
-        toast.error("Vui lòng chờ OCR hoàn thành trước khi chuyển lịch sử", {
+      if (phaseRef.current === "processing") {
+        toast.error("Vui lòng chờ OCR hoàn tất trước khi chuyển lịch sử", {
           duration: 3000,
         });
         return;
@@ -465,10 +471,8 @@ const OCRWorkspace = ({
       setEnhance(false);
       setCurrentHistoryId(entry.id);
 
-      if (lastOcrBlobUrlRef.current) {
-        URL.revokeObjectURL(lastOcrBlobUrlRef.current);
-        lastOcrBlobUrlRef.current = null;
-      }
+      const prevPreviewBlob = lastOcrBlobUrlRef.current;
+      lastOcrBlobUrlRef.current = null;
 
       // entry is guaranteed non-batch here (handled above)
 
@@ -513,6 +517,11 @@ const OCRWorkspace = ({
       );
       if (entry.image_data) {
         setImageUrl(entry.image_data);
+        if (prevPreviewBlob) {
+          requestAnimationFrame(() =>
+            URL.revokeObjectURL(prevPreviewBlob),
+          );
+        }
         // Convert data URL to File object synchronously to avoid flicker
         // Data URL format: data:image/png;base64,... or data:image/jpeg;base64,...
         if (entry.image_data.startsWith("data:")) {
@@ -565,15 +574,22 @@ const OCRWorkspace = ({
             }
           })();
         }
+      } else if (prevPreviewBlob) {
+        requestAnimationFrame(() => URL.revokeObjectURL(prevPreviewBlob));
       }
     },
-    [isBatchHistoryEntry, onRequestOpenHistory, setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText, phase],
+    [isBatchHistoryEntry, onRequestOpenHistory, setBoundingBoxes, setCurrentHistoryId, setJsonText, setMarkdownText],
   );
 
   useEffect(() => {
-    if (initialHistoryEntry) {
-      handleHistorySelect(initialHistoryEntry);
+    if (!initialHistoryEntry) {
+      appliedInitialHistoryIdRef.current = null;
+      return;
     }
+    const id = initialHistoryEntry.id;
+    if (appliedInitialHistoryIdRef.current === id) return;
+    appliedInitialHistoryIdRef.current = id;
+    handleHistorySelect(initialHistoryEntry);
   }, [handleHistorySelect, initialHistoryEntry]);
 
   return (
@@ -593,7 +609,7 @@ const OCRWorkspace = ({
         onDownloadJson={() => download("json")}
         onExportPdf={exportPdf}
         onDownloadDocx={downloadDocx}
-        showReprocess={phase === "result"}
+        showReprocess={phase === "result" || phase === "edit"}
         onCancelProcessing={ocrPipelineBusy ? cancelProcessing : undefined}
         onSwitchToBatch={onSwitchToBatch ? () => onSwitchToBatch(imageFile) : undefined}
       />

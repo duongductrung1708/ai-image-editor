@@ -208,9 +208,9 @@ const HistorySidebar = ({
             <AlertDialogTitle>Xóa lịch sử OCR?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete ? (
-                <span className="block">
+                <span className="block min-w-0">
                   Bạn có chắc chắn muốn xóa{" "}
-                  <span className="font-mono text-xs break-all">
+                  <span className="inline font-mono text-xs break-all">
                     &quot;{pendingDelete.imageName}&quot;
                   </span>
                   ?
