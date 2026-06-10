@@ -144,7 +144,7 @@ const OCRWorkspace = ({
 
   const { copied, copy, download, exportPdf, downloadDocx } =
     useSingleImageExportActions({
-      activeTab,
+      activeTab: activeTab === "chat" ? "markdown" : activeTab,
       editor,
       turndown,
       markdownText,
