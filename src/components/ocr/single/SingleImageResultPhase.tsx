@@ -13,6 +13,9 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import DocumentChatPanel from "@/features/chat/DocumentChatPanel";
+
+export type SingleImageResultTab = "markdown" | "json" | "chat";
 
 interface SingleImageResultPhaseProps {
   imageUrl: string;
@@ -20,8 +23,8 @@ interface SingleImageResultPhaseProps {
   isProcessing: boolean;
   markdownLinkedBoxIndices: number[] | null;
   onMarkdownHighlightChange: (indices: number[] | null) => void;
-  activeTab: "markdown" | "json";
-  onActiveTabChange: (tab: "markdown" | "json") => void;
+  activeTab: SingleImageResultTab;
+  onActiveTabChange: (tab: SingleImageResultTab) => void;
   editor: Editor | null;
   jsonText: string;
   onJsonTextChange: (text: string) => void;
@@ -30,7 +33,12 @@ interface SingleImageResultPhaseProps {
   onHistorySelect: (entry: OcrHistoryEntry) => void;
   historyRefresh: number;
   activeHistoryId?: string | null;
+  /** Văn bản đã OCR (markdown) để chatbot dùng làm ngữ cảnh. */
+  ocrText: string;
+  /** Đổi khi sang ảnh khác để reset hội thoại. */
+  chatSessionKey: string;
 }
+
 
 /**
  * Kết quả OCR một ảnh: viewer + Markdown/JSON + lịch sử (desktop).
@@ -69,6 +77,7 @@ const SingleImageResultPhase = ({
     [onActiveTabChange, onMarkdownHighlightChange],
   );
 
+
   const leftPanel = (
     <ImageViewer
       imageUrl={imageUrl}
@@ -93,7 +102,9 @@ const SingleImageResultPhase = ({
           )}
           <Tabs
             value={activeTab}
-            onValueChange={(v) => onActiveTabChange(v as "markdown" | "json")}
+            onValueChange={(v) =>
+              onActiveTabChange(v as SingleImageResultTab)
+            }
           >
             <TabsList className="h-8">
               <TabsTrigger className="px-2 py-1 text-xs" value="markdown">
@@ -101,6 +112,9 @@ const SingleImageResultPhase = ({
               </TabsTrigger>
               <TabsTrigger className="px-2 py-1 text-xs" value="json">
                 JSON
+              </TabsTrigger>
+              <TabsTrigger className="px-2 py-1 text-xs" value="chat">
+                Hỏi đáp
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -110,7 +124,7 @@ const SingleImageResultPhase = ({
       <div className="min-h-0 flex-1 overflow-hidden">
         <Tabs
           value={activeTab}
-          onValueChange={(v) => onActiveTabChange(v as "markdown" | "json")}
+          onValueChange={(v) => onActiveTabChange(v as SingleImageResultTab)}
           className="h-full"
         >
           <TabsContent value="markdown" className="m-0 h-full">
@@ -130,10 +144,19 @@ const SingleImageResultPhase = ({
               onChange={onJsonTextChange}
             />
           </TabsContent>
+          <TabsContent value="chat" className="m-0 h-full">
+            <DocumentChatPanel
+              imageUrl={imageUrl}
+              ocrText={ocrText}
+              sessionKey={chatSessionKey}
+              disabled={isProcessing || !imageUrl}
+            />
+          </TabsContent>
         </Tabs>
       </div>
     </>
   );
+
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">

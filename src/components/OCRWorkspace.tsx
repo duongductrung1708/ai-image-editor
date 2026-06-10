@@ -669,7 +669,13 @@ const OCRWorkspace = ({
             isProcessing={isProcessing}
             markdownLinkedBoxIndices={markdownLinkedBoxIndices}
             onMarkdownHighlightChange={handleMarkdownHighlightChange}
-            activeTab={activeTab === "json" ? "json" : "markdown"}
+            activeTab={
+              activeTab === "json"
+                ? "json"
+                : activeTab === "chat"
+                  ? "chat"
+                  : "markdown"
+            }
             onActiveTabChange={(t) => setActiveTab(t)}
             editor={editor}
             jsonText={jsonText}
@@ -679,7 +685,10 @@ const OCRWorkspace = ({
             onHistorySelect={handleHistorySelect}
             historyRefresh={historyRefresh}
             activeHistoryId={currentHistoryId}
+            ocrText={markdownText}
+            chatSessionKey={currentHistoryId || imageFile.name}
           />
+
           <OcrHistoryMobileDrawer
             open={showHistory && !isLg}
             onClose={() => setShowHistory(false)}
