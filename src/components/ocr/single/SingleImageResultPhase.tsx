@@ -59,6 +59,8 @@ const SingleImageResultPhase = ({
   onHistorySelect,
   historyRefresh,
   activeHistoryId = null,
+  ocrText,
+  chatSessionKey,
 }: SingleImageResultPhaseProps) => {
   const [jumpToBox, setJumpToBox] = useState<JumpToBoxRequest | null>(null);
   const jumpNonceRef = useRef(0);
