@@ -39,7 +39,8 @@ const PricingPage = () => {
           toast.success(`Nạp thành công ${data.credits} credits!`);
           refreshCredits();
         } else {
-          toast.error(("message" in (data ?? {}) && data.message) || "Thanh toán không thành công.");
+          const msg = data && !data.success ? data.message : undefined;
+          toast.error(msg || "Thanh toán không thành công.");
         }
       })
       .catch(() => toast.error("Không thể xác minh thanh toán."))
