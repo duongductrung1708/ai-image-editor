@@ -3,6 +3,8 @@ function splitTwoColumns(line: string): { left: string; right: string } | null {
   if (!raw.trim()) return null;
   if (raw.trimStart().startsWith("|")) return null; // already a markdown table row
   if (raw.trimStart().startsWith("<")) return null; // already HTML
+  if (raw.trimStart().startsWith("#")) return null; // markdown heading
+  if (raw.trimStart().startsWith("- ") || raw.trimStart().startsWith("* ")) return null;
 
   // Find the longest whitespace run (acts like a visual column gutter).
   let bestStart = -1;
@@ -23,6 +25,10 @@ function splitTwoColumns(line: string): { left: string; right: string } | null {
   const left = raw.slice(0, bestStart).trim();
   const right = raw.slice(bestStart + bestLen).trim();
   if (!left || !right) return null;
+  // Avoid mis-detecting normal sentences as 2-col: require both sides to be short-ish
+  if (left.length > 80 || right.length > 80) return null;
+  // Avoid lines that look like prose (has sentence-ending punctuation in middle)
+  if (/[.?!;]\s/.test(left) || /[.?!;]\s/.test(right)) return null;
 
   return { left, right };
 }
@@ -34,85 +40,139 @@ function escapeHtml(s: string): string {
     .split(">").join("&gt;");
 }
 
+type SplitRun = {
+  startIdx: number;
+  endIdx: number;
+  rows: Array<
+    | { kind: "split"; left: string; right: string; idx: number }
+    | { kind: "span"; text: string; idx: number }
+  >;
+};
+
 /**
- * Auto-format "2-side header" lines (left/right) into a split table.
+ * Find all runs of consecutive 2-column lines (with optional in-between single
+ * lines) anywhere in the document. A run needs at least 2 split lines to qualify.
+ */
+function findSplitRuns(lines: string[]): SplitRun[] {
+  const runs: SplitRun[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const split = splitTwoColumns(lines[i] || "");
+    if (!split) {
+      i += 1;
+      continue;
+    }
+
+    // Seed a run starting at i
+    const rows: SplitRun["rows"] = [
+      { kind: "split", left: split.left, right: split.right, idx: i },
+    ];
+    let lastSplitIdx = i;
+    let j = i + 1;
+    let splitCount = 1;
+
+    while (j < lines.length) {
+      const line = lines[j] || "";
+      const trimmed = line.trim();
+
+      // Blank line: only allow 1 blank between split rows; if next isn't split, stop.
+      if (!trimmed) {
+        // Peek ahead
+        let k = j + 1;
+        while (k < lines.length && !(lines[k] || "").trim()) k += 1;
+        const nextSplit = k < lines.length ? splitTwoColumns(lines[k] || "") : null;
+        if (nextSplit && k - lastSplitIdx <= 3) {
+          j = k;
+          continue;
+        }
+        break;
+      }
+
+      // HTML / markdown structures break the run
+      if (
+        trimmed.startsWith("<") ||
+        trimmed.startsWith("|") ||
+        trimmed.startsWith("#") ||
+        trimmed.startsWith("- ") ||
+        trimmed.startsWith("* ")
+      ) {
+        break;
+      }
+
+      const s = splitTwoColumns(line);
+      if (s) {
+        rows.push({ kind: "split", left: s.left, right: s.right, idx: j });
+        lastSplitIdx = j;
+        splitCount += 1;
+        j += 1;
+        continue;
+      }
+
+      // Single column line inside run: only allow if next line is also a split
+      // and the line is short (caption / sub-heading), max 1-2 in a row.
+      if (trimmed.length <= 100 && j - lastSplitIdx <= 2) {
+        const peek = splitTwoColumns(lines[j + 1] || "") || splitTwoColumns(lines[j + 2] || "");
+        if (peek) {
+          rows.push({ kind: "span", text: trimmed, idx: j });
+          j += 1;
+          continue;
+        }
+      }
+      break;
+    }
+
+    if (splitCount >= 2) {
+      const endIdx = rows[rows.length - 1].idx;
+      runs.push({ startIdx: i, endIdx, rows });
+      i = endIdx + 1;
+    } else {
+      i += 1;
+    }
+  }
+  return runs;
+}
+
+function renderSplitRun(run: SplitRun): string {
+  const tr = run.rows
+    .map((r) => {
+      if (r.kind === "split") {
+        return `<tr><td>${escapeHtml(r.left)}</td><td>${escapeHtml(r.right)}</td></tr>`;
+      }
+      return `<tr><td colspan="2">${escapeHtml(r.text)}</td></tr>`;
+    })
+    .join("");
+  return `<table data-layout="split"><tbody>${tr}</tbody></table>`;
+}
+
+/**
+ * Auto-format "2-column" line runs (left/right) into borderless split tables.
  *
- * It looks only at the top of the document, and only applies when it finds
- * at least 2 lines with a clear whitespace gutter.
+ * Scans the ENTIRE document (not just the top) and converts every run of
+ * consecutive 2-column lines into a `<table data-layout="split">` block.
  *
- * Output uses TipTap's `table[data-layout="split"]` styles (borderless).
+ * Preserves the original function name for backwards compatibility.
  */
 export function formatTopSplitHeaderAsTable(markdownOrHtml: string): string {
   const text = (markdownOrHtml || "").replace(/\r\n/g, "\n");
   if (!text.trim()) return text;
 
   const lines = text.split("\n");
-  const scanMax = Math.min(18, lines.length);
+  const runs = findSplitRuns(lines);
+  if (runs.length === 0) return text;
 
-  // Stop scanning once we reach a real paragraph body.
-  let stopAt = scanMax;
-  for (let i = 0; i < scanMax; i += 1) {
-    const t = lines[i].trim();
-    if (!t) continue;
-    // If OCR already produced body HTML paragraphs early, avoid rewriting.
-    if (t.startsWith("<p") || t.startsWith("<table")) {
-      return text;
-    }
-    // Heuristic: body paragraphs tend to be long and have punctuation.
-    if (t.length > 120 || /[.?!;:]\s/.test(t)) {
-      stopAt = i;
-      break;
-    }
-  }
-
-  const candidates: Array<{
-    index: number;
-    left: string;
-    right: string;
-  }> = [];
-
-  for (let i = 0; i < stopAt; i += 1) {
-    const res = splitTwoColumns(lines[i] || "");
-    if (res) candidates.push({ index: i, left: res.left, right: res.right });
-  }
-
-  if (candidates.length < 1) return text;
-
-  const firstIdx = candidates[0].index;
-  const lastIdx = candidates[candidates.length - 1].index;
-
-  // Only rewrite if the split block is reasonably compact near top.
-  if (lastIdx - firstIdx > 10) return text;
-
-  const candidateSet = new Set(candidates.map((c) => c.index));
-
-  // Build table rows: 2-col lines as split, in-between lines as colspan
-  const tableRows: string[] = [];
-  for (let i = firstIdx; i <= lastIdx; i += 1) {
-    const c = candidates.find((x) => x.index === i);
-    if (c) {
-      tableRows.push(
-        `<tr><td>${escapeHtml(c.left)}</td><td>${escapeHtml(c.right)}</td></tr>`,
-      );
-    } else {
-      const lineText = (lines[i] || "").trim();
-      if (lineText) {
-        tableRows.push(
-          `<tr><td colspan="2">${escapeHtml(lineText)}</td></tr>`,
-        );
-      }
-    }
-  }
-
-  const table = `<table data-layout="split"><tbody>${tableRows.join("")}</tbody></table>`;
-
+  // Build output replacing each run with its rendered table
   const out: string[] = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    if (i === firstIdx) out.push(table);
-    if (i >= firstIdx && i <= lastIdx) continue; // consumed by table
+  let i = 0;
+  let runIdx = 0;
+  while (i < lines.length) {
+    if (runIdx < runs.length && i === runs[runIdx].startIdx) {
+      out.push(renderSplitRun(runs[runIdx]));
+      i = runs[runIdx].endIdx + 1;
+      runIdx += 1;
+      continue;
+    }
     out.push(lines[i]);
+    i += 1;
   }
-
   return out.join("\n").replace(/\n{3,}/g, "\n\n");
 }
-

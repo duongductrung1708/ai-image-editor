@@ -35,11 +35,12 @@ const PricingPage = () => {
     verifyVnpay
       .mutateAsync(vnpayParams)
       .then((data) => {
-        if (data?.success) {
+        if (data && data.success) {
           toast.success(`Nạp thành công ${data.credits} credits!`);
           refreshCredits();
         } else {
-          toast.error(data?.message || "Thanh toán không thành công.");
+          const msg = data && data.success === false ? data.message : undefined;
+          toast.error(msg || "Thanh toán không thành công.");
         }
       })
       .catch(() => toast.error("Không thể xác minh thanh toán."))

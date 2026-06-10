@@ -174,7 +174,7 @@ const MarkdownEditor = ({
 
       type Cell = {
         pos: number;
-        node: { type?: { name?: string } };
+        node: import("prosemirror-model").Node;
         row: number;
         col: number;
       };
