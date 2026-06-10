@@ -24,9 +24,9 @@ const Navbar = () => {
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
         <Link to="/" className="flex min-w-0 shrink items-center gap-2">
-          <img src={monkeyLogo} alt="MonkeyOCR Logo" className="h-8 w-10 shrink-0" />
+          <img src={monkeyLogo} alt="VetaOCR Logo" className="h-8 w-10 shrink-0" />
           <span className="truncate text-lg font-bold font-display text-foreground">
-            MonkeyOCR
+            VetaOCR
           </span>
         </Link>
         {/* Desktop nav */}
@@ -151,7 +151,7 @@ const Navbar = () => {
                   Menu
                 </SheetTitle>
                 <p className="text-xs font-normal text-muted-foreground">
-                  MonkeyOCR — nhận diện văn bản đa ngôn ngữ
+                  VetaOCR — nhận diện văn bản đa ngôn ngữ
                 </p>
               </SheetHeader>
 

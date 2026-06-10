@@ -16,7 +16,7 @@ function setFavicon(href: string) {
   }
 }
 
-document.title = "MonkeyOCR";
+document.title = "VetaOCR";
 setFavicon("/monkey.png");
 
 createRoot(document.getElementById("root")!).render(<App />);

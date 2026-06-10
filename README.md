@@ -1,4 +1,4 @@
-# MonkeyOCR
+# VetaOCR
 
 ## Tổng quan / Overview
 

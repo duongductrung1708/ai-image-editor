@@ -252,7 +252,7 @@ const LandingPage = () => {
             Đối tượng
           </p>
           <h2 className="mt-2 text-2xl font-bold text-foreground font-display">
-            Ai nên dùng MonkeyOCR?
+            Ai nên dùng VetaOCR?
           </h2>
         </div>
         <div className="rounded-xl border border-border bg-card p-6 md:p-8">
@@ -283,7 +283,7 @@ const LandingPage = () => {
       {/* Footer */}
       <footer className="border-t border-border bg-card/40">
         <div className="mx-auto flex max-w-5xl flex-col gap-3 px-6 py-10 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} MonkeyOCR</p>
+          <p>© {new Date().getFullYear()} VetaOCR</p>
           <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 sm:justify-end">
             <Link to="/support" className="hover:text-foreground transition-colors">
               Hỗ trợ & FAQ

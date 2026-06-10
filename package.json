@@ -1,8 +1,8 @@
 {
-  "name": "monkey-ocr",
+  "name": "veta-ocr",
   "private": true,
   "version": "1.0.0",
-  "description": "MonkeyOCR - OCR tiếng Việt nhanh và chính xác.",
+  "description": "VetaOCR - OCR tiếng Việt nhanh và chính xác.",
   "type": "module",
   "scripts": {
     "dev": "vite",
