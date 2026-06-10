@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type SingleActiveTab = "markdown" | "json" | "tables";
+type SingleActiveTab = "markdown" | "json" | "tables" | "chat";
 type BatchActiveTab = "markdown" | "json";
 
 interface WorkspaceState {

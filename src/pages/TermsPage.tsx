@@ -13,13 +13,13 @@ const TermsPage = () => {
 
         <section className="mt-8 space-y-4 text-sm leading-6 text-foreground/90">
           <p>
-            Khi sử dụng MonkeyOCR, bạn đồng ý với các điều khoản dưới đây. Nếu bạn không đồng ý, vui lòng
+            Khi sử dụng VetaOCR, bạn đồng ý với các điều khoản dưới đây. Nếu bạn không đồng ý, vui lòng
             ngừng sử dụng dịch vụ.
           </p>
 
           <h2 className="mt-6 text-lg font-semibold text-foreground">1) Mô tả dịch vụ</h2>
           <p>
-            MonkeyOCR cung cấp công cụ nhận dạng văn bản (OCR) từ hình ảnh/tài liệu và các tiện ích định
+            VetaOCR cung cấp công cụ nhận dạng văn bản (OCR) từ hình ảnh/tài liệu và các tiện ích định
             dạng/xuất dữ liệu. Kết quả OCR có thể sai lệch; bạn cần kiểm tra lại trước khi dùng cho mục đích
             quan trọng.
           </p>
@@ -70,7 +70,7 @@ const TermsPage = () => {
 
           <h2 className="mt-6 text-lg font-semibold text-foreground">8) Liên hệ</h2>
           <p>
-            Hỗ trợ/điều khoản: <strong>support@monkeyocr.com</strong>
+            Hỗ trợ/điều khoản: <strong>support@vetaocr.com</strong>
           </p>
         </section>
       </main>

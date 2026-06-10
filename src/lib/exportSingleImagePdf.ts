@@ -38,7 +38,7 @@ export async function exportSingleImageOcrPdf({
   // Header
   doc.setFontSize(14);
   doc.setTextColor(137, 25, 28);
-  doc.text("MonkeyOCR", marginX, cursorY);
+  doc.text("VetaOCR", marginX, cursorY);
   doc.setFontSize(9);
   doc.setTextColor(80);
   doc.text(new Date().toLocaleString("vi-VN"), 210 - marginX, cursorY, {
@@ -144,7 +144,7 @@ export async function exportSingleImageOcrPdf({
     }
   }
 
-  const safeName = (sourceImageName || "monkeyocr").replace(
+  const safeName = (sourceImageName || "vetaocr").replace(
     /[/\\?%*:|"<>]/g,
     "-",
   );

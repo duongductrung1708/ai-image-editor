@@ -1,7 +1,7 @@
 {
-  "name": "MonkeyOCR",
-  "short_name": "MonkeyOCR",
-  "description": "MonkeyOCR - OCR tiếng Việt nhanh và chính xác.",
+  "name": "VetaOCR",
+  "short_name": "VetaOCR",
+  "description": "VetaOCR - OCR tiếng Việt nhanh và chính xác.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FFFFFF",
