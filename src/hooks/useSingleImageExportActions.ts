@@ -13,7 +13,7 @@ import {
 } from "@/lib/ocrResultContent";
 
 export function useSingleImageExportActions(params: {
-  activeTab: "markdown" | "json" | "tables";
+  activeTab: "markdown" | "json" | "tables" | "chat";
   editor: Editor | null;
   turndown: TurndownService;
   markdownText: string;
