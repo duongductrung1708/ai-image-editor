@@ -206,8 +206,21 @@ serve(async (req) => {
     }
 
     const vnpayUrl = Deno.env.get("VNPAY_URL") || "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
-    const origin = req.headers.get("origin") || "https://localhost:3000";
-    const returnUrl = `${origin}/pricing?vnpay_return=1`;
+    const allowlist = parseAllowedOrigins();
+    const reqOrigin = req.headers.get("origin") || "";
+    const appUrlEnv = (Deno.env.get("APP_URL") || "").trim();
+    // Trusted base: APP_URL env, else first allowlist entry, else validated origin (only if in allowlist).
+    const trustedOrigin =
+      appUrlEnv ||
+      (allowlist[0] || (allowlist.includes(reqOrigin) ? reqOrigin : "")) ||
+      "";
+    if (!trustedOrigin) {
+      return new Response(JSON.stringify({ error: "Server misconfigured: APP_URL or ALLOWED_ORIGINS required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      });
+    }
+    const returnUrl = `${trustedOrigin.replace(/\/$/, "")}/pricing?vnpay_return=1`;
 
     const txnRef = `${user.id.slice(0, 8)}_${Date.now()}`;
     const now = new Date();

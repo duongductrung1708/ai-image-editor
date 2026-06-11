@@ -4,7 +4,7 @@ project_id = "rdbzyrzibnvdszsyrwaw"
 verify_jwt = true
 
 [functions.chat-document]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-checkout]
 verify_jwt = true

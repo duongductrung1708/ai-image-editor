@@ -226,40 +226,27 @@ serve(async (req) => {
       });
     }
 
-    // Credit the user - update balance
-    const { data: currentCredits } = await srvClient
-      .from("user_credits")
-      .select("balance")
-      .eq("user_id", userId)
-      .single();
-
-    const currentBalance = currentCredits?.balance ?? 0;
-
-    if (currentCredits) {
-      await srvClient
-        .from("user_credits")
-        .update({ balance: currentBalance + pack.credits })
-        .eq("user_id", userId);
-    } else {
-      await srvClient
-        .from("user_credits")
-        .insert({ user_id: userId, balance: pack.credits });
+    // Atomic credit top-up via SECURITY DEFINER RPC (avoids read-then-write race).
+    const { error: addErr } = await srvClient.rpc("add_credits", {
+      p_user_id: userId,
+      p_amount: pack.credits,
+      p_reason: `Completed: +${pack.credits} credits (${txnRef})`,
+      p_txn_ref: txnRef,
+    });
+    if (addErr) {
+      console.error("vnpay-verify add_credits error:", addErr);
+      return new Response(JSON.stringify({ success: false, message: "Failed to credit account" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Update transaction record
+    // Mark the pre-existing pending transaction (if any) as completed.
     if (existing) {
       await srvClient
         .from("credit_transactions")
-        .update({ description: `Completed: +${pack.credits} credits (${txnRef})` })
+        .update({ description: `Completed: +${pack.credits} credits (${txnRef}) [pending row]` })
         .eq("id", existing.id);
-    } else {
-      await srvClient.from("credit_transactions").insert({
-        user_id: userId,
-        amount: pack.credits,
-        type: "topup",
-        description: `Completed: +${pack.credits} credits (${txnRef})`,
-        vnpay_txn_ref: txnRef,
-      });
     }
 
     return new Response(JSON.stringify({ success: true, credits: pack.credits }), {

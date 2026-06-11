@@ -145,13 +145,28 @@ serve(async (req) => {
       customerId = customers.data[0].id;
     }
 
+    const allowlist = parseAllowedOrigins();
+    const reqOrigin = req.headers.get("origin") || "";
+    const appUrlEnv = (Deno.env.get("APP_URL") || "").trim();
+    const trustedOrigin =
+      appUrlEnv ||
+      (allowlist[0] || (allowlist.includes(reqOrigin) ? reqOrigin : "")) ||
+      "";
+    if (!trustedOrigin) {
+      return new Response(JSON.stringify({ error: "Server misconfigured: APP_URL or ALLOWED_ORIGINS required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      });
+    }
+    const baseUrl = trustedOrigin.replace(/\/$/, "");
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : user.email,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
-      success_url: `${req.headers.get("origin")}/profile?tab=plan&success=true`,
-      cancel_url: `${req.headers.get("origin")}/profile?tab=plan`,
+      success_url: `${baseUrl}/profile?tab=plan&success=true`,
+      cancel_url: `${baseUrl}/profile?tab=plan`,
     });
 
     return new Response(JSON.stringify({ url: session.url }), {
