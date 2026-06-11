@@ -44,6 +44,33 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_free_uses: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          updated_at: string
+          used: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          updated_at?: string
+          used?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          updated_at?: string
+          used?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       ocr_batch_pages: {
         Row: {
           blocks: Json | null
@@ -52,6 +79,7 @@ export type Database = {
           file_name: string
           full_text: string
           id: string
+          image_data: string | null
           markdown: string
           ok: boolean
           page_index: number
@@ -64,6 +92,7 @@ export type Database = {
           file_name?: string
           full_text?: string
           id?: string
+          image_data?: string | null
           markdown?: string
           ok?: boolean
           page_index: number
@@ -76,6 +105,7 @@ export type Database = {
           file_name?: string
           full_text?: string
           id?: string
+          image_data?: string | null
           markdown?: string
           ok?: boolean
           page_index?: number
@@ -157,6 +187,36 @@ export type Database = {
         }
         Relationships: []
       }
+      ocr_jobs: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          result: Json | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          result?: Json | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          result?: Json | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -215,6 +275,7 @@ export type Database = {
         Returns: number
       }
       deduct_credit: { Args: { p_user_id: string }; Returns: undefined }
+      deduct_daily_use: { Args: { p_user_id: string }; Returns: boolean }
       enforce_rate_limit: {
         Args: {
           p_ip: string
@@ -225,6 +286,8 @@ export type Database = {
         }
         Returns: undefined
       }
+      get_daily_free_uses: { Args: { p_user_id: string }; Returns: number }
+      get_remaining_free_uses: { Args: { p_user_id: string }; Returns: number }
       refund_credits: {
         Args: { p_amount: number; p_reason?: string; p_user_id: string }
         Returns: undefined
