@@ -96,15 +96,10 @@ export function useOcrQuota() {
 
     // If deducted is false, free uses are exhausted, so deduct a credit instead
     if (balance > 0) {
-      await supabase.rpc("deduct_credit" as never, { p_user_id: user.id } as never).then(() => {
-        // Also log the transaction
-        supabase.from("credit_transactions").insert({
-          user_id: user.id,
-          amount: -1,
-          type: "usage" as const,
-          description: "OCR usage",
-        });
-      });
+      // deduct_credit (SECURITY DEFINER) atomically decrements balance AND logs
+      // the matching `credit_transactions` row server-side. Clients must not
+      // write to credit_transactions directly.
+      await supabase.rpc("deduct_credit" as never, { p_user_id: user.id } as never);
       refreshCredits();
     }
   }, [user, balance, refreshCredits, fetchCount]);

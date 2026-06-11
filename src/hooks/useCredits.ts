@@ -24,16 +24,8 @@ export function useCredits() {
 
       if (error) throw error;
 
-      // If no row yet (user created before migration), create one
-      if (!data) {
-        const { error: insertErr } = await supabase
-          .from("user_credits")
-          .insert({ user_id: userId, balance: 0 });
-        if (insertErr) throw insertErr;
-        return 0;
-      }
-
-      return data.balance ?? 0;
+      // Rows are auto-created server-side via the on_auth_user_created_credits trigger.
+      return data?.balance ?? 0;
     },
     staleTime: 15_000,
   });
