@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import monkeyLogo from "@/assets/monkey.png";
+import logoIcon from "@/assets/vetaocr-icon.png";
 
 const mobileNavLinkClass =
   "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary active:bg-secondary/80";
@@ -24,7 +24,7 @@ const Navbar = () => {
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
         <Link to="/" className="flex min-w-0 shrink items-center gap-2">
-          <img src={monkeyLogo} alt="VetaOCR Logo" className="h-8 w-10 shrink-0" />
+          <img src={logoIcon} alt="VetaOCR Logo" className="h-8 w-10 shrink-0" />
           <span className="truncate text-lg font-bold font-display text-foreground">
             VetaOCR
           </span>
@@ -147,7 +147,7 @@ const Navbar = () => {
             >
               <SheetHeader className="space-y-1 border-b border-border bg-muted/30 px-4 py-4 text-left">
                 <SheetTitle className="flex items-center gap-2.5 text-base font-semibold">
-                  <img src={monkeyLogo} alt="" className="h-8 w-10" />
+                  <img src={logoIcon} alt="" className="h-8 w-10" />
                   Menu
                 </SheetTitle>
                 <p className="text-xs font-normal text-muted-foreground">
