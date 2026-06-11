@@ -17,6 +17,6 @@ function setFavicon(href: string) {
 }
 
 document.title = "VetaOCR";
-setFavicon("/monkey.png");
+setFavicon("/vetaocr-icon.png");
 
 createRoot(document.getElementById("root")!).render(<App />);

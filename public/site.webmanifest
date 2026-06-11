@@ -8,7 +8,7 @@
   "theme_color": "#89191C",
   "icons": [
     {
-      "src": "/monkey.png",
+      "src": "/vetaocr-icon.png",
       "sizes": "1024x1024",
       "type": "image/png"
     }
