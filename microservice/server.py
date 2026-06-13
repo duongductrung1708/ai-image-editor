@@ -3,15 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from PIL import Image, ImageOps, ImageEnhance
 from paddleocr import PaddleOCR
-from typing import Union, List, Optional
+from typing import Union, List, Optional, Tuple
 import numpy as np
 import base64
 import io
 import re
+import math
 import uvicorn
 import os
 
-app = FastAPI(title="VetaOCR Microservice", version="1.1.0")
+app = FastAPI(title="VetaOCR Microservice", version="1.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,6 +45,14 @@ class OcrBlock(BaseModel):
     width: float
     height: float
     confidence: float
+    # Heuristic style estimates
+    fontSizePx: Optional[float] = None
+    fontFamily: str = "unknown"
+    color: Optional[str] = None
+    bold: bool = False
+    italic: bool = False
+    underline: bool = False
+    textAlign: str = "left"
 
 
 class OcrResponse(BaseModel):
@@ -94,7 +103,6 @@ def preprocess_image(image: Image.Image) -> Image.Image:
 
 
 def sort_blocks_reading_order(blocks: List[OcrBlock]) -> List[OcrBlock]:
-    """Sort top-to-bottom, left-to-right. Group rows by y proximity."""
     if not blocks:
         return blocks
     avg_h = sum(b.height for b in blocks) / len(blocks)
@@ -118,6 +126,79 @@ def sort_blocks_reading_order(blocks: List[OcrBlock]) -> List[OcrBlock]:
     return ordered
 
 
+def estimate_style(
+    rgb_crop: np.ndarray,
+) -> Tuple[bool, bool, Optional[str]]:
+    """Return (bold, italic, color_hex) from an RGB crop of one text line."""
+    if rgb_crop.size == 0:
+        return False, False, None
+    gray = np.mean(rgb_crop, axis=2).astype(np.uint8)
+    # Otsu-ish threshold via mean - std
+    thr = max(0, int(gray.mean() - 0.3 * gray.std()))
+    mask = gray < thr  # text pixels (dark on light)
+    total = mask.size
+    text_pixels = int(mask.sum())
+    if text_pixels < 10:
+        return False, False, None
+
+    # Bold heuristic: stroke density relative to bbox height
+    h = max(1, rgb_crop.shape[0])
+    density = text_pixels / total
+    bold = density > 0.22 and (text_pixels / h) > (rgb_crop.shape[1] * 0.18)
+
+    # Italic heuristic: image moments slant
+    ys, xs = np.where(mask)
+    italic = False
+    if xs.size > 30:
+        x_mean = xs.mean()
+        y_mean = ys.mean()
+        mu11 = float(((xs - x_mean) * (ys - y_mean)).mean())
+        mu02 = float(((ys - y_mean) ** 2).mean()) or 1.0
+        slant = mu11 / mu02
+        italic = abs(slant) > 0.18
+
+    # Color: median of text pixels
+    color = None
+    if text_pixels > 5:
+        ts = rgb_crop[mask]
+        med = np.median(ts, axis=0).astype(int)
+        # Treat near-black as default (no color override)
+        if not (med[0] < 60 and med[1] < 60 and med[2] < 60):
+            color = "#{:02x}{:02x}{:02x}".format(
+                int(med[0]), int(med[1]), int(med[2])
+            )
+
+    return bool(bold), bool(italic), color
+
+
+def infer_text_align(blocks: List[OcrBlock]) -> None:
+    """Mutates blocks: assign textAlign based on x position within rows of similar y."""
+    if not blocks:
+        return
+    avg_h = sum(b.height for b in blocks) / len(blocks)
+    tol = max(avg_h * 0.6, 1.0)
+    used = [False] * len(blocks)
+    for i, b in enumerate(blocks):
+        if used[i]:
+            continue
+        row = [b]
+        used[i] = True
+        for j in range(i + 1, len(blocks)):
+            if not used[j] and abs(blocks[j].y - b.y) <= tol:
+                row.append(blocks[j])
+                used[j] = True
+        for rb in row:
+            left = rb.x
+            right = 100 - (rb.x + rb.width)
+            center_off = abs(left - right)
+            if center_off < 4 and left > 10:
+                rb.textAlign = "center"
+            elif right < 5 and left > 25:
+                rb.textAlign = "right"
+            else:
+                rb.textAlign = "left"
+
+
 def run_ocr_on_base64(b64: str) -> OcrResponse:
     try:
         raw_b64 = strip_data_uri_prefix(b64)
@@ -132,6 +213,8 @@ def run_ocr_on_base64(b64: str) -> OcrResponse:
     processed = preprocess_image(image)
     pw, ph = processed.size
     arr = np.array(processed)
+    # Keep RGB original (resized to processed size) for color sampling
+    rgb_for_color = np.array(image.resize((pw, ph), Image.LANCZOS))
 
     try:
         result = ocr_engine.ocr(arr, cls=True)
@@ -151,6 +234,20 @@ def run_ocr_on_base64(b64: str) -> OcrResponse:
             ys = [pt[1] for pt in box]
             min_x, max_x = min(xs), max(xs)
             min_y, max_y = min(ys), max(ys)
+
+            # Style estimation from RGB crop
+            cx1 = max(0, int(min_x))
+            cy1 = max(0, int(min_y))
+            cx2 = min(pw, int(max_x))
+            cy2 = min(ph, int(max_y))
+            crop = rgb_for_color[cy1:cy2, cx1:cx2]
+            bold, italic, color = estimate_style(crop)
+
+            # Font size in px scaled back to original image coords
+            box_h_px = max(1.0, max_y - min_y)
+            scale_back = orig_h / ph if ph else 1.0
+            font_size_px = round(box_h_px * scale_back * 0.85, 1)
+
             blocks.append(OcrBlock(
                 text=text,
                 kind="text",
@@ -159,9 +256,16 @@ def run_ocr_on_base64(b64: str) -> OcrResponse:
                 width=((max_x - min_x) / pw) * 100.0,
                 height=((max_y - min_y) / ph) * 100.0,
                 confidence=float(conf),
+                fontSizePx=font_size_px,
+                fontFamily="unknown",
+                color=color,
+                bold=bold,
+                italic=italic,
+                underline=False,
             ))
 
     blocks = sort_blocks_reading_order(blocks)
+    infer_text_align(blocks)
     full_text = "\n".join(b.text for b in blocks)
     markdown = full_text.replace("\n", "  \n")
 
