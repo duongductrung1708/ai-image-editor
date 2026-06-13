@@ -1336,6 +1336,65 @@ async function fetchProviderContent(
   return typeof data?.message?.content === "string" ? data.message.content : "";
 }
 
+/**
+ * Hybrid engine: PaddleOCR microservice for pixel-precise blocks.
+ * Returns null if PADDLE_OCR_URL is unset or the call fails (graceful fallback).
+ */
+async function fetchPaddleBlocks(
+  imageBase64: string,
+  mimeType: string,
+): Promise<OcrBlockNorm[] | null> {
+  const base = Deno.env.get("PADDLE_OCR_URL");
+  if (!base) return null;
+  try {
+    const dataUri = `data:${mimeType};base64,${imageBase64}`;
+    const ctrl = new AbortController();
+    const timeoutMs = Number(Deno.env.get("PADDLE_OCR_TIMEOUT_MS") || "60000");
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(`${base.replace(/\/$/, "")}/api/ocr`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageBase64: dataUri }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      console.warn(`[paddle] non-OK status ${res.status}`);
+      return null;
+    }
+    const json = (await res.json()) as { blocks?: unknown };
+    const raw = Array.isArray(json?.blocks) ? json.blocks : [];
+    // Bridge Paddle camelCase keys → normalizeOcrBlocks snake_case
+    const mapped = raw.map((item) => {
+      const b =
+        item && typeof item === "object"
+          ? (item as Record<string, unknown>)
+          : {};
+      return {
+        ...b,
+        font_size_px:
+          typeof b.fontSizePx === "number"
+            ? b.fontSizePx
+            : (b as { font_size_px?: number }).font_size_px,
+        text_align:
+          typeof b.textAlign === "string"
+            ? b.textAlign
+            : (b as { text_align?: string }).text_align,
+        font_family:
+          typeof b.fontFamily === "string"
+            ? b.fontFamily
+            : (b as { font_family?: string }).font_family,
+      };
+    });
+    return normalizeOcrBlocks(mapped);
+  } catch (e) {
+    console.warn(
+      `[paddle] failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return null;
+  }
+}
+
 async function runSingleOcr(
   image: unknown,
   mimeType: unknown,
@@ -1346,14 +1405,42 @@ async function runSingleOcr(
 
   const cfg = getOcrConfig(overrideMode);
   const prompt = buildOcrPrompt(cfg);
-  const textOut = await fetchProviderContent(normalized, cfg, prompt);
-  if (!textOut) throw new Error("OCR provider returned empty response");
 
+  // Hybrid: provider (Gemini/OpenAI) for markdown + Paddle for precise blocks, in parallel.
+  const [providerRes, paddleRes] = await Promise.allSettled([
+    fetchProviderContent(normalized, cfg, prompt),
+    fetchPaddleBlocks(normalized.image, normalized.mimeType),
+  ]);
+
+  if (providerRes.status !== "fulfilled" || !providerRes.value) {
+    if (providerRes.status === "rejected") {
+      throw providerRes.reason instanceof Error
+        ? providerRes.reason
+        : new Error(String(providerRes.reason));
+    }
+    throw new Error("OCR provider returned empty response");
+  }
+
+  const textOut = providerRes.value;
+  let parsed: ParsedOcr;
   if (cfg.mode === "markdown") {
     const cleaned = postProcessMarkdown(textOut, cfg.markdownStyle);
-    return { markdown: cleaned, full_text: cleaned, blocks: [] };
+    parsed = { markdown: cleaned, full_text: cleaned, blocks: [] };
+  } else {
+    parsed = parseOcrPayload(textOut, cfg.markdownStyle);
   }
-  return parseOcrPayload(textOut, cfg.markdownStyle);
+
+  if (
+    paddleRes.status === "fulfilled" &&
+    paddleRes.value &&
+    paddleRes.value.length > 0
+  ) {
+    console.log(
+      `[hybrid] using paddle blocks=${paddleRes.value.length} (provider blocks=${parsed.blocks?.length ?? 0})`,
+    );
+    parsed = { ...parsed, blocks: paddleRes.value };
+  }
+  return parsed;
 }
 
 async function runPool<T, R>(
