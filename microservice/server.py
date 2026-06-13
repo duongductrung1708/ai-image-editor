@@ -25,7 +25,6 @@ app.add_middleware(
 ocr_engine = PaddleOCR(
     use_angle_cls=True,
     lang="vi",
-    show_log=False,
 )
 
 MAX_SIDE = 1600
