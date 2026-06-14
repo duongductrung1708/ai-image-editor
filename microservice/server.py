@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from PIL import Image, ImageOps, ImageEnhance
@@ -8,19 +8,39 @@ import numpy as np
 import base64
 import io
 import re
+import hmac
 import math
 import uvicorn
 import os
 
-app = FastAPI(title="VetaOCR Microservice", version="1.2.0")
+app = FastAPI(title="VetaOCR Microservice", version="1.3.0")
 
+# Restrict CORS to configured origins. Defaults to no browser origins
+# (this service is server-to-server only — called from the edge function).
+_allowed_origins_raw = os.environ.get("ALLOWED_ORIGINS", "").strip()
+_allowed_origins = [o.strip() for o in _allowed_origins_raw.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins or [],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-OCR-Secret"],
 )
+
+# Shared-secret auth: required for /api/ocr. If unset, the endpoint is disabled
+# (fail-closed) so the service cannot be abused before it is configured.
+OCR_SECRET = os.environ.get("PADDLE_OCR_SECRET", "").strip()
+
+
+def require_ocr_secret(request: Request) -> None:
+    if not OCR_SECRET:
+        raise HTTPException(
+            status_code=503,
+            detail="Microservice not configured: PADDLE_OCR_SECRET is unset",
+        )
+    provided = request.headers.get("X-OCR-Secret", "")
+    if not provided or not hmac.compare_digest(provided, OCR_SECRET):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 ocr_engine = PaddleOCR(
     use_angle_cls=True,
@@ -283,7 +303,8 @@ async def health():
 
 
 @app.post("/api/ocr")
-async def ocr_endpoint(req: OcrRequest):
+async def ocr_endpoint(req: OcrRequest, request: Request):
+    require_ocr_secret(request)
     if isinstance(req.imageBase64, list):
         pages: List[OcrBatchPageResult] = []
         all_text: List[str] = []

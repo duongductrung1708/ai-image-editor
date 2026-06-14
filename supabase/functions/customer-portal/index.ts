@@ -128,10 +128,23 @@ serve(async (req) => {
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     if (customers.data.length === 0) throw new Error("No Stripe customer found");
 
-    const origin = req.headers.get("origin") || "http://localhost:3000";
+    const allowlist = parseAllowedOrigins();
+    const reqOrigin = req.headers.get("origin") || "";
+    const appUrlEnv = (Deno.env.get("APP_URL") || "").trim();
+    const trustedOrigin =
+      appUrlEnv ||
+      (allowlist[0] || (allowlist.includes(reqOrigin) ? reqOrigin : "")) ||
+      "";
+    if (!trustedOrigin) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfigured: APP_URL or ALLOWED_ORIGINS required" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const baseUrl = trustedOrigin.replace(/\/$/, "");
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customers.data[0].id,
-      return_url: `${origin}/profile?tab=plan`,
+      return_url: `${baseUrl}/profile?tab=plan`,
     });
 
     return new Response(JSON.stringify({ url: portalSession.url }), {
