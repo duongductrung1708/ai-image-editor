@@ -205,10 +205,15 @@ export function useSingleImageOcr() {
       if (!accessToken) {
         throw new Error("Missing Authorization header");
       }
-      const bodyBase = {
+      const bodyBase: {
+        imageBase64: string;
+        mimeType: string;
+        textOnly?: boolean;
+      } = {
         imageBase64: base64,
         mimeType: scaled.type || file.type,
       };
+      if (textOnly) bodyBase.textOnly = true;
 
       let data: OcrApiResponse | null = null;
       let blocksFromProvider: BoundingBox[] = [];
