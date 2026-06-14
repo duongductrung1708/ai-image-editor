@@ -303,7 +303,8 @@ async def health():
 
 
 @app.post("/api/ocr")
-async def ocr_endpoint(req: OcrRequest):
+async def ocr_endpoint(req: OcrRequest, request: Request):
+    require_ocr_secret(request)
     if isinstance(req.imageBase64, list):
         pages: List[OcrBatchPageResult] = []
         all_text: List[str] = []
