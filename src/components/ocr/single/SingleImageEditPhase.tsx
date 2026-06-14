@@ -1,5 +1,5 @@
 import { type MutableRefObject } from "react";
-import { Crop, FlipHorizontal, RotateCcw, RotateCw, Sparkles } from "lucide-react";
+import { Crop, FileText, FlipHorizontal, RotateCcw, RotateCw, Sparkles, Table } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ImageCropper, {
