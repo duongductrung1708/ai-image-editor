@@ -1351,9 +1351,12 @@ async function fetchPaddleBlocks(
     const ctrl = new AbortController();
     const timeoutMs = Number(Deno.env.get("PADDLE_OCR_TIMEOUT_MS") || "60000");
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const secret = Deno.env.get("PADDLE_OCR_SECRET") || "";
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (secret) headers["X-OCR-Secret"] = secret;
     const res = await fetch(`${base.replace(/\/$/, "")}/api/ocr`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ imageBase64: dataUri }),
       signal: ctrl.signal,
     });
