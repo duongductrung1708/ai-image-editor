@@ -24,6 +24,8 @@ interface SingleImageEditPhaseProps {
   onStartOcr: () => void;
   quotaRemaining?: number;
   quotaUnlimited?: boolean;
+  extractMode?: "styled" | "text";
+  onExtractModeChange?: (mode: "styled" | "text") => void;
 }
 
 /**
@@ -42,6 +44,8 @@ const SingleImageEditPhase = ({
   onStartOcr,
   quotaRemaining,
   quotaUnlimited,
+  extractMode = "styled",
+  onExtractModeChange,
 }: SingleImageEditPhaseProps) => {
   const leftPanel = editImageUrl ? (
     <ImageCropper
