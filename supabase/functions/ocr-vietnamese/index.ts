@@ -1338,7 +1338,8 @@ async function fetchProviderContent(
 
 /**
  * Hybrid engine: PaddleOCR microservice for pixel-precise blocks.
- * Returns null if PADDLE_OCR_URL is unset or the call fails (graceful fallback).
+ * Returns null if PADDLE_OCR_URL is unset or the call fails — caller
+ * transparently falls back to the Gemini/OpenAI provider blocks/markdown.
  */
 async function fetchPaddleBlocks(
   imageBase64: string,
@@ -1362,7 +1363,15 @@ async function fetchPaddleBlocks(
     });
     clearTimeout(timer);
     if (!res.ok) {
-      console.warn(`[paddle] non-OK status ${res.status}`);
+      // 5xx typically means microservice is down or OOM (Render 512MB free tier).
+      // Caller will gracefully fall back to Gemini/OpenAI (already ran in parallel).
+      const reason =
+        res.status === 507 || res.status === 503 || res.status === 502
+          ? "out-of-memory/unavailable"
+          : `status ${res.status}`;
+      console.warn(
+        `[paddle] microservice failed (${reason}) — falling back to Gemini`,
+      );
       return null;
     }
     const json = (await res.json()) as { blocks?: unknown };
@@ -1391,8 +1400,10 @@ async function fetchPaddleBlocks(
     });
     return normalizeOcrBlocks(mapped);
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const isAbort = msg.toLowerCase().includes("abort");
     console.warn(
-      `[paddle] failed: ${e instanceof Error ? e.message : String(e)}`,
+      `[paddle] ${isAbort ? "timeout" : "error"}: ${msg} — falling back to Gemini`,
     );
     return null;
   }
@@ -1402,6 +1413,7 @@ async function runSingleOcr(
   image: unknown,
   mimeType: unknown,
   overrideMode?: "markdown" | "json" | "both",
+  opts?: { skipPaddle?: boolean },
 ): Promise<ParsedOcr> {
   const normalized = normalizeImageAndMimeType(image, mimeType);
   if (!normalized.image) throw new Error("imageBase64 is required");
@@ -1410,9 +1422,14 @@ async function runSingleOcr(
   const prompt = buildOcrPrompt(cfg);
 
   // Hybrid: provider (Gemini/OpenAI) for markdown + Paddle for precise blocks, in parallel.
+  // If skipPaddle is set (text-only mode), don't even contact the microservice — this
+  // saves RAM on the Paddle host and avoids any chance of OOM affecting the request.
+  const skipPaddle = opts?.skipPaddle === true;
   const [providerRes, paddleRes] = await Promise.allSettled([
     fetchProviderContent(normalized, cfg, prompt),
-    fetchPaddleBlocks(normalized.image, normalized.mimeType),
+    skipPaddle
+      ? Promise.resolve(null)
+      : fetchPaddleBlocks(normalized.image, normalized.mimeType),
   ]);
 
   if (providerRes.status !== "fulfilled" || !providerRes.value) {
@@ -1442,6 +1459,10 @@ async function runSingleOcr(
       `[hybrid] using paddle blocks=${paddleRes.value.length} (provider blocks=${parsed.blocks?.length ?? 0})`,
     );
     parsed = { ...parsed, blocks: paddleRes.value };
+  } else if (!skipPaddle) {
+    console.log(
+      `[hybrid] paddle unavailable — using Gemini blocks=${parsed.blocks?.length ?? 0}`,
+    );
   }
   return parsed;
 }
