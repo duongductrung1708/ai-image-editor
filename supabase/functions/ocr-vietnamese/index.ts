@@ -1869,7 +1869,7 @@ serve(async (req) => {
           if (bytes > maxBytes) {
             throw new Error(`Image too large (${bytes} bytes > max ${maxBytes})`);
           }
-          const out = await runSingleOcr(task.image, task.mimeType, overrideMode);
+          const out = await runSingleOcr(task.image, task.mimeType, overrideMode, runOpts);
           const imageSize = getImageSizePx(normalized.image, normalized.mimeType);
           return {
             index: task.index,
