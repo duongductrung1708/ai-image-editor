@@ -1634,11 +1634,17 @@ serve(async (req) => {
     const body = req.method === "GET" ? null : await req.json();
     const lite = body?.lite === true;
     const blocksOnly = body?.blocksOnly === true;
-    const overrideMode: "markdown" | "json" | "both" | undefined = lite
+    // textOnly: user opted for raw-text extraction only — skip Paddle microservice
+    // (saves RAM, avoids OOM on free hosts) and force markdown-only mode.
+    const textOnly = body?.textOnly === true;
+    const overrideMode: "markdown" | "json" | "both" | undefined = textOnly
+      ? "markdown"
+      : lite
       ? "markdown"
       : blocksOnly
       ? "json"
       : undefined;
+    const runOpts = { skipPaddle: textOnly } as const;
 
     // POST /job/start -> create job and process OCR in background
     if (req.method === "POST" && isJobStartPath) {
