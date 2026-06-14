@@ -1999,7 +1999,7 @@ serve(async (req) => {
 
     let payload: ParsedOcr;
     try {
-      payload = await runSingleOcr(singleImage, body?.mimeType, overrideMode);
+      payload = await runSingleOcr(singleImage, body?.mimeType, overrideMode, runOpts);
     } catch (err) {
       if (chargeAmount > 0) {
         await refundCreditsBestEffort({
