@@ -383,6 +383,7 @@ const OCRWorkspace = ({
     deductCredit,
     editFile,
     enhance,
+    extractMode,
     isCancelRequested,
     phase,
     quotaCanUse,
