@@ -363,7 +363,7 @@ const OCRWorkspace = ({
       setOcrLoadingUi("Đang chuẩn bị ảnh...", 5);
 
       setOcrImageFromFile(fileForOcr);
-      const ok = await runOcrOnFile(fileForOcr);
+      const ok = await runOcrOnFile(fileForOcr, { textOnly: extractMode === "text" });
       if (isCancelRequested()) {
         setPhase("edit");
         return;
