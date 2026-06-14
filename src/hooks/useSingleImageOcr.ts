@@ -441,7 +441,7 @@ export function useSingleImageOcr() {
       await qc.invalidateQueries({ queryKey: ["ocr_history"] });
 
       // Step 2 (background): fetch blocks with json-mode only when lite-first is enabled
-      if (liteFirst && !useAsyncJobs) {
+      if (liteFirst && !useAsyncJobs && !textOnly) {
         try {
           const r2 = await fetch(OCR_FUNCTION_URL, {
             method: "POST",
