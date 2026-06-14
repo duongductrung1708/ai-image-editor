@@ -113,7 +113,11 @@ export function useSingleImageOcr() {
     };
   }, []);
 
-  const runOcrOnFile = useCallback(async (file: File): Promise<boolean> => {
+  const runOcrOnFile = useCallback(async (
+    file: File,
+    opts?: { textOnly?: boolean },
+  ): Promise<boolean> => {
+    const textOnly = opts?.textOnly === true;
     ocrAbortRef.current?.abort();
     const controller = new AbortController();
     ocrAbortRef.current = controller;
