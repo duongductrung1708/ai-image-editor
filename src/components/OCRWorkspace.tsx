@@ -720,7 +720,10 @@ const OCRWorkspace = ({
               onStartOcr={() => void startOcr()}
               quotaRemaining={quotaRemaining}
               quotaUnlimited={quotaUnlimited}
+              extractMode={extractMode}
+              onExtractModeChange={setExtractMode}
             />
+
           </div>
 
           {showHistory && isLg ? (
