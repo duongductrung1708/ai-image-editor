@@ -120,7 +120,20 @@ serve(async (req) => {
     const idemKey =
       (req.headers.get("Idempotency-Key") || "").trim() ||
       String(body?.idempotencyKey || "").trim();
-    if (!priceId) throw new Error("priceId is required");
+    if (!priceId || typeof priceId !== "string") throw new Error("priceId is required");
+
+    const allowedPriceIds = new Set(
+      (Deno.env.get("ALLOWED_STRIPE_PRICE_IDS") || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+    if (allowedPriceIds.size === 0 || !allowedPriceIds.has(priceId)) {
+      return new Response(JSON.stringify({ error: "Invalid priceId" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const { error: idemErr } = await srvClient.rpc("consume_idempotency_key", {
       p_user_id: user.id,
