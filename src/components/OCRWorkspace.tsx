@@ -70,6 +70,7 @@ const OCRWorkspace = ({
   const [phase, setPhase] = useState<"edit" | "processing" | "result">("edit");
   const [editFile, setEditFile] = useState<File>(imageFile);
   const [enhance, setEnhance] = useState(false);
+  const [extractMode, setExtractMode] = useState<"styled" | "text">("styled");
   const [isEditingBusy, setIsEditingBusy] = useState(false);
 
   const editImageUrl = useObjectUrl(editFile);
@@ -362,7 +363,7 @@ const OCRWorkspace = ({
       setOcrLoadingUi("Đang chuẩn bị ảnh...", 5);
 
       setOcrImageFromFile(fileForOcr);
-      const ok = await runOcrOnFile(fileForOcr);
+      const ok = await runOcrOnFile(fileForOcr, { textOnly: extractMode === "text" });
       if (isCancelRequested()) {
         setPhase("edit");
         return;
@@ -382,6 +383,7 @@ const OCRWorkspace = ({
     deductCredit,
     editFile,
     enhance,
+    extractMode,
     isCancelRequested,
     phase,
     quotaCanUse,
@@ -718,7 +720,10 @@ const OCRWorkspace = ({
               onStartOcr={() => void startOcr()}
               quotaRemaining={quotaRemaining}
               quotaUnlimited={quotaUnlimited}
+              extractMode={extractMode}
+              onExtractModeChange={setExtractMode}
             />
+
           </div>
 
           {showHistory && isLg ? (
