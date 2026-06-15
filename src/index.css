@@ -2,7 +2,12 @@
 @import "@fontsource/be-vietnam-pro/500.css";
 @import "@fontsource/be-vietnam-pro/600.css";
 @import "@fontsource/be-vietnam-pro/700.css";
+@import "@fontsource/lora/400.css";
+@import "@fontsource/lora/500.css";
+@import "@fontsource/lora/600.css";
+@import "@fontsource/lora/400-italic.css";
 /* TipTap / ProseMirror table: cell selection (`.selectedCell`) — must stay with other @import before @tailwind */
+@import "prosemirror-tables/style/tables.css";
 @import "prosemirror-tables/style/tables.css";
 
 @tailwind base;
@@ -202,3 +207,44 @@ body.ocr-workspace {
 .animate-scan {
   animation: scan 2s ease-in-out infinite;
 }
+
+/* ============================================================
+ * Zen mode: typography minimalist cho khu vực đọc Markdown.
+ * ============================================================ */
+.zen-mode {
+  background-color: hsl(var(--background));
+}
+.zen-mode .ProseMirror {
+  font-family: "Lora", Charter, Georgia, "Times New Roman", serif;
+  font-size: 17.5px;
+  line-height: 1.85;
+  letter-spacing: 0.005em;
+  color: hsl(var(--foreground));
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0.5rem 0.25rem 4rem;
+}
+.zen-mode .ProseMirror p {
+  margin: 0.85em 0;
+}
+.zen-mode .ProseMirror h1,
+.zen-mode .ProseMirror h2,
+.zen-mode .ProseMirror h3,
+.zen-mode .ProseMirror h4 {
+  font-family: "Lora", Charter, Georgia, serif;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+  margin-top: 1.4em;
+  margin-bottom: 0.5em;
+}
+.zen-mode .ProseMirror h1 { font-size: 2em; }
+.zen-mode .ProseMirror h2 { font-size: 1.55em; }
+.zen-mode .ProseMirror h3 { font-size: 1.25em; }
+.zen-mode .ProseMirror blockquote {
+  border-left: 3px solid hsl(var(--primary) / 0.4);
+  padding-left: 1rem;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+.zen-mode .ProseMirror em { font-style: italic; }

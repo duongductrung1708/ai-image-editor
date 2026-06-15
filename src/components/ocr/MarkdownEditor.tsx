@@ -34,8 +34,9 @@ import {
   TableColumnsSplit,
   Undo2,
   Redo2,
+  BookOpen,
 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import ShimmerLines from "@/components/ocr/ShimmerLines";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -142,6 +143,7 @@ const MarkdownEditor = ({
   const [insertTableCols, setInsertTableCols] = useState(3);
   const [insertTableHeaderRow, setInsertTableHeaderRow] = useState(true);
   const [toolbarTick, setToolbarTick] = useState(0);
+  const [zenMode, setZenMode] = useState(false);
 
   const toolbarButtonClass = (active: boolean, wide = false) => {
     const base = wide
@@ -477,6 +479,36 @@ const MarkdownEditor = ({
     clearBatchHighlight,
   ]);
 
+  // Bi-directional sync (chiều ngược): khi user bôi đen text trong Markdown
+  // → tìm bbox tương ứng và "flash" trên ảnh.
+  useEffect(() => {
+    if (!editor || isProcessing) return;
+    if (useBatchHover) return;
+    if (boundingBoxes.length === 0) return;
+
+    const onSelectionUpdate = () => {
+      const { state } = editor;
+      const { from, to, empty } = state.selection;
+      if (empty) return;
+      const selectedText = state.doc.textBetween(from, to, " ", " ").trim();
+      if (selectedText.length < 2) return;
+      const indices = findMatchingBoxIndices(selectedText, boundingBoxes);
+      if (indices.length === 0) return;
+      onMarkdownHighlightChange?.(indices);
+    };
+
+    editor.on("selectionUpdate", onSelectionUpdate);
+    return () => {
+      editor.off("selectionUpdate", onSelectionUpdate);
+    };
+  }, [
+    editor,
+    isProcessing,
+    boundingBoxes,
+    useBatchHover,
+    onMarkdownHighlightChange,
+  ]);
+
   useEffect(() => {
     if (!editor || !jumpToBox || isProcessing) return;
 
@@ -724,18 +756,7 @@ const MarkdownEditor = ({
   );
 
   if (isProcessing && !editor) {
-    return (
-      <div className="h-full w-full p-4 space-y-3">
-        <Skeleton className="h-5 w-2/3" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-11/12" />
-        <Skeleton className="h-4 w-10/12" />
-        <Skeleton className="h-4 w-9/12" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6" />
-        <Skeleton className="h-4 w-2/3" />
-      </div>
-    );
+    return <ShimmerLines />;
   }
 
   return (
@@ -1246,17 +1267,36 @@ const MarkdownEditor = ({
           <TableColumnsSplit className="h-3.5 w-3.5" />
           <span className="ml-1 text-[10px]">Tách ô</span>
         </button>
+
+        <span className="mx-1 h-5 w-px bg-border" />
+
+        <button
+          type="button"
+          className={
+            zenMode
+              ? "flex h-7 items-center justify-center rounded border border-primary/40 bg-primary/10 px-2 text-[11px] text-foreground"
+              : "flex h-7 items-center justify-center rounded border border-transparent px-2 text-[11px] hover:border-border hover:bg-muted/60"
+          }
+          onClick={() => setZenMode((v) => !v)}
+          aria-pressed={zenMode}
+          aria-label="Chế độ đọc Zen"
+          title="Chế độ đọc Zen (serif, thoáng đãng)"
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          <span className="ml-1">Zen</span>
+        </button>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-auto bg-card px-4 py-3">
+      <div
+        ref={scrollRef}
+        className={`flex-1 overflow-auto bg-card px-4 py-3 transition-colors ${
+          zenMode ? "zen-mode" : ""
+        }`}
+      >
         {editor ? (
           <EditorContent editor={editor} className="h-full" />
         ) : (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-11/12" />
-          </div>
+          <ShimmerLines rows={["50%", "100%", "92%"]} />
         )}
       </div>
     </div>

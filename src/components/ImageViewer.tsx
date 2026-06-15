@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from "react";
+import { motion } from "framer-motion";
 import { mergeBoxRectsPercent } from "@/lib/bboxTextMatch";
 
 export interface BoundingBox {
@@ -207,7 +208,14 @@ const ImageViewer = ({
         ))}
 
         {linkedRect && (
-          <div
+          <motion.div
+            key={`flash-${(linkedHighlightIndices ?? []).join(",")}`}
+            initial={{ opacity: 0.25, scale: 1.08 }}
+            animate={{
+              opacity: [0.25, 1, 0.55, 1],
+              scale: [1.08, 1, 1.025, 1],
+            }}
+            transition={{ duration: 1.1, ease: "easeOut" }}
             className="pointer-events-none absolute z-20 rounded-sm border-2 border-yellow-400 bg-yellow-300/25 shadow-[0_0_0_1px_rgba(250,204,21,0.4)]"
             style={{
               boxSizing: "border-box",
