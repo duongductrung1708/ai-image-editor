@@ -19,9 +19,12 @@ function outExt(outType: string) {
 }
 
 // ---- Worker singleton ------------------------------------------------------
-type WorkerResponse =
-  | { id: number; ok: true; blob: Blob | null }
-  | { id: number; ok: false; error: string };
+type WorkerResponse = {
+  id: number;
+  ok: boolean;
+  blob?: Blob | null;
+  error?: string;
+};
 
 let workerInstance: Worker | null = null;
 let workerSeq = 0;
@@ -49,8 +52,8 @@ function getWorker(): Worker | null {
       const entry = pending.get(msg.id);
       if (!entry) return;
       pending.delete(msg.id);
-      if (msg.ok) entry.resolve(msg.blob);
-      else entry.reject(new Error(msg.error));
+      if (msg.ok) entry.resolve(msg.blob ?? null);
+      else entry.reject(new Error(msg.error || "worker failure"));
     };
     workerInstance.onerror = () => {
       workerBroken = true;
