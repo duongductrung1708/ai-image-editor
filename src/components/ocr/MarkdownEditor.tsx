@@ -34,8 +34,9 @@ import {
   TableColumnsSplit,
   Undo2,
   Redo2,
+  BookOpen,
 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import ShimmerLines from "@/components/ocr/ShimmerLines";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -142,6 +143,7 @@ const MarkdownEditor = ({
   const [insertTableCols, setInsertTableCols] = useState(3);
   const [insertTableHeaderRow, setInsertTableHeaderRow] = useState(true);
   const [toolbarTick, setToolbarTick] = useState(0);
+  const [zenMode, setZenMode] = useState(false);
 
   const toolbarButtonClass = (active: boolean, wide = false) => {
     const base = wide
@@ -724,18 +726,7 @@ const MarkdownEditor = ({
   );
 
   if (isProcessing && !editor) {
-    return (
-      <div className="h-full w-full p-4 space-y-3">
-        <Skeleton className="h-5 w-2/3" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-11/12" />
-        <Skeleton className="h-4 w-10/12" />
-        <Skeleton className="h-4 w-9/12" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6" />
-        <Skeleton className="h-4 w-2/3" />
-      </div>
-    );
+    return <ShimmerLines />;
   }
 
   return (
