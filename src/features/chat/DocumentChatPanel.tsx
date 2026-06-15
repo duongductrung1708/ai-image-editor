@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
-import { Loader2, RotateCcw, Send, Sparkles } from "lucide-react";
+import { Bot, Loader2, RotateCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -73,7 +73,7 @@ const DocumentChatPanel = ({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2">
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          <Bot className="h-3.5 w-3.5 text-primary" />
           Hỏi đáp về tài liệu
         </div>
         {messages.length > 0 ? (
@@ -98,7 +98,7 @@ const DocumentChatPanel = ({
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Sparkles className="h-5 w-5" />
+              <Bot className="h-5 w-5" />
             </div>
             <div className="max-w-sm text-sm text-muted-foreground">
               Hỏi bất kỳ điều gì về ảnh tài liệu bạn vừa OCR. AI sẽ trả lời

@@ -70,7 +70,7 @@ const OCRWorkspace = ({
   const [phase, setPhase] = useState<"edit" | "processing" | "result">("edit");
   const [editFile, setEditFile] = useState<File>(imageFile);
   const [enhance, setEnhance] = useState(false);
-  const [extractMode, setExtractMode] = useState<"styled" | "text">("styled");
+  const [extractMode, setExtractMode] = useState<"styled" | "text">("text");
   const [isEditingBusy, setIsEditingBusy] = useState(false);
 
   const editImageUrl = useObjectUrl(editFile);

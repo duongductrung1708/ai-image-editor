@@ -44,7 +44,7 @@ const SingleImageEditPhase = ({
   onStartOcr,
   quotaRemaining,
   quotaUnlimited,
-  extractMode = "styled",
+  extractMode = "text",
   onExtractModeChange,
 }: SingleImageEditPhaseProps) => {
   const leftPanel = editImageUrl ? (
@@ -169,23 +169,6 @@ const SingleImageEditPhase = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant={extractMode === "styled" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => onExtractModeChange?.("styled")}
-                    disabled={ocrPipelineBusy || isEditingBusy}
-                    className="gap-1.5"
-                  >
-                    <Table className="h-3.5 w-3.5" />
-                    Có bảng / màu
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  Giữ định dạng bảng, in đậm, màu chữ. Dùng PaddleOCR + Gemini song song.
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
                     variant={extractMode === "text" ? "default" : "outline"}
                     size="sm"
                     onClick={() => onExtractModeChange?.("text")}
@@ -197,15 +180,27 @@ const SingleImageEditPhase = ({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
-                  Chỉ trích xuất chữ — nhanh hơn, tiết kiệm RAM, tránh quá tải microservice.
+                  Chỉ trích xuất chữ — nhanh hơn, đơn giản hơn.
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={extractMode === "styled" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onExtractModeChange?.("styled")}
+                    disabled={ocrPipelineBusy || isEditingBusy}
+                    className="gap-1.5"
+                  >
+                    <Table className="h-3.5 w-3.5" />
+                    Có bảng / màu
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  Giữ định dạng bảng, in đậm, màu chữ.
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              {extractMode === "text"
-                ? "Bỏ qua PaddleOCR — chỉ dùng Gemini đọc chữ. Không có viền/bảng/màu."
-                : "Dùng Paddle (viền) + Gemini (markdown). Tự fallback sang Gemini nếu Paddle lỗi."}
-            </p>
           </div>
 
           <div className="rounded-lg border border-border bg-card p-3">
