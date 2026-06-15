@@ -65,23 +65,30 @@ const DropZone = ({ onFilesSelect }: DropZoneProps) => {
 
   return (
     <div className="w-full max-w-2xl text-center">
-      <label
+      <motion.label
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`group flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-16 transition-all duration-200 ${
+        animate={
           isDragOver
-            ? "border-primary bg-primary/5 scale-[1.02]"
+            ? { scale: [1, 1.04, 1.02], y: [0, -6, 0] }
+            : { scale: 1, y: 0 }
+        }
+        transition={{ type: "spring", stiffness: 320, damping: 18 }}
+        whileTap={{ scale: 0.985 }}
+        className={`group flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-16 transition-colors duration-200 ${
+          isDragOver
+            ? "border-primary bg-primary/5"
             : "border-border bg-card hover:border-primary/50 hover:bg-secondary/50"
         }`}
       >
         <AnimatePresence mode="wait">
           <motion.div
             key={isDragOver ? "drop" : "idle"}
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.8, opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            initial={{ scale: 0.7, opacity: 0, y: 8 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.7, opacity: 0, y: -8 }}
+            transition={{ type: "spring", stiffness: 380, damping: 22 }}
             className="mb-4 rounded-full bg-primary/10 p-4"
           >
             {isDragOver ? (
@@ -107,7 +114,7 @@ const DropZone = ({ onFilesSelect }: DropZoneProps) => {
           onChange={handleFileInput}
           className="hidden"
         />
-      </label>
+      </motion.label>
     </div>
   );
 };
