@@ -9,13 +9,13 @@
 
 ### Yêu cầu / Prerequisites
 
-- **Node.js** (khuyến nghị LTS / recommend LTS) + **npm**
+- **Node.js** (khuyến nghị LTS / recommend LTS) + **bun**
 - **Supabase CLI** (dev local, migrations / local dev & migrations)
 
 ### 1) Cài dependencies / Install dependencies
 
 ```bash
-npm install
+bun install
 ```
 
 ### 2) Chạy Supabase local (khuyến nghị cho dev) / Start Supabase locally (recommended for dev)
@@ -31,6 +31,7 @@ supabase db reset
 ```
 
 Notes:
+
 - This repo uses a **single consolidated migration**: `supabase/migrations/20260414000000_init.sql`.
 - `supabase db reset` will recreate the local DB and apply migrations from scratch.
 
@@ -52,7 +53,7 @@ supabase status
 ### 4) Chạy app / Run the app
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ### Tuỳ chọn: link Supabase remote (staging/prod) / Optional: link to a remote Supabase project (staging/prod)
@@ -98,7 +99,7 @@ Set secrets on Supabase for the deployed function (or local env when using `supa
 ### Run the frontend locally
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ### Run Edge Function locally (optional)
