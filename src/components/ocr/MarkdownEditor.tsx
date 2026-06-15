@@ -479,6 +479,36 @@ const MarkdownEditor = ({
     clearBatchHighlight,
   ]);
 
+  // Bi-directional sync (chiều ngược): khi user bôi đen text trong Markdown
+  // → tìm bbox tương ứng và "flash" trên ảnh.
+  useEffect(() => {
+    if (!editor || isProcessing) return;
+    if (useBatchHover) return;
+    if (boundingBoxes.length === 0) return;
+
+    const onSelectionUpdate = () => {
+      const { state } = editor;
+      const { from, to, empty } = state.selection;
+      if (empty) return;
+      const selectedText = state.doc.textBetween(from, to, " ", " ").trim();
+      if (selectedText.length < 2) return;
+      const indices = findMatchingBoxIndices(selectedText, boundingBoxes);
+      if (indices.length === 0) return;
+      onMarkdownHighlightChange?.(indices);
+    };
+
+    editor.on("selectionUpdate", onSelectionUpdate);
+    return () => {
+      editor.off("selectionUpdate", onSelectionUpdate);
+    };
+  }, [
+    editor,
+    isProcessing,
+    boundingBoxes,
+    useBatchHover,
+    onMarkdownHighlightChange,
+  ]);
+
   useEffect(() => {
     if (!editor || !jumpToBox || isProcessing) return;
 
