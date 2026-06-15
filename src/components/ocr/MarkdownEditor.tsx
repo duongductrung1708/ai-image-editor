@@ -1237,17 +1237,36 @@ const MarkdownEditor = ({
           <TableColumnsSplit className="h-3.5 w-3.5" />
           <span className="ml-1 text-[10px]">Tách ô</span>
         </button>
+
+        <span className="mx-1 h-5 w-px bg-border" />
+
+        <button
+          type="button"
+          className={
+            zenMode
+              ? "flex h-7 items-center justify-center rounded border border-primary/40 bg-primary/10 px-2 text-[11px] text-foreground"
+              : "flex h-7 items-center justify-center rounded border border-transparent px-2 text-[11px] hover:border-border hover:bg-muted/60"
+          }
+          onClick={() => setZenMode((v) => !v)}
+          aria-pressed={zenMode}
+          aria-label="Chế độ đọc Zen"
+          title="Chế độ đọc Zen (serif, thoáng đãng)"
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          <span className="ml-1">Zen</span>
+        </button>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-auto bg-card px-4 py-3">
+      <div
+        ref={scrollRef}
+        className={`flex-1 overflow-auto bg-card px-4 py-3 transition-colors ${
+          zenMode ? "zen-mode" : ""
+        }`}
+      >
         {editor ? (
           <EditorContent editor={editor} className="h-full" />
         ) : (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-11/12" />
-          </div>
+          <ShimmerLines rows={["50%", "100%", "92%"]} />
         )}
       </div>
     </div>
