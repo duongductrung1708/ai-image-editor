@@ -1326,7 +1326,14 @@ async function runSingleOcr(
   let parsed: ParsedOcr;
   if (cfg.mode === "markdown") {
     const cleaned = postProcessMarkdown(textOut, cfg.markdownStyle);
-    parsed = { markdown: cleaned, full_text: cleaned, blocks: [] };
+    // Parse blocks from provider response even in text-only mode
+    // so that bbox is always available
+    const providerBlocks = parseOcrPayload(textOut, cfg.markdownStyle);
+    parsed = { 
+      markdown: cleaned, 
+      full_text: cleaned, 
+      blocks: providerBlocks.blocks || [] 
+    };
   } else {
     parsed = parseOcrPayload(textOut, cfg.markdownStyle);
   }
@@ -1342,7 +1349,11 @@ async function runSingleOcr(
     parsed = { ...parsed, blocks: paddleRes.value };
   } else if (!skipPaddle) {
     console.log(
-      `[hybrid] paddle unavailable — using Gemini blocks=${parsed.blocks?.length ?? 0}`,
+      `[hybrid] paddle unavailable — using provider blocks=${parsed.blocks?.length ?? 0}`,
+    );
+  } else {
+    console.log(
+      `[text-only] skipped paddle — using provider blocks=${parsed.blocks?.length ?? 0}`,
     );
   }
   return parsed;
