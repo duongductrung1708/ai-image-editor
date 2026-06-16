@@ -280,27 +280,22 @@ const AppPage = () => {
   }, [files, historyId]);
 
   if (historyId && (resumeLoading || resumeEntry || resumeError)) {
-    if (resumeLoading) {
+    // Always render with fixed height to prevent layout shift during loading/error
+    if (resumeLoading || resumeError) {
       return (
         <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
           <Navbar />
           <div className="flex flex-1 items-center justify-center px-6">
-            <div className="text-sm text-muted-foreground">
-              Đang mở lịch sử OCR...
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (resumeError) {
-      return (
-        <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
-          <Navbar />
-          <div className="flex flex-1 items-center justify-center px-6">
-            <div className="max-w-md text-center">
-              <p className="text-sm text-destructive">{resumeError}</p>
-            </div>
+            {resumeLoading && (
+              <div className="text-sm text-muted-foreground">
+                Đang mở lịch sử OCR...
+              </div>
+            )}
+            {resumeError && (
+              <div className="max-w-md text-center">
+                <p className="text-sm text-destructive">{resumeError}</p>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -309,27 +304,22 @@ const AppPage = () => {
     // UI will be handled by the inline view below.
   }
 
-  if (inlineHistoryLoading) {
+  // Always render with fixed height to prevent layout shift during loading
+  if (inlineHistoryLoading || inlineHistoryError) {
     return (
       <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
         <Navbar />
         <div className="flex flex-1 items-center justify-center px-6">
-          <div className="text-sm text-muted-foreground">
-            Đang mở lịch sử OCR...
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (inlineHistoryError) {
-    return (
-      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
-        <Navbar />
-        <div className="flex flex-1 items-center justify-center px-6">
-          <div className="max-w-md text-center">
-            <p className="text-sm text-destructive">{inlineHistoryError}</p>
-          </div>
+          {inlineHistoryLoading && (
+            <div className="text-sm text-muted-foreground">
+              Đang mở lịch sử OCR...
+            </div>
+          )}
+          {inlineHistoryError && (
+            <div className="max-w-md text-center">
+              <p className="text-sm text-destructive">{inlineHistoryError}</p>
+            </div>
+          )}
         </div>
       </div>
     );
