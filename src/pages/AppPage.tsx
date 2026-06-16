@@ -90,7 +90,7 @@ const AppPage = () => {
       bb &&
       typeof bb === "object" &&
       !Array.isArray(bb) &&
-      (bb as { batch?: boolean }).batch === true
+      (bb as { batch?: boolean }).batch === truef
     );
   }, []);
 
@@ -403,7 +403,7 @@ const AppPage = () => {
   }
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-background">
+    <div className="relative min-h-screen bg-background">
       <div
         className="pointer-events-none absolute inset-0 overflow-hidden"
         aria-hidden
