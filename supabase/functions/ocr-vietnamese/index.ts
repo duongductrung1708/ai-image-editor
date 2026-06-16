@@ -727,13 +727,8 @@ function buildPrompt(
     "- For tables, use GitHub-flavored Markdown tables when it clearly improves readability.\n";
 
   const base = markdownStyle === "clean" ? baseClean : baseRaw;
-  if (mode === "markdown") {
-    return (
-      base +
-      "Return ONLY Markdown/plain text (no code fences, no extra explanations).\n"
-    );
-  }
-
+  
+  // Always return JSON with blocks (even in text-only mode) so bbox is always available
   // --- HACK RIÊNG CHO GEMINI ---
   if (provider === "gemini" || isGeminiViaOpenRouter) {
     return (
