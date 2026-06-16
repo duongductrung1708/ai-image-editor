@@ -706,25 +706,27 @@ function buildPrompt(
     "Extract all Vietnamese text (and other languages if present) from this image.\n" +
     "Do not omit any text.\n" +
     "Do NOT summarize. Do NOT paraphrase.\n" +
-    "Preserve the original reading order as best as possible.\n" +
-    "\nPARAGRAPH & LINE-BREAK RULES:\n" +
-    "- Join words that belong to the SAME logical paragraph/sentence into one continuous line, even if they span multiple visual lines in the image.\n" +
-    "- Only insert a line break (\\n) when the document clearly starts a NEW paragraph, a new list item, a new heading, or a new section.\n" +
-    "- Do NOT break lines at every bounding-box boundary.\n" +
-    "\nFORMATTING:\n" +
-    "- Plain text only. Do not detect or apply any special formatting (bold, italic, color, font size, etc.).\n" +
-    "- Keep the text simple and readable.\n" +
-    "\nTABLES:\n" +
-    "- If the image contains a table, output it as a GitHub-flavored Markdown pipe table: header row, | --- | --- | separator, then one row per line.\n";
+    "Preserve the original reading order and structure (paragraphs, headings, lists, indentation, alignment).\n" +
+    "\nSTRUCTURE PRESERVATION RULES (critical):\n" +
+    "- PARAGRAPHS: Join words in the same paragraph into one continuous line. Use \\n\\n (double line break) between paragraphs.\n" +
+    "- HEADINGS: Identify headings by visual prominence (larger, centered, bold appearance). Use HTML <h1>, <h2>, <h3> tags or Markdown #, ##, ### notation.\n" +
+    "- LISTS: Preserve bullet/numbered lists exactly as they appear. Use Markdown bullets (-) or numbering (1. 2. 3.).\n" +
+    "- INDENTATION: Preserve first-line indent and paragraph indentation using leading spaces or HTML/Markdown format.\n" +
+    "- ALIGNMENT: Preserve text alignment (center, right, justify) using HTML style attributes or Markdown.\n" +
+    "- TABLES: Use GitHub-flavored Markdown pipe tables (| col | col |) with header row and --- separator.\n" +
+    "\nSTYLE RULES (remove all styling, keep structure only):\n" +
+    "- Do NOT detect or apply bold, italic, underline, color, or font size styling.\n" +
+    "- Extract text as plain, undecorated content.\n" +
+    "- Keep formatting structure (headings, lists, tables) but remove all visual styling.\n";
 
   const baseClean =
     baseRaw +
-    "\nAdditionally, try to format as readable Markdown WITHOUT changing the meaning/content:\n" +
-    "- Only transform formatting (headings, emphasis, lists, tables). Do not rewrite sentences.\n" +
-    "- Use Markdown headings (#, ##, ###) when you are confident a line is a heading.\n" +
-    "- Use bullet/numbered lists when the document clearly uses them.\n" +
-    "- Convert bold/italic/underline per VISUAL FORMATTING rules (Markdown + <p style=...> / <u> as needed).\n" +
-    "- For tables, use GitHub-flavored Markdown tables when it clearly improves readability.\n";
+    "\nUse readable Markdown format for structure representation without styling:\n" +
+    "- Use Markdown headings (#, ##, ###) instead of HTML for simplicity.\n" +
+    "- Use Markdown bullets (-) and numbering (1.) for lists.\n" +
+    "- Use leading spaces for indentation and Markdown quotes (>) for blockquotes.\n" +
+    "- Use GFM tables for table content.\n" +
+    "- Do not use HTML formatting tags.\n";
 
   const base = markdownStyle === "clean" ? baseClean : baseRaw;
   
@@ -752,45 +754,25 @@ function buildPrompt(
     "The response MUST start with '{' and end with '}'.\n" +
     "No Markdown code fences, no commentary, no extra characters.\n" +
     "JSON must match fields exactly:\n" +
-    "- markdown: string\n" +
-    "- full_text: string\n" +
+    "- markdown: string (structured text with headings, lists, indentation preserved, but NO styling)\n" +
+    "- full_text: string (same as markdown)\n" +
     '- blocks: array of objects with these fields:\n' +
-    '  - text: string (the text content)\n' +
+    '  - text: string (the text content, no styling)\n' +
     '  - x: number (top-left X in % of image width, 0-100)\n' +
     '  - y: number (top-left Y in % of image height, 0-100)\n' +
     '  - width: number (width in % of image width)\n' +
     '  - height: number (height in % of image height)\n' +
     '  - kind: "text"|"figure"|"stamp"|"signature"\n' +
-    '  - font_family: "sans"|"serif"|"mono"|"unknown" (best-effort classification)\n' +
-    '  - font_size: number (estimated font size in pixels, based on the text height in the image)\n' +
-    '  - color: string (CSS color value like "#000000", "#ff0000", "red", "blue" — only if text color is NOT black/default)\n' +
-    '  - bold: boolean (true if text appears bold/heavy)\n' +
-    '  - italic: boolean (true if text appears italic/slanted)\n' +
-    '  - underline: boolean (true if text has underline decoration)\n' +
-    '  - text_align: "left"|"center"|"right"|"justify" (only if NOT left-aligned)\n' +
-    "\nSTYLE DETECTION RULES (critical — make the editor match the image):\n" +
-    "- FONT SIZE: Estimate the font size in pixels by measuring the text height relative to the image. Larger headings should have larger font_size values.\n" +
-    "- COLOR: If text is colored (red, blue, green, etc.), set the color field. Black text should omit color or set it to null.\n" +
-    "- BOLD: Set bold=true for visually heavy/bold text. Headings are typically bold.\n" +
-    "- ITALIC: Set italic=true for slanted/italic text.\n" +
-    "- UNDERLINE: Set underline=true for underlined text.\n" +
-    "- TEXT ALIGN: Set text_align for centered, right-aligned, or justified text.\n" +
-    "- FONT FAMILY: 'sans' for Arial/Helvetica-like, 'serif' for Times-like, 'mono' for Courier-like.\n" +
-    "\nMARKDOWN: GFM tables for grids; apply VISUAL FORMATTING (bold/italic/u, alignment, text-indent, colors) when visible; do not flatten tables into plain paragraphs.\n" +
-    "BOUNDING BOX RULES (critical):\n" +
+    "\nBOUNDING BOX RULES:\n" +
     "- Coordinate system: origin TOP-LEFT of the image. x increases to the RIGHT, y increases DOWNWARD.\n" +
-    "- x and y are the TOP-LEFT corner of the rectangle, in PERCENT of image width and height (0–100, decimals allowed).\n" +
-    "- width and height are the rectangle size in PERCENT of image width and height (not pixels).\n" +
-    "- Draw TIGHT boxes: edges should touch the outermost pixels of that text/figure region — avoid whole-page boxes unless the content truly spans the page.\n" +
-    "- One block per distinct paragraph, line group, table region, stamp, signature, or figure; follow natural reading order when listing blocks.\n" +
-    '- Use kind "stamp" for seals/stamps, "signature" for hand-written signatures, "figure" for photos/charts/diagrams — NOT for plain text blocks.\n' +
-    "STAMP & SIGNATURE RULES (critical):\n" +
-    '- If you detect a red stamp/seal (con dau do), you MUST create a separate block with kind = "stamp".\n' +
-    '- For stamp blocks, set text to the readable content if any; otherwise use placeholder "[CON DẤU]".\n' +
-    '- If you detect a hand-written signature (chu ky), you MUST create a separate block with kind = "signature".\n' +
-    '- For signature blocks, set text to the readable content if any; otherwise use placeholder "[CHỮ KÝ]".\n' +
-    '- If stamp and signature overlap or are immediately adjacent, you MAY merge them into ONE block: kind = "stamp" and text = "[CON DẤU + CHỮ KÝ]".\n' +
-    "If bounding boxes are uncertain, still return best-effort values (do not omit 'blocks').\n"
+    "- x and y are the TOP-LEFT corner in PERCENT of image width and height (0–100, decimals allowed).\n" +
+    "- width and height are the rectangle size in PERCENT of image width and height.\n" +
+    "- Draw TIGHT boxes: edges should touch the outermost pixels of text/figure region.\n" +
+    "- One block per distinct paragraph, line group, table region, stamp, signature, or figure.\n" +
+    '- Use kind "stamp" for seals/stamps, "signature" for hand-written signatures, "figure" for photos/charts/diagrams.\n' +
+    "STAMP & SIGNATURE RULES:\n" +
+    '- If you detect a stamp/seal, create a separate block with kind="stamp", text set to readable content or "[CON DẤU]".\n' +
+    '- If you detect a hand-written signature, create a separate block with kind="signature", text set to readable content or "[CHỮ KÝ]".\n'
   );
 }
 
