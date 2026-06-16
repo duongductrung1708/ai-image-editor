@@ -1,5 +1,5 @@
 import { type MutableRefObject } from "react";
-import { Crop, FlipHorizontal, RotateCcw, RotateCw, Sparkles } from "lucide-react";
+import { Crop, FileText, FlipHorizontal, RotateCcw, RotateCw, Sparkles, Table } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ImageCropper, {
@@ -24,6 +24,8 @@ interface SingleImageEditPhaseProps {
   onStartOcr: () => void;
   quotaRemaining?: number;
   quotaUnlimited?: boolean;
+  extractMode?: "styled" | "text";
+  onExtractModeChange?: (mode: "styled" | "text") => void;
 }
 
 /**
@@ -42,6 +44,8 @@ const SingleImageEditPhase = ({
   onStartOcr,
   quotaRemaining,
   quotaUnlimited,
+  extractMode = "text",
+  onExtractModeChange,
 }: SingleImageEditPhaseProps) => {
   const leftPanel = editImageUrl ? (
     <ImageCropper
@@ -152,6 +156,51 @@ const SingleImageEditPhase = ({
                 Tăng tương phản nhẹ để OCR dễ nhận diện hơn
               </TooltipContent>
             </Tooltip>
+          </div>
+
+          <div className="rounded-lg border border-border bg-card p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+                <FileText className="h-4 w-4 text-primary" />
+              </span>
+              Chế độ trích xuất
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={extractMode === "text" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onExtractModeChange?.("text")}
+                    disabled={ocrPipelineBusy || isEditingBusy}
+                    className="gap-1.5"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Văn bản thô
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  Chỉ trích xuất chữ — nhanh hơn, đơn giản hơn.
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={extractMode === "styled" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onExtractModeChange?.("styled")}
+                    disabled={ocrPipelineBusy || isEditingBusy}
+                    className="gap-1.5"
+                  >
+                    <Table className="h-3.5 w-3.5" />
+                    Có bảng / màu
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  Giữ định dạng bảng, in đậm, màu chữ.
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </div>
 
           <div className="rounded-lg border border-border bg-card p-3">

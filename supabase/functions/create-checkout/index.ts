@@ -120,7 +120,20 @@ serve(async (req) => {
     const idemKey =
       (req.headers.get("Idempotency-Key") || "").trim() ||
       String(body?.idempotencyKey || "").trim();
-    if (!priceId) throw new Error("priceId is required");
+    if (!priceId || typeof priceId !== "string") throw new Error("priceId is required");
+
+    const allowedPriceIds = new Set(
+      (Deno.env.get("ALLOWED_STRIPE_PRICE_IDS") || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+    if (allowedPriceIds.size === 0 || !allowedPriceIds.has(priceId)) {
+      return new Response(JSON.stringify({ error: "Invalid priceId" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const { error: idemErr } = await srvClient.rpc("consume_idempotency_key", {
       p_user_id: user.id,
@@ -145,13 +158,28 @@ serve(async (req) => {
       customerId = customers.data[0].id;
     }
 
+    const allowlist = parseAllowedOrigins();
+    const reqOrigin = req.headers.get("origin") || "";
+    const appUrlEnv = (Deno.env.get("APP_URL") || "").trim();
+    const trustedOrigin =
+      appUrlEnv ||
+      (allowlist[0] || (allowlist.includes(reqOrigin) ? reqOrigin : "")) ||
+      "";
+    if (!trustedOrigin) {
+      return new Response(JSON.stringify({ error: "Server misconfigured: APP_URL or ALLOWED_ORIGINS required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      });
+    }
+    const baseUrl = trustedOrigin.replace(/\/$/, "");
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : user.email,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
-      success_url: `${req.headers.get("origin")}/profile?tab=plan&success=true`,
-      cancel_url: `${req.headers.get("origin")}/profile?tab=plan`,
+      success_url: `${baseUrl}/profile?tab=plan&success=true`,
+      cancel_url: `${baseUrl}/profile?tab=plan`,
     });
 
     return new Response(JSON.stringify({ url: session.url }), {

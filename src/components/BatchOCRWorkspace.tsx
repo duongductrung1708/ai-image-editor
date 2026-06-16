@@ -93,6 +93,7 @@ const BatchOCRWorkspace = ({
     totalBoxCount,
     runBatch,
     cancelBatch,
+    returnToBatchReady,
     applyHistoryEntry,
   } = useBatchOcr(orderedFiles);
 
@@ -100,7 +101,13 @@ const BatchOCRWorkspace = ({
     (entry: import("@/components/ocr/OcrHistoryMobileDrawer").OcrHistoryEntry) => {
       setActiveHistoryId(entry.id);
       if (!isBatchHistoryEntry(entry)) {
-        onRequestOpenHistory?.(entry);
+        if (onRequestOpenHistory) {
+          onRequestOpenHistory(entry);
+        } else {
+          // Fallback for callers that don't provide a handler (e.g. LandingPage):
+          // deep-link to /app so AppPage can hydrate either single or batch entries.
+          window.location.href = `/app?historyId=${encodeURIComponent(entry.id)}`;
+        }
         return;
       }
       applyHistoryEntry(entry);
@@ -263,8 +270,12 @@ const BatchOCRWorkspace = ({
   }, [runBatch, refreshQuota, deductDailyFreeUsesUpTo, user, freeDailyRemaining, balance, files.length]);
 
   const handleToolbarReprocess = useCallback(() => {
-    if (phase === "result") guardedRunBatch();
-  }, [phase, guardedRunBatch]);
+    if (phase === "result") {
+      returnToBatchReady();
+      return;
+    }
+    if (phase === "ready") guardedRunBatch();
+  }, [phase, guardedRunBatch, returnToBatchReady]);
 
   const toolbarTitle =
     phase === "result"
@@ -283,7 +294,7 @@ const BatchOCRWorkspace = ({
     <div className="flex h-full min-h-0 flex-1 flex-col bg-background overflow-hidden">
       <OCRToolbar
         fileName={toolbarTitle}
-        isProcessing={phase === "processing"}
+        isProcessing={isProcessing || phase === "processing"}
         loadingLabel="OCR hàng loạt trên máy chủ…"
         hasText={Boolean(markdownText || jsonText)}
         copied={copied}
@@ -296,9 +307,11 @@ const BatchOCRWorkspace = ({
         onDownloadJson={downloadJson}
         onExportPdf={exportPdf}
         onDownloadDocx={() => void downloadDocx()}
-        showReprocess={phase === "result"}
+        showReprocess={phase === "result" || phase === "ready"}
         showPdf={phase === "result"}
-        onCancelProcessing={phase === "processing" ? cancelBatch : undefined}
+        onCancelProcessing={
+          isProcessing || phase === "processing" ? cancelBatch : undefined
+        }
       />
       {/* Fixed-height status area to avoid layout shifts */}
       <div className="border-b border-border bg-card px-4 py-1.5 min-h-[40px] flex items-center">

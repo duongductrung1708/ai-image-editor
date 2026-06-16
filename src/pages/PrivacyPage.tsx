@@ -13,7 +13,7 @@ const PrivacyPage = () => {
 
         <section className="mt-8 space-y-4 text-sm leading-6 text-foreground/90">
           <p>
-            MonkeyOCR (“chúng tôi”) tôn trọng quyền riêng tư của bạn. Tài liệu/ảnh bạn tải lên có thể chứa
+            VetaOCR (“chúng tôi”) tôn trọng quyền riêng tư của bạn. Tài liệu/ảnh bạn tải lên có thể chứa
             dữ liệu nhạy cảm; vì vậy chính sách này mô tả rõ chúng tôi thu thập gì, dùng như thế nào và
             bạn có quyền gì đối với dữ liệu của mình.
           </p>
@@ -72,7 +72,7 @@ const PrivacyPage = () => {
 
           <h2 className="mt-6 text-lg font-semibold text-foreground">7) Liên hệ</h2>
           <p>
-            Nếu có câu hỏi về quyền riêng tư, vui lòng liên hệ: <strong>support@monkeyocr.com</strong>
+            Nếu có câu hỏi về quyền riêng tư, vui lòng liên hệ: <strong>support@vetaocr.com</strong>
           </p>
         </section>
       </main>

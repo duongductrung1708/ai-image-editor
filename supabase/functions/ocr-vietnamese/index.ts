@@ -1336,24 +1336,135 @@ async function fetchProviderContent(
   return typeof data?.message?.content === "string" ? data.message.content : "";
 }
 
+/**
+ * Hybrid engine: PaddleOCR microservice for pixel-precise blocks.
+ * Returns null if PADDLE_OCR_URL is unset or the call fails — caller
+ * transparently falls back to the Gemini/OpenAI provider blocks/markdown.
+ */
+async function fetchPaddleBlocks(
+  imageBase64: string,
+  mimeType: string,
+): Promise<OcrBlockNorm[] | null> {
+  const base = Deno.env.get("PADDLE_OCR_URL");
+  if (!base) return null;
+  try {
+    const dataUri = `data:${mimeType};base64,${imageBase64}`;
+    const ctrl = new AbortController();
+    const timeoutMs = Number(Deno.env.get("PADDLE_OCR_TIMEOUT_MS") || "60000");
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const secret = Deno.env.get("PADDLE_OCR_SECRET") || "";
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (secret) headers["X-OCR-Secret"] = secret;
+    const res = await fetch(`${base.replace(/\/$/, "")}/api/ocr`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ imageBase64: dataUri }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      // 5xx typically means microservice is down or OOM (Render 512MB free tier).
+      // Caller will gracefully fall back to Gemini/OpenAI (already ran in parallel).
+      const reason =
+        res.status === 507 || res.status === 503 || res.status === 502
+          ? "out-of-memory/unavailable"
+          : `status ${res.status}`;
+      console.warn(
+        `[paddle] microservice failed (${reason}) — falling back to Gemini`,
+      );
+      return null;
+    }
+    const json = (await res.json()) as { blocks?: unknown };
+    const raw = Array.isArray(json?.blocks) ? json.blocks : [];
+    // Bridge Paddle camelCase keys → normalizeOcrBlocks snake_case
+    const mapped = raw.map((item) => {
+      const b =
+        item && typeof item === "object"
+          ? (item as Record<string, unknown>)
+          : {};
+      return {
+        ...b,
+        font_size_px:
+          typeof b.fontSizePx === "number"
+            ? b.fontSizePx
+            : (b as { font_size_px?: number }).font_size_px,
+        text_align:
+          typeof b.textAlign === "string"
+            ? b.textAlign
+            : (b as { text_align?: string }).text_align,
+        font_family:
+          typeof b.fontFamily === "string"
+            ? b.fontFamily
+            : (b as { font_family?: string }).font_family,
+      };
+    });
+    return normalizeOcrBlocks(mapped);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const isAbort = msg.toLowerCase().includes("abort");
+    console.warn(
+      `[paddle] ${isAbort ? "timeout" : "error"}: ${msg} — falling back to Gemini`,
+    );
+    return null;
+  }
+}
+
 async function runSingleOcr(
   image: unknown,
   mimeType: unknown,
   overrideMode?: "markdown" | "json" | "both",
+  opts?: { skipPaddle?: boolean },
 ): Promise<ParsedOcr> {
   const normalized = normalizeImageAndMimeType(image, mimeType);
   if (!normalized.image) throw new Error("imageBase64 is required");
 
   const cfg = getOcrConfig(overrideMode);
   const prompt = buildOcrPrompt(cfg);
-  const textOut = await fetchProviderContent(normalized, cfg, prompt);
-  if (!textOut) throw new Error("OCR provider returned empty response");
 
+  // Hybrid: provider (Gemini/OpenAI) for markdown + Paddle for precise blocks, in parallel.
+  // If skipPaddle is set (text-only mode), don't even contact the microservice — this
+  // saves RAM on the Paddle host and avoids any chance of OOM affecting the request.
+  const skipPaddle = opts?.skipPaddle === true;
+  const [providerRes, paddleRes] = await Promise.allSettled([
+    fetchProviderContent(normalized, cfg, prompt),
+    skipPaddle
+      ? Promise.resolve(null)
+      : fetchPaddleBlocks(normalized.image, normalized.mimeType),
+  ]);
+
+  if (providerRes.status !== "fulfilled" || !providerRes.value) {
+    if (providerRes.status === "rejected") {
+      throw providerRes.reason instanceof Error
+        ? providerRes.reason
+        : new Error(String(providerRes.reason));
+    }
+    throw new Error("OCR provider returned empty response");
+  }
+
+  const textOut = providerRes.value;
+  let parsed: ParsedOcr;
   if (cfg.mode === "markdown") {
     const cleaned = postProcessMarkdown(textOut, cfg.markdownStyle);
-    return { markdown: cleaned, full_text: cleaned, blocks: [] };
+    parsed = { markdown: cleaned, full_text: cleaned, blocks: [] };
+  } else {
+    parsed = parseOcrPayload(textOut, cfg.markdownStyle);
   }
-  return parseOcrPayload(textOut, cfg.markdownStyle);
+
+  if (
+    paddleRes.status === "fulfilled" &&
+    paddleRes.value &&
+    paddleRes.value.length > 0
+  ) {
+    console.log(
+      `[hybrid] using paddle blocks=${paddleRes.value.length} (provider blocks=${parsed.blocks?.length ?? 0})`,
+    );
+    parsed = { ...parsed, blocks: paddleRes.value };
+  } else if (!skipPaddle) {
+    console.log(
+      `[hybrid] paddle unavailable — using Gemini blocks=${parsed.blocks?.length ?? 0}`,
+    );
+  }
+  return parsed;
 }
 
 async function runPool<T, R>(
@@ -1523,11 +1634,17 @@ serve(async (req) => {
     const body = req.method === "GET" ? null : await req.json();
     const lite = body?.lite === true;
     const blocksOnly = body?.blocksOnly === true;
-    const overrideMode: "markdown" | "json" | "both" | undefined = lite
+    // textOnly: user opted for raw-text extraction only — skip Paddle microservice
+    // (saves RAM, avoids OOM on free hosts) and force markdown-only mode.
+    const textOnly = body?.textOnly === true;
+    const overrideMode: "markdown" | "json" | "both" | undefined = textOnly
+      ? "markdown"
+      : lite
       ? "markdown"
       : blocksOnly
       ? "json"
       : undefined;
+    const runOpts = { skipPaddle: textOnly } as const;
 
     // POST /job/start -> create job and process OCR in background
     if (req.method === "POST" && isJobStartPath) {
@@ -1752,7 +1869,7 @@ serve(async (req) => {
           if (bytes > maxBytes) {
             throw new Error(`Image too large (${bytes} bytes > max ${maxBytes})`);
           }
-          const out = await runSingleOcr(task.image, task.mimeType, overrideMode);
+          const out = await runSingleOcr(task.image, task.mimeType, overrideMode, runOpts);
           const imageSize = getImageSizePx(normalized.image, normalized.mimeType);
           return {
             index: task.index,
@@ -1882,7 +1999,7 @@ serve(async (req) => {
 
     let payload: ParsedOcr;
     try {
-      payload = await runSingleOcr(singleImage, body?.mimeType, overrideMode);
+      payload = await runSingleOcr(singleImage, body?.mimeType, overrideMode, runOpts);
     } catch (err) {
       if (chargeAmount > 0) {
         await refundCreditsBestEffort({

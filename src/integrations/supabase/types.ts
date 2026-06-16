@@ -14,27 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      daily_free_uses: {
-        Row: {
-          date: string
-          id: string
-          user_id: string
-          used: number
-        }
-        Insert: {
-          date?: string
-          id?: string
-          user_id: string
-          used?: number
-        }
-        Update: {
-          date?: string
-          id?: string
-          user_id?: string
-          used?: number
-        }
-        Relationships: []
-      }
       credit_transactions: {
         Row: {
           amount: number
@@ -62,6 +41,33 @@ export type Database = {
           type?: string
           user_id?: string
           vnpay_txn_ref?: string | null
+        }
+        Relationships: []
+      }
+      daily_free_uses: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          updated_at: string
+          used: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          updated_at?: string
+          used?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          updated_at?: string
+          used?: number
+          user_id?: string
         }
         Relationships: []
       }
@@ -181,6 +187,36 @@ export type Database = {
         }
         Relationships: []
       }
+      ocr_jobs: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          result: Json | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          result?: Json | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          result?: Json | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -234,6 +270,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_credits: {
+        Args: {
+          p_amount: number
+          p_reason?: string
+          p_txn_ref?: string
+          p_user_id: string
+        }
+        Returns: number
+      }
       charge_credits: {
         Args: { p_amount: number; p_reason?: string; p_user_id: string }
         Returns: number

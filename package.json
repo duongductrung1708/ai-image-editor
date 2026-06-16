@@ -1,8 +1,8 @@
 {
-  "name": "monkey-ocr",
+  "name": "veta-ocr",
   "private": true,
   "version": "1.0.0",
-  "description": "MonkeyOCR - OCR tiếng Việt nhanh và chính xác.",
+  "description": "VetaOCR - OCR tiếng Việt nhanh và chính xác.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,6 +16,7 @@
   "dependencies": {
     "@fontsource/be-vietnam-pro": "^5.2.8",
     "@fontsource/inter": "^5.2.8",
+    "@fontsource/lora": "^5.2.8",
     "@fontsource/plus-jakarta-sans": "^5.2.8",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
@@ -84,6 +85,7 @@
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.61.1",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.9",
     "react-router-dom": "^6.30.1",
     "recharts": "^2.15.4",

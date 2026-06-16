@@ -113,7 +113,11 @@ export function useSingleImageOcr() {
     };
   }, []);
 
-  const runOcrOnFile = useCallback(async (file: File): Promise<boolean> => {
+  const runOcrOnFile = useCallback(async (
+    file: File,
+    opts?: { textOnly?: boolean },
+  ): Promise<boolean> => {
+    const textOnly = opts?.textOnly === true;
     ocrAbortRef.current?.abort();
     const controller = new AbortController();
     ocrAbortRef.current = controller;
@@ -201,10 +205,15 @@ export function useSingleImageOcr() {
       if (!accessToken) {
         throw new Error("Missing Authorization header");
       }
-      const bodyBase = {
+      const bodyBase: {
+        imageBase64: string;
+        mimeType: string;
+        textOnly?: boolean;
+      } = {
         imageBase64: base64,
         mimeType: scaled.type || file.type,
       };
+      if (textOnly) bodyBase.textOnly = true;
 
       let data: OcrApiResponse | null = null;
       let blocksFromProvider: BoundingBox[] = [];
@@ -432,7 +441,7 @@ export function useSingleImageOcr() {
       await qc.invalidateQueries({ queryKey: ["ocr_history"] });
 
       // Step 2 (background): fetch blocks with json-mode only when lite-first is enabled
-      if (liteFirst && !useAsyncJobs) {
+      if (liteFirst && !useAsyncJobs && !textOnly) {
         try {
           const r2 = await fetch(OCR_FUNCTION_URL, {
             method: "POST",

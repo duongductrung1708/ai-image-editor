@@ -129,6 +129,16 @@ export function useBatchOcr(files: File[]) {
   const [sourcePreviewUrls, setSourcePreviewUrls] = useState<string[]>([]);
 
   const batchAbortRef = useRef<AbortController | null>(null);
+  const filesRef = useRef(files);
+  filesRef.current = files;
+
+  const filesIdentityKey = useMemo(
+    () =>
+      files
+        .map((f) => `${f.name}\0${f.size}\0${f.lastModified}`)
+        .join("\n"),
+    [files],
+  );
 
   useEffect(() => {
     return () => {
@@ -137,12 +147,20 @@ export function useBatchOcr(files: File[]) {
   }, []);
 
   useEffect(() => {
-    const urls = files.map((f) => URL.createObjectURL(f));
+    const list = filesRef.current;
+    if (list.length === 0) {
+      setSourcePreviewUrls([]);
+      return;
+    }
+    const urls = list.map((f) => URL.createObjectURL(f));
     setSourcePreviewUrls(urls);
     return () => {
-      for (const u of urls) URL.revokeObjectURL(u);
+      const toRevoke = urls;
+      requestAnimationFrame(() => {
+        for (const u of toRevoke) URL.revokeObjectURL(u);
+      });
     };
-  }, [files]);
+  }, [filesIdentityKey]);
 
   const totalBytes = useMemo(
     () => files.reduce((sum, f) => sum + f.size, 0),
@@ -224,7 +242,11 @@ export function useBatchOcr(files: File[]) {
   }, [batchPages]);
 
   const runBatch = useCallback(async (): Promise<number> => {
-    if (isProcessing || files.length === 0) return 0;
+    if (isProcessing) return 0;
+    if (files.length === 0) {
+      toast.error("Không có ảnh để OCR hàng loạt. Vui lòng chọn lại file.");
+      return 0;
+    }
     const snapshotPageImages = [...historyPageImageDatas];
     const snapshotFirstPageImage = historyFirstImageData;
     batchAbortRef.current?.abort();
@@ -518,6 +540,20 @@ export function useBatchOcr(files: File[]) {
     batchAbortRef.current?.abort();
   }, []);
 
+  /** Từ màn kết quả: quay lại chuẩn bị (danh sách ảnh) để chỉnh thứ tự rồi chạy OCR lại — không tự chạy OCR. */
+  const returnToBatchReady = useCallback(() => {
+    batchAbortRef.current?.abort();
+    setIsProcessing(false);
+    setPhase("ready");
+    setMarkdownText("");
+    setJsonText("");
+    setLastBatchMeta(null);
+    setBatchPages(null);
+    setLastError(null);
+    setResultFirstImageData(null);
+    setResultPageImageDatas([]);
+  }, []);
+
   const applyHistoryEntry = useCallback((entry: OcrHistoryEntry) => {
     batchAbortRef.current?.abort();
     const bb = entry.bounding_boxes;
@@ -632,6 +668,7 @@ export function useBatchOcr(files: File[]) {
     totalBoxCount,
     runBatch,
     cancelBatch,
+    returnToBatchReady,
     applyHistoryEntry,
   };
 }

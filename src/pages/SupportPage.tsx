@@ -1,8 +1,8 @@
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 
-const SUPPORT_EMAIL = "support@monkeyocr.com";
-const TELEGRAM_URL = "https://t.me/monkeyocr";
+const SUPPORT_EMAIL = "support@vetaocr.com";
+const TELEGRAM_URL = "https://t.me/vetaocr";
 
 const faqs: Array<{ q: string; a: string }> = [
   {
@@ -11,7 +11,7 @@ const faqs: Array<{ q: string; a: string }> = [
   },
   {
     q: "Vì sao kết quả không giữ đúng căn lề/màu sắc như file gốc?",
-    a: "Một số mô hình ưu tiên trích xuất chữ hơn là định dạng. MonkeyOCR có cơ chế hậu xử lý để hiển thị tốt hơn, nhưng vẫn có trường hợp cần chỉnh tay.",
+    a: "Một số mô hình ưu tiên trích xuất chữ hơn là định dạng. VetaOCR có cơ chế hậu xử lý để hiển thị tốt hơn, nhưng vẫn có trường hợp cần chỉnh tay.",
   },
   {
     q: "Giới hạn file là bao nhiêu?",
@@ -27,7 +27,7 @@ const faqs: Array<{ q: string; a: string }> = [
   },
   {
     q: "Dữ liệu OCR của tôi có được dùng để train model không?",
-    a: "MonkeyOCR không dùng dữ liệu của bạn để huấn luyện. Tuy nhiên, ảnh có thể được gửi tới nhà cung cấp mô hình bạn đang dùng để xử lý OCR theo chính sách của họ.",
+    a: "VetaOCR không dùng dữ liệu của bạn để huấn luyện. Tuy nhiên, ảnh có thể được gửi tới nhà cung cấp mô hình bạn đang dùng để xử lý OCR theo chính sách của họ.",
   },
 ];
 

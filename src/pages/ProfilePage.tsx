@@ -111,6 +111,10 @@ const ProfilePage = () => {
     { id: string; amount: number; type: string; description: string | null; created_at: string; vnpay_txn_ref: string | null }[]
   >([]);
   const [txLoading, setTxLoading] = useState(false);
+  const [freeUsesHistory, setFreeUsesHistory] = useState<
+    { id: string; date: string; used: number }[]
+  >([]);
+  const [freeUsesLoading, setFreeUsesLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -124,6 +128,21 @@ const ProfilePage = () => {
       .then(({ data }) => {
         setTransactions(data ?? []);
         setTxLoading(false);
+      });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    setFreeUsesLoading(true);
+    supabase
+      .from("daily_free_uses")
+      .select("id, date, used")
+      .eq("user_id", user.id)
+      .order("date", { ascending: false })
+      .limit(30)
+      .then(({ data }) => {
+        setFreeUsesHistory((data ?? []) as { id: string; date: string; used: number }[]);
+        setFreeUsesLoading(false);
       });
   }, [user]);
   const [displayName, setDisplayName] = useState("");
@@ -143,6 +162,12 @@ const ProfilePage = () => {
   const [deletingAllHistory, setDeletingAllHistory] = useState(false);
   const [confirmDeleteOneOpen, setConfirmDeleteOneOpen] = useState(false);
   const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false);
+  /** Snapshot at open so dialog text / mutation target stay stable if cache refetch retargets selection. */
+  const [deleteOnePending, setDeleteOnePending] = useState<{
+    id: string;
+    image_name: string;
+    batch_session_id?: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -168,6 +193,7 @@ const ProfilePage = () => {
   } = useOcrHistory(100);
 
   useEffect(() => {
+    if (confirmDeleteOneOpen || deletingHistory) return;
     if (!selectedHistoryId) {
       setSelectedHistoryId(ocrHistory[0]?.id ?? null);
       return;
@@ -175,7 +201,13 @@ const ProfilePage = () => {
     if (ocrHistory.length > 0 && !ocrHistory.some((h) => h.id === selectedHistoryId)) {
       setSelectedHistoryId(ocrHistory[0]?.id ?? null);
     }
-  }, [ocrHistory, selectedHistoryId, setSelectedHistoryId]);
+  }, [
+    ocrHistory,
+    selectedHistoryId,
+    setSelectedHistoryId,
+    confirmDeleteOneOpen,
+    deletingHistory,
+  ]);
 
   const filteredHistory = ocrHistory.filter((item) => {
     if (!ocrHistoryQuery.trim()) return true;
@@ -277,18 +309,21 @@ const ProfilePage = () => {
   }, [selectedHistory]);
 
   const handleDeleteSelectedHistory = async () => {
-    if (!selectedHistory || deletingHistory) return;
+    if (!deleteOnePending || deletingHistory) return;
     setDeletingHistory(true);
     try {
       await deleteHistoryOne.mutateAsync({
-        id: selectedHistory.id,
-        batchSessionId: (selectedHistory as unknown as { batch_session_id?: string }).batch_session_id,
+        id: deleteOnePending.id,
+        batchSessionId: deleteOnePending.batch_session_id ?? undefined,
       });
       setConfirmDeleteOneOpen(false);
+      setDeleteOnePending(null);
       toast.success("Đã xóa lịch sử OCR.");
     } catch {
       toast.error("Không thể xóa lịch sử OCR.");
-    } finally { setDeletingHistory(false); }
+    } finally {
+      setDeletingHistory(false);
+    }
   };
 
   const handleDeleteAllHistory = async () => {
@@ -373,21 +408,41 @@ const ProfilePage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <AlertDialog open={confirmDeleteOneOpen} onOpenChange={(open) => { if (!deletingHistory) setConfirmDeleteOneOpen(open); }}>
+      <AlertDialog
+        open={confirmDeleteOneOpen}
+        onOpenChange={(open) => {
+          if (deletingHistory) return;
+          setConfirmDeleteOneOpen(open);
+          if (!open) setDeleteOnePending(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xóa lịch sử OCR?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {selectedHistory
-                ? `Bạn có chắc muốn xóa "${selectedHistory.image_name}"? Hành động này không thể hoàn tác.`
-                : "Bạn có chắc muốn xóa bản ghi này? Hành động này không thể hoàn tác."}
+            <AlertDialogDescription asChild>
+              <div className="min-w-0">
+                {deleteOnePending ? (
+                  <p className="text-left">
+                    Bạn có chắc muốn xóa{" "}
+                    <span className="inline font-mono text-xs break-all">
+                      &quot;{deleteOnePending.image_name}&quot;
+                    </span>
+                    ? Hành động này không thể hoàn tác.
+                  </p>
+                ) : (
+                  "Bạn có chắc muốn xóa bản ghi này? Hành động này không thể hoàn tác."
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deletingHistory}>Hủy</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => { e.preventDefault(); void handleDeleteSelectedHistory(); }}
-              disabled={deletingHistory || !selectedHistory}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDeleteSelectedHistory();
+              }}
+              disabled={deletingHistory || !deleteOnePending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deletingHistory ? "Đang xóa..." : "Xóa"}
@@ -544,50 +599,119 @@ const ProfilePage = () => {
                     <History className="h-4 w-4" />
                     Lịch sử giao dịch
                   </h3>
-                  {txLoading ? (
-                    <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang tải...
-                    </div>
-                  ) : transactions.length === 0 ? (
-                    <p className="py-6 text-center text-sm text-muted-foreground">Chưa có giao dịch nào.</p>
-                  ) : (
-                    <div className="max-h-[300px] overflow-y-auto rounded-md border border-border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-xs">Thời gian</TableHead>
-                            <TableHead className="text-xs">Loại</TableHead>
-                            <TableHead className="text-xs">Mô tả</TableHead>
-                            <TableHead className="text-xs text-right">Số lượng</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {transactions.map((tx) => (
-                            <TableRow key={tx.id}>
-                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                                {new Date(tx.created_at).toLocaleString("vi-VN")}
-                              </TableCell>
-                              <TableCell className="text-xs">
-                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                                  tx.type === "topup" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                  : tx.type === "refund" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                  : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
-                                }`}>
-                                  {tx.type === "topup" ? "Nạp" : tx.type === "refund" ? "Hoàn" : "Sử dụng"}
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                                {tx.description || tx.vnpay_txn_ref || "—"}
-                              </TableCell>
-                              <TableCell className={`text-xs text-right font-medium ${tx.amount > 0 ? "text-green-600 dark:text-green-400" : "text-orange-600 dark:text-orange-400"}`}>
-                                {tx.amount > 0 ? "+" : ""}{tx.amount}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
+                  <Tabs defaultValue="credits" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="credits">Credits</TabsTrigger>
+                      <TabsTrigger value="free">Lượt miễn phí</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="credits" className="mt-3">
+                      {txLoading ? (
+                        <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang tải...
+                        </div>
+                      ) : transactions.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-muted-foreground">
+                          Chưa có giao dịch nào.
+                        </p>
+                      ) : (
+                        <div className="max-h-[300px] overflow-y-auto rounded-md border border-border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-xs">Thời gian</TableHead>
+                                <TableHead className="text-xs">Loại</TableHead>
+                                <TableHead className="text-xs">Mô tả</TableHead>
+                                <TableHead className="text-xs text-right">Số lượng</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {transactions.map((tx) => (
+                                <TableRow key={tx.id}>
+                                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                    {new Date(tx.created_at).toLocaleString("vi-VN")}
+                                  </TableCell>
+                                  <TableCell className="text-xs">
+                                    <span
+                                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                        tx.type === "topup"
+                                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                          : tx.type === "refund"
+                                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                            : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                                      }`}
+                                    >
+                                      {tx.type === "topup"
+                                        ? "Nạp"
+                                        : tx.type === "refund"
+                                          ? "Hoàn"
+                                          : "Sử dụng"}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                                    {tx.description || tx.vnpay_txn_ref || "—"}
+                                  </TableCell>
+                                  <TableCell
+                                    className={`text-xs text-right font-medium ${
+                                      tx.amount > 0
+                                        ? "text-green-600 dark:text-green-400"
+                                        : "text-orange-600 dark:text-orange-400"
+                                    }`}
+                                  >
+                                    {tx.amount > 0 ? "+" : ""}
+                                    {tx.amount}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="free" className="mt-3">
+                      {freeUsesLoading ? (
+                        <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang tải...
+                        </div>
+                      ) : freeUsesHistory.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-muted-foreground">
+                          Chưa có dữ liệu lượt miễn phí.
+                        </p>
+                      ) : (
+                        <div className="max-h-[300px] overflow-y-auto rounded-md border border-border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-xs">Ngày</TableHead>
+                                <TableHead className="text-xs text-right">Đã dùng</TableHead>
+                                <TableHead className="text-xs text-right">Còn lại</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {freeUsesHistory.map((r) => {
+                                const used = typeof r.used === "number" ? r.used : 0;
+                                const remaining = Math.max(0, 5 - used);
+                                return (
+                                  <TableRow key={r.id}>
+                                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                      {new Date(r.date).toLocaleDateString("vi-VN")}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-right font-medium">
+                                      {used}/5
+                                    </TableCell>
+                                    <TableCell className="text-xs text-right text-muted-foreground">
+                                      {remaining}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </TabsContent>
+                  </Tabs>
                 </div>
               </CardContent>
             </Card>
@@ -645,7 +769,24 @@ const ProfilePage = () => {
                               <Button type="button" variant="ghost" size="icon" onClick={() => navigate(`/app?historyId=${selectedHistory.id}`)} title="Mở trong OCR">
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              <Button type="button" variant="destructive" size="icon" className="gap-1.5" onClick={() => setConfirmDeleteOneOpen(true)} disabled={deletingHistory}>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="icon"
+                                className="gap-1.5"
+                                onClick={() => {
+                                  if (!selectedHistory || deletingHistory) return;
+                                  setDeleteOnePending({
+                                    id: selectedHistory.id,
+                                    image_name: selectedHistory.image_name,
+                                    batch_session_id: (
+                                      selectedHistory as unknown as { batch_session_id?: string | null }
+                                    ).batch_session_id,
+                                  });
+                                  setConfirmDeleteOneOpen(true);
+                                }}
+                                disabled={deletingHistory || !selectedHistory}
+                              >
                                 {deletingHistory ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </Button>
                             </div>
