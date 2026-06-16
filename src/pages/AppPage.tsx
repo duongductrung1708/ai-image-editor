@@ -90,7 +90,7 @@ const AppPage = () => {
       bb &&
       typeof bb === "object" &&
       !Array.isArray(bb) &&
-      (bb as { batch?: boolean }).batch === truef
+      (bb as { batch?: boolean }).batch === true
     );
   }, []);
 
