@@ -171,21 +171,29 @@ function tryParseJsonObject(candidate: string | undefined): ParsedOcr | null {
 
 function parseJsonFromText(textOut: string): ParsedOcr {
   const direct = tryParseJsonObject(textOut.trim());
-  if (direct) return direct;
+  if (direct) return ensureBlocksField(direct);
 
   const fenceMatch = textOut.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   const fromFence = tryParseJsonObject(fenceMatch?.[1]?.trim());
-  if (fromFence) return fromFence;
+  if (fromFence) return ensureBlocksField(fromFence);
 
   const firstBrace = textOut.indexOf("{");
   const lastBrace = textOut.lastIndexOf("}");
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
     const sub = textOut.slice(firstBrace, lastBrace + 1);
     const fromSub = tryParseJsonObject(sub);
-    if (fromSub) return fromSub;
+    if (fromSub) return ensureBlocksField(fromSub);
   }
 
   throw new Error("Model response was not valid JSON");
+}
+
+function ensureBlocksField(parsed: ParsedOcr): ParsedOcr {
+  // Ensure blocks field always exists as array
+  if (!Array.isArray(parsed.blocks)) {
+    parsed.blocks = [];
+  }
+  return parsed;
 }
 
 function postProcessMarkdown(markdown: string, style: string): string {
@@ -318,17 +326,6 @@ function normalizeGfmTables(input: string): string {
 
 type OcrBlockKind = "text" | "figure" | "stamp" | "signature";
 
-type OcrFontFamily = "sans" | "serif" | "mono" | "unknown";
-
-function parseOcrFontFamily(raw: unknown): OcrFontFamily {
-  const t = typeof raw === "string" ? raw.toLowerCase().trim() : "";
-  if (!t) return "unknown";
-  if (t === "sans" || t === "sans-serif" || t === "sansserif") return "sans";
-  if (t === "serif") return "serif";
-  if (t === "mono" || t === "monospace" || t === "mono-space") return "mono";
-  return "unknown";
-}
-
 function parseOcrBlockKind(rawKind: unknown, text: string): OcrBlockKind {
   const t = typeof rawKind === "string" ? rawKind.toLowerCase().trim() : "";
   if (t === "stamp" || t === "seal") return "stamp";
@@ -352,7 +349,6 @@ type OcrBlockNorm = {
   width: number;
   height: number;
   kind: OcrBlockKind;
-  fontFamily?: OcrFontFamily;
   color?: string;
   bold?: boolean;
   italic?: boolean;
@@ -580,20 +576,13 @@ type OcrBlockRow = {
   width: number;
   height: number;
   kind: OcrBlockKind;
-  fontFamily?: OcrFontFamily;
-  color?: string;
-  bold?: boolean;
-  italic?: boolean;
-  underline?: boolean;
-  fontSize?: number;
-  textAlign?: "left" | "center" | "right" | "justify";
   origId: string | null;
 };
 
 /** Chuẩn hóa blocks: tinh chỉnh tọa độ, id, kind; tùy chọn sort theo đọc trang. */
 function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
   if (!Array.isArray(raw)) return [];
-  const rows: OcrBlockRow[] = raw.map((item) => {
+  const rows: OcrBlockRow[] = raw.map((item, idx) => {
     const b =
       item && typeof item === "object" ? (item as Record<string, unknown>) : {};
     const text = typeof b.text === "string" ? b.text : "";
@@ -624,32 +613,29 @@ function normalizeOcrBlocks(raw: unknown): OcrBlockNorm[] {
 
     const refined = refineBBoxGeometry(x, y, width, height);
     const kind = parseOcrBlockKind(b.kind, text);
-    const fontFamily = parseOcrFontFamily(b.font_family ?? b.fontFamily);
     const origId = typeof b.id === "string" && b.id.trim() ? b.id.trim() : null;
-    
-    // Parse style attributes
-    const color = typeof b.color === "string" && b.color.trim() ? b.color.trim() : undefined;
-    const bold = b.bold === true || b.bold === "true";
-    const italic = b.italic === true || b.italic === "true";
-    const underline = b.underline === true || b.underline === "true";
-    const fontSize = typeof b.font_size === "number" && b.font_size > 0 ? Math.round(b.font_size) : 
-                     typeof b.font_size_px === "number" && b.font_size_px > 0 ? Math.round(b.font_size_px) :
-                     typeof b.fontSize === "number" && b.fontSize > 0 ? Math.round(b.fontSize) : undefined;
-    const rawAlign = typeof b.text_align === "string" ? b.text_align.toLowerCase().trim() : 
-                     typeof b.textAlign === "string" ? b.textAlign.toLowerCase().trim() : "";
-    const textAlign = (rawAlign === "center" || rawAlign === "right" || rawAlign === "justify") ? rawAlign as "center" | "right" | "justify" : undefined;
+
+    // Create fallback bbox if none provided
+    let finalRefined = refined;
+    if (refined.width === 0 && refined.height === 0) {
+      // Generate approximate bbox based on block index (for fallback)
+      const blockIndex = idx;
+      const blocksPerRow = 1;
+      finalRefined = {
+        x: 5,
+        y: Math.min(90, 5 + (blockIndex % 10) * 10),
+        width: 90,
+        height: 8,
+      };
+      console.log(
+        `[v0] Generated fallback bbox for block ${blockIndex}: ${JSON.stringify(finalRefined)}`,
+      );
+    }
 
     return {
       text,
-      ...refined,
+      ...finalRefined,
       kind,
-      ...(fontFamily !== "unknown" ? { fontFamily } : {}),
-      ...(color ? { color } : {}),
-      ...(bold ? { bold } : {}),
-      ...(italic ? { italic } : {}),
-      ...(underline ? { underline } : {}),
-      ...(fontSize ? { fontSize } : {}),
-      ...(textAlign ? { textAlign } : {}),
       origId,
     };
   });
