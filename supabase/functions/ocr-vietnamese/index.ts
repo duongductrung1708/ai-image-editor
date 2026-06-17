@@ -860,6 +860,9 @@ function parseOcrPayload(content: string, markdownStyle: string): ParsedOcr {
     const fullTextRaw =
       typeof parsed?.full_text === "string" ? parsed.full_text.trim() : "";
     const blocks = Array.isArray(parsed?.blocks) ? parsed.blocks : [];
+    console.log(
+      `[v0] OCR parsed: markdown=${markdownRaw.length} full_text=${fullTextRaw.length} blocks=${blocks.length}`,
+    );
 
     // Fallback chain: markdown -> full_text -> joined blocks text
     let bestText = markdownRaw;
@@ -1007,11 +1010,9 @@ async function fetchProviderContent(
     // 1. Nhốt toàn bộ hàm buildPrompt (chứa rule JSON, tọa độ, con dấu) vào Não hệ thống
     const systemInstruction = prompt;
 
-    // 2. User chỉ cần đưa ảnh và ra một lệnh ngắn gọn
+    // 2. Always request JSON with blocks for bbox support
     const userPrompt =
-      cfg.mode === "markdown"
-        ? "Trích xuất nội dung ảnh này ra Markdown."
-        : "Trích xuất văn bản, con dấu và chữ ký từ ảnh này, TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC ĐÃ YÊU CẦU.";
+      "Trích xuất văn bản, con dấu và chữ ký từ ảnh này, TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC ĐÃ YÊU CẦU.";
 
     const requestBody = {
       systemInstruction: {
@@ -1143,10 +1144,9 @@ async function fetchProviderContent(
           ],
           temperature: 0,
           // Smaller token budget reduces time and memory pressure.
-          max_tokens: 2048,
-          ...(cfg.mode !== "markdown"
-            ? { response_format: { type: "json_object" } }
-            : {}),
+          max_tokens: 4096,
+          // Always require JSON response for bbox support
+          response_format: { type: "json_object" },
         }),
       });
     };
@@ -1300,6 +1300,9 @@ async function runSingleOcr(
   }
 
   const textOut = providerRes.value;
+  console.log(
+    `[v0] Provider response (first 300 chars): ${textOut.substring(0, 300)}`,
+  );
   let parsed: ParsedOcr;
   if (cfg.mode === "markdown") {
     const cleaned = postProcessMarkdown(textOut, cfg.markdownStyle);
