@@ -251,6 +251,19 @@ function postProcessMarkdown(markdown: string, style: string): string {
     });
   }
   const normalized = normalizeGfmTables(lines.join("\n"));
+  
+  // If style is not "clean", remove Markdown styling (bold, italic, underline) for plain text
+  if (style !== "clean") {
+    // Remove **bold** and ***bold-italic*** and __bold__
+    let cleaned = normalized
+      .replace(/\*{3}([^*]+)\*{3}/g, "$1")  // ***text*** -> text
+      .replace(/\*{2}([^*]+)\*{2}/g, "$1")  // **text** -> text
+      .replace(/__([^_]+)__/g, "$1")        // __text__ -> text
+      .replace(/\*([^*]+)\*/g, "$1")        // *text* -> text (italic)
+      .replace(/_([^_]+)_/g, "$1");         // _text_ -> text (italic)
+    return cleaned.replace(/\n{3,}/g, "\n\n").trim();
+  }
+  
   return normalized.replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -1392,12 +1405,14 @@ async function runSingleOcr(
   }
 
   const textOut = providerRes.value;
-  let parsed: ParsedOcr;
+  // Always parse JSON from provider (since we enforce response_format: json_object)
+  const parsed = parseOcrPayload(textOut, cfg.markdownStyle);
+  
+  // If mode is markdown, clean the markdown to remove styling
   if (cfg.mode === "markdown") {
-    const cleaned = postProcessMarkdown(textOut, cfg.markdownStyle);
-    parsed = { markdown: cleaned, full_text: cleaned, blocks: [] };
-  } else {
-    parsed = parseOcrPayload(textOut, cfg.markdownStyle);
+    const cleaned = postProcessMarkdown(parsed.markdown, cfg.markdownStyle);
+    parsed.markdown = cleaned;
+    parsed.full_text = cleaned;
   }
 
   if (
