@@ -1,7 +1,19 @@
 import { type MutableRefObject } from "react";
-import { Crop, FileText, FlipHorizontal, RotateCcw, RotateCw, Sparkles, Table } from "lucide-react";
+import {
+  Crop,
+  FileText,
+  FlipHorizontal,
+  RotateCcw,
+  RotateCw,
+  Sparkles,
+  Table,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import ImageCropper, {
   type ImageCropperApi,
 } from "@/components/ocr/ImageCropper";
@@ -95,7 +107,9 @@ const SingleImageEditPhase = ({
                     Trái 90°
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">Xoay ảnh sang trái 90°</TooltipContent>
+                <TooltipContent side="bottom">
+                  Xoay ảnh sang trái 90°
+                </TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -111,7 +125,9 @@ const SingleImageEditPhase = ({
                     Phải 90°
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">Xoay ảnh sang phải 90°</TooltipContent>
+                <TooltipContent side="bottom">
+                  Xoay ảnh sang phải 90°
+                </TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -127,7 +143,9 @@ const SingleImageEditPhase = ({
                     Đảo ảnh
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">Lật gương ảnh (trái ↔ phải)</TooltipContent>
+                <TooltipContent side="bottom">
+                  Lật gương ảnh (trái ↔ phải)
+                </TooltipContent>
               </Tooltip>
             </div>
           </div>
@@ -194,10 +212,13 @@ const SingleImageEditPhase = ({
                   >
                     <Table className="h-3.5 w-3.5" />
                     Có bảng / màu
+                    <span className="ml-1 rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:bg-amber-900/40 dark:text-amber-400">
+                      Beta
+                    </span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
-                  Giữ định dạng bảng, in đậm, màu chữ.
+                  Giữ định dạng bảng, in đậm, màu chữ (Đang phát triển).
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -217,27 +238,35 @@ const SingleImageEditPhase = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => cropperApiRef.current?.resetCropToFullImage()}
+                    onClick={() =>
+                      cropperApiRef.current?.resetCropToFullImage()
+                    }
                     disabled={ocrPipelineBusy || isEditingBusy}
                   >
                     Toàn ảnh
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">Đặt lại khung crop về toàn ảnh</TooltipContent>
+                <TooltipContent side="bottom">
+                  Đặt lại khung crop về toàn ảnh
+                </TooltipContent>
               </Tooltip>
             </div>
 
             {!quotaUnlimited && quotaRemaining !== undefined && (
               <p className="mt-2 text-xs font-medium text-muted-foreground">
                 Còn lại:{" "}
-                <span className={quotaRemaining <= 3 ? "text-destructive" : "text-primary"}>
+                <span
+                  className={
+                    quotaRemaining <= 3 ? "text-destructive" : "text-primary"
+                  }
+                >
                   {quotaRemaining}
-                </span>
-                {" "}lượt hôm nay
+                </span>{" "}
+                lượt hôm nay
               </p>
             )}
             <p className="mt-1 text-xs text-muted-foreground">
-              Thu nhỏ/di chuyện khung crop để OCR đúng vùng.
+              Thu nhỏ/di chuyển khung crop để OCR đúng vùng.
             </p>
           </div>
 
@@ -252,7 +281,9 @@ const SingleImageEditPhase = ({
                   Reset ảnh
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Hoàn tác các thay đổi (xoay/đảo/làm rõ/crop)</TooltipContent>
+              <TooltipContent side="top">
+                Hoàn tác các thay đổi (xoay/đảo/làm rõ/crop)
+              </TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -265,7 +296,9 @@ const SingleImageEditPhase = ({
                   Bắt đầu OCR
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Chạy OCR với vùng đã crop</TooltipContent>
+              <TooltipContent side="top">
+                Chạy OCR với vùng đã crop
+              </TooltipContent>
             </Tooltip>
           </div>
         </div>
@@ -277,15 +310,24 @@ const SingleImageEditPhase = ({
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {/* Mobile: giữ layout cũ */}
       <div className="flex min-h-0 flex-1 flex-col lg:hidden">
-        <div className="flex min-h-[240px] w-full flex-1 border-b border-border">{leftPanel}</div>
+        <div className="flex min-h-[240px] w-full flex-1 border-b border-border">
+          {leftPanel}
+        </div>
         <div className="flex min-h-0 w-full flex-1 flex-col">{rightPanel}</div>
       </div>
 
       {/* Desktop: ảnh | editor có kéo resize */}
       <div className="hidden h-full min-h-0 flex-1 overflow-hidden lg:flex">
         <ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">
-          <ResizablePanel defaultSize={50} minSize={30} maxSize={70} className="min-h-0">
-            <div className="min-h-0 h-full w-full overflow-hidden">{leftPanel}</div>
+          <ResizablePanel
+            defaultSize={50}
+            minSize={30}
+            maxSize={70}
+            className="min-h-0"
+          >
+            <div className="min-h-0 h-full w-full overflow-hidden">
+              {leftPanel}
+            </div>
           </ResizablePanel>
           <ResizableHandle
             withHandle
