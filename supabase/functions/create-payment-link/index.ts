@@ -133,12 +133,23 @@ Deno.serve(async (req) => {
     // PayOS description max ~25 chars
     const description = `Nap ${pack.credits} credits`.slice(0, 25);
 
-    const origin =
-      req.headers.get("origin") ??
-      req.headers.get("referer")?.replace(/\/$/, "") ??
-      "https://example.com";
-    const returnUrl = `${origin}/pricing?payos=success`;
-    const cancelUrl = `${origin}/pricing?payos=cancel`;
+    const allowlist = parseAllowedOrigins();
+    const reqOrigin = req.headers.get("origin") || "";
+    const appUrlEnv = (Deno.env.get("APP_URL") || "").trim();
+    // Trusted base: APP_URL env, else first allowlist entry, else validated origin (only if in allowlist).
+    const trustedOrigin =
+      appUrlEnv ||
+      (allowlist[0] || (allowlist.includes(reqOrigin) ? reqOrigin : "")) ||
+      "";
+    if (!trustedOrigin) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfigured: APP_URL or ALLOWED_ORIGINS required" }),
+        { status: 500, headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" } },
+      );
+    }
+    const baseUrl = trustedOrigin.replace(/\/$/, "");
+    const returnUrl = `${baseUrl}/pricing?payos=success`;
+    const cancelUrl = `${baseUrl}/pricing?payos=cancel`;
 
     const signature = await buildCreateSignature(checksumKey, {
       amount: pack.priceVnd,
