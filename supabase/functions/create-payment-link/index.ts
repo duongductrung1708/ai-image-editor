@@ -2,12 +2,31 @@
 // POST /create-payment-link  { packId: string }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+function parseAllowedOrigins(): string[] {
+  const raw = (Deno.env.get("ALLOWED_ORIGINS") || "").trim();
+  if (!raw) return [];
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function requireAllowedOrigins(): boolean {
+  return (Deno.env.get("REQUIRE_ALLOWED_ORIGINS") || "0").trim() === "1";
+}
+
+function corsHeadersForRequest(req: Request): Record<string, string> {
+  const allowlist = parseAllowedOrigins();
+  const origin = req.headers.get("origin") || "";
+  const allowOrigin =
+    allowlist.length === 0
+      ? requireAllowedOrigins() ? "null" : "*"
+      : allowlist.includes(origin) ? origin : "null";
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    ...(allowlist.length > 0 ? { Vary: "Origin" } : {}),
+  };
+}
 
 const CREDIT_PACKS: Record<string, { credits: number; priceVnd: number }> = {
   pack_100: { credits: 100, priceVnd: 25_000 },
