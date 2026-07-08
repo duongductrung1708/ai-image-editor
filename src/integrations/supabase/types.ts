@@ -217,6 +217,54 @@ export type Database = {
         }
         Relationships: []
       }
+      orders: {
+        Row: {
+          amount: number
+          checkout_url: string | null
+          created_at: string
+          description: string
+          id: string
+          order_code: number
+          pack_id: string | null
+          paid_at: string | null
+          payos_payment_link_id: string | null
+          qr_code: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          amount: number
+          checkout_url?: string | null
+          created_at?: string
+          description: string
+          id?: string
+          order_code: number
+          pack_id?: string | null
+          paid_at?: string | null
+          payos_payment_link_id?: string | null
+          qr_code?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          checkout_url?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          order_code?: number
+          pack_id?: string | null
+          paid_at?: string | null
+          payos_payment_link_id?: string | null
+          qr_code?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
