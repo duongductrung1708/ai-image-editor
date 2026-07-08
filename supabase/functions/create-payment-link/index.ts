@@ -76,7 +76,7 @@ async function buildCreateSignature(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeadersForRequest(req) });
   }
 
   try {
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
     if (!clientId || !apiKey || !checksumKey) {
       return new Response(
         JSON.stringify({ error: "PayOS credentials not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 500, headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" } },
       );
     }
 
@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     if (!token) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" },
       });
     }
     const authClient = createClient(supabaseUrl, anonKey, {
@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
     if (userErr || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" },
       });
     }
     const user = userData.user;
@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     if (!pack) {
       return new Response(JSON.stringify({ error: "Invalid packId" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" },
       });
     }
 
@@ -162,7 +162,7 @@ Deno.serve(async (req) => {
       console.error("orders insert error", insertErr);
       return new Response(JSON.stringify({ error: "DB insert failed" }), {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" },
       });
     }
 
@@ -195,7 +195,7 @@ Deno.serve(async (req) => {
         .eq("order_code", orderCode);
       return new Response(
         JSON.stringify({ error: "PayOS create failed", detail: payosJson }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 502, headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" } },
       );
     }
 
@@ -222,13 +222,13 @@ Deno.serve(async (req) => {
         checkoutUrl: d.checkoutUrl,
         paymentLinkId: d.paymentLinkId,
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 200, headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" } },
     );
   } catch (e) {
     console.error("create-payment-link error", e);
     return new Response(
       JSON.stringify({ error: (e as Error).message ?? "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 500, headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" } },
     );
   }
 });
