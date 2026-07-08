@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import SupportPage from "./pages/SupportPage";
+import ReceiptPage from "./pages/ReceiptPage";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +60,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/receipt/:orderId"
+              element={
+                <ProtectedRoute>
+                  <ReceiptPage />
                 </ProtectedRoute>
               }
             />

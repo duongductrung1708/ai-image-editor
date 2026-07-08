@@ -122,11 +122,35 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Reconciliation: PayOS-reported amount must match the stored order amount.
+      // Mismatch => refuse to mark PAID (log + mark FAILED for investigation).
+      const reportedAmount = Number(payload.data.amount);
+      if (!Number.isFinite(reportedAmount) || reportedAmount !== order.amount) {
+        console.warn("PayOS amount mismatch", {
+          orderCode,
+          expected: order.amount,
+          reported: reportedAmount,
+        });
+        if (order.status === "PENDING") {
+          await admin
+            .from("orders")
+            .update({ status: "FAILED" })
+            .eq("id", order.id)
+            .eq("status", "PENDING");
+        }
+        return new Response(JSON.stringify({ received: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       if (order.status !== "PAID") {
         const { error: updErr } = await admin
           .from("orders")
           .update({ status: "PAID", paid_at: new Date().toISOString() })
           .eq("id", order.id)
+          .eq("order_code", orderCode) // reconciliation: order_code guard
+          .eq("amount", order.amount) // reconciliation: amount guard
           .eq("status", "PENDING"); // guard vs race
 
         if (updErr) {
