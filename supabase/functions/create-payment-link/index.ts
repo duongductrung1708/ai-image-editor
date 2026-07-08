@@ -2,12 +2,31 @@
 // POST /create-payment-link  { packId: string }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+function parseAllowedOrigins(): string[] {
+  const raw = (Deno.env.get("ALLOWED_ORIGINS") || "").trim();
+  if (!raw) return [];
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function requireAllowedOrigins(): boolean {
+  return (Deno.env.get("REQUIRE_ALLOWED_ORIGINS") || "0").trim() === "1";
+}
+
+function corsHeadersForRequest(req: Request): Record<string, string> {
+  const allowlist = parseAllowedOrigins();
+  const origin = req.headers.get("origin") || "";
+  const allowOrigin =
+    allowlist.length === 0
+      ? requireAllowedOrigins() ? "null" : "*"
+      : allowlist.includes(origin) ? origin : "null";
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    ...(allowlist.length > 0 ? { Vary: "Origin" } : {}),
+  };
+}
 
 const CREDIT_PACKS: Record<string, { credits: number; priceVnd: number }> = {
   pack_100: { credits: 100, priceVnd: 25_000 },
@@ -57,7 +76,7 @@ async function buildCreateSignature(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeadersForRequest(req) });
   }
 
   try {
@@ -71,7 +90,7 @@ Deno.serve(async (req) => {
     if (!clientId || !apiKey || !checksumKey) {
       return new Response(
         JSON.stringify({ error: "PayOS credentials not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 500, headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" } },
       );
     }
 
@@ -81,7 +100,7 @@ Deno.serve(async (req) => {
     if (!token) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" },
       });
     }
     const authClient = createClient(supabaseUrl, anonKey, {
@@ -91,7 +110,7 @@ Deno.serve(async (req) => {
     if (userErr || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" },
       });
     }
     const user = userData.user;
@@ -102,7 +121,7 @@ Deno.serve(async (req) => {
     if (!pack) {
       return new Response(JSON.stringify({ error: "Invalid packId" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" },
       });
     }
 
@@ -114,12 +133,23 @@ Deno.serve(async (req) => {
     // PayOS description max ~25 chars
     const description = `Nap ${pack.credits} credits`.slice(0, 25);
 
-    const origin =
-      req.headers.get("origin") ??
-      req.headers.get("referer")?.replace(/\/$/, "") ??
-      "https://example.com";
-    const returnUrl = `${origin}/pricing?payos=success`;
-    const cancelUrl = `${origin}/pricing?payos=cancel`;
+    const allowlist = parseAllowedOrigins();
+    const reqOrigin = req.headers.get("origin") || "";
+    const appUrlEnv = (Deno.env.get("APP_URL") || "").trim();
+    // Trusted base: APP_URL env, else first allowlist entry, else validated origin (only if in allowlist).
+    const trustedOrigin =
+      appUrlEnv ||
+      (allowlist[0] || (allowlist.includes(reqOrigin) ? reqOrigin : "")) ||
+      "";
+    if (!trustedOrigin) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfigured: APP_URL or ALLOWED_ORIGINS required" }),
+        { status: 500, headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" } },
+      );
+    }
+    const baseUrl = trustedOrigin.replace(/\/$/, "");
+    const returnUrl = `${baseUrl}/pricing?payos=success`;
+    const cancelUrl = `${baseUrl}/pricing?payos=cancel`;
 
     const signature = await buildCreateSignature(checksumKey, {
       amount: pack.priceVnd,
@@ -143,7 +173,7 @@ Deno.serve(async (req) => {
       console.error("orders insert error", insertErr);
       return new Response(JSON.stringify({ error: "DB insert failed" }), {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" },
       });
     }
 
@@ -176,7 +206,7 @@ Deno.serve(async (req) => {
         .eq("order_code", orderCode);
       return new Response(
         JSON.stringify({ error: "PayOS create failed", detail: payosJson }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 502, headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" } },
       );
     }
 
@@ -203,13 +233,13 @@ Deno.serve(async (req) => {
         checkoutUrl: d.checkoutUrl,
         paymentLinkId: d.paymentLinkId,
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 200, headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" } },
     );
   } catch (e) {
     console.error("create-payment-link error", e);
     return new Response(
       JSON.stringify({ error: (e as Error).message ?? "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 500, headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" } },
     );
   }
 });
