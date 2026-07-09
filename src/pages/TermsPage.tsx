@@ -46,7 +46,7 @@ const TermsPage = () => {
               sách hỗ trợ.
             </li>
             <li>
-              Với giao dịch thanh toán, bạn đồng ý tuân thủ điều kiện của cổng thanh toán (VNPay/Stripe).
+              Với giao dịch thanh toán, bạn đồng ý tuân thủ điều kiện của cổng thanh toán (PayOS/Stripe).
             </li>
           </ul>
 
