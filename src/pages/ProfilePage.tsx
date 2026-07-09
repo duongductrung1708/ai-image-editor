@@ -6,7 +6,8 @@ import { useOcrHistory } from "@/hooks/useOcrHistory";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { CREDIT_PACKS } from "@/lib/creditPacks";
-import { useCreateVnpayPayment } from "@/hooks/useVnpay";
+import { useCreatePayosPayment, type PayosPaymentLink } from "@/hooks/usePayos";
+import { PayosPaymentDialog } from "@/components/PayosPaymentDialog";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,8 +104,11 @@ const ProfilePage = () => {
 
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { balance, loading: creditsLoading } = useCredits();
-  const createVnpayPayment = useCreateVnpayPayment();
+  const { balance, loading: creditsLoading, refresh: refreshCredits } = useCredits();
+  const createPayosPayment = useCreatePayosPayment();
+  const [payosDialogOpen, setPayosDialogOpen] = useState(false);
+  const [payosPayment, setPayosPayment] = useState<PayosPaymentLink | null>(null);
+  const [payosPackId, setPayosPackId] = useState<string | null>(null);
 
   // Transaction history
   const [transactions, setTransactions] = useState<
@@ -389,9 +393,11 @@ const ProfilePage = () => {
   const handleBuyCredits = async (packId: string) => {
     setCheckoutLoading(packId);
     try {
-      const data = await createVnpayPayment.mutateAsync(packId);
-      if (data?.url) window.location.href = data.url;
-    } catch { toast.error("Không thể tạo phiên thanh toán."); }
+      const data = await createPayosPayment.mutateAsync(packId);
+      setPayosPackId(packId);
+      setPayosPayment(data);
+      setPayosDialogOpen(true);
+    } catch { toast.error("Không thể tạo phiên thanh toán PayOS."); }
     finally { setCheckoutLoading(null); }
   };
 
@@ -865,6 +871,14 @@ const ProfilePage = () => {
           </TabsContent>
         </Tabs>
       </div>
+      <PayosPaymentDialog
+        open={payosDialogOpen}
+        payment={payosPayment}
+        packId={payosPackId}
+        onOpenChange={setPayosDialogOpen}
+        onPaymentUpdated={setPayosPayment}
+        onPaid={() => refreshCredits()}
+      />
     </div>
   );
 };

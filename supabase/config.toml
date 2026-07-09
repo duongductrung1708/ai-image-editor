@@ -15,11 +15,6 @@ verify_jwt = true
 [functions.check-subscription]
 verify_jwt = true
 
-[functions.create-vnpay-payment]
-verify_jwt = true
-
-[functions.vnpay-verify]
-verify_jwt = true
 
 [functions.create-payment-link]
 verify_jwt = true
