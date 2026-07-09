@@ -1,54 +1,24 @@
 import { Check, Sparkles, Coins } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
 import { CREDIT_PACKS } from "@/lib/creditPacks";
-import { useCreateVnpayPayment, useVerifyVnpayPayment } from "@/hooks/useVnpay";
+import { useCreatePayosPayment, type PayosPaymentLink } from "@/hooks/usePayos";
+import { PayosPaymentDialog } from "@/components/PayosPaymentDialog";
 
 const PricingPage = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { user, session } = useAuth();
   const { balance, refresh: refreshCredits } = useCredits();
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const [verifying, setVerifying] = useState(false);
-  const verifyVnpay = useVerifyVnpayPayment();
-  const createVnpayPayment = useCreateVnpayPayment();
-
-  // Handle VNPay return
-  useEffect(() => {
-    const isReturn = searchParams.get("vnpay_return") === "1";
-    if (!isReturn || !session?.access_token) return;
-
-    const vnpayParams: Record<string, string> = {};
-    searchParams.forEach((v, k) => {
-      if (k.startsWith("vnp_")) vnpayParams[k] = v;
-    });
-
-    if (!vnpayParams.vnp_ResponseCode) return;
-
-    setVerifying(true);
-    verifyVnpay
-      .mutateAsync(vnpayParams)
-      .then((data) => {
-        if (data && data.success) {
-          toast.success(`Nạp thành công ${data.credits} credits!`);
-          refreshCredits();
-        } else {
-          const msg = data && data.success === false ? data.message : undefined;
-          toast.error(msg || "Thanh toán không thành công.");
-        }
-      })
-      .catch(() => toast.error("Không thể xác minh thanh toán."))
-      .finally(() => {
-        setVerifying(false);
-        navigate("/pricing", { replace: true });
-      });
-  }, [navigate, refreshCredits, searchParams, session?.access_token, verifyVnpay]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [activePackId, setActivePackId] = useState<string | null>(null);
+  const [payment, setPayment] = useState<PayosPaymentLink | null>(null);
+  const createPayment = useCreatePayosPayment();
 
   const handleBuyPack = async (packId: string) => {
     if (!user || !session?.access_token) {
@@ -58,10 +28,13 @@ const PricingPage = () => {
 
     setCheckoutLoading(packId);
     try {
-      const data = await createVnpayPayment.mutateAsync(packId);
-      if (data?.url) window.location.href = data.url;
-    } catch {
-      toast.error("Không thể tạo phiên thanh toán VNPay.");
+      const data = await createPayment.mutateAsync(packId);
+      setActivePackId(packId);
+      setPayment(data);
+      setDialogOpen(true);
+    } catch (err) {
+      console.error("[PricingPage] create payment failed", err);
+      toast.error("Không thể tạo phiên thanh toán PayOS.");
     } finally {
       setCheckoutLoading(null);
     }
@@ -91,12 +64,6 @@ const PricingPage = () => {
             <span className="text-lg font-semibold text-foreground">
               Số dư hiện tại: <span className="text-primary">{balance.toLocaleString()}</span> credits
             </span>
-          </div>
-        )}
-
-        {verifying && (
-          <div className="mb-8 text-center text-sm text-muted-foreground animate-pulse">
-            Đang xác minh thanh toán...
           </div>
         )}
 
@@ -162,7 +129,7 @@ const PricingPage = () => {
                 </li>
                 <li className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  <span>Thanh toán qua VNPay QR</span>
+                  <span>Thanh toán qua PayOS · VietQR</span>
                 </li>
               </ul>
               <Button
@@ -183,6 +150,15 @@ const PricingPage = () => {
           </Link>
         </div>
       </main>
+
+      <PayosPaymentDialog
+        open={dialogOpen}
+        payment={payment}
+        packId={activePackId}
+        onOpenChange={setDialogOpen}
+        onPaymentUpdated={setPayment}
+        onPaid={() => refreshCredits()}
+      />
     </div>
   );
 };
