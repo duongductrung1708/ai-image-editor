@@ -125,16 +125,21 @@ export function PaymentScreen({
     return () => window.clearInterval(iv);
   }, [status, timedOut, pollIntervalMs, fetchStatus]);
 
-  // Timeout — if still PENDING after timeoutMs, surface the retry UI.
+  // Timeout + countdown — if still PENDING after timeoutMs, surface retry UI.
   useEffect(() => {
-    if (status !== "PENDING") return;
-    const remaining = Math.max(
-      0,
-      timeoutMs - (Date.now() - startedAtRef.current),
-    );
-    const t = window.setTimeout(() => setTimedOut(true), remaining);
-    return () => window.clearTimeout(t);
-  }, [status, timeoutMs]);
+    if (status !== "PENDING" || timedOut) return;
+    const tick = () => {
+      const left = Math.max(
+        0,
+        timeoutMs - (Date.now() - startedAtRef.current),
+      );
+      setRemainingMs(left);
+      if (left <= 0) setTimedOut(true);
+    };
+    tick();
+    const iv = window.setInterval(tick, 1000);
+    return () => window.clearInterval(iv);
+  }, [status, timedOut, timeoutMs]);
 
   // Redirect on PAID.
   useEffect(() => {
