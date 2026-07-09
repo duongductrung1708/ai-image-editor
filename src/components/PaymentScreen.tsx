@@ -285,7 +285,11 @@ export function PaymentScreen({
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Đang chờ thanh toán…</span>
+        <span>
+          Đang chờ thanh toán… hết hạn sau{" "}
+          {String(Math.floor(remainingMs / 60000)).padStart(2, "0")}:
+          {String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, "0")}
+        </span>
       </div>
 
       <div className="flex w-full flex-col gap-2">
