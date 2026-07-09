@@ -1,0 +1,1 @@
+REVOKE UPDATE ON public.ocr_batch_sessions FROM authenticated;
