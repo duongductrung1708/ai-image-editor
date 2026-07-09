@@ -85,6 +85,7 @@ export function PaymentScreen({
 
     startedAtRef.current = Date.now();
     setTimedOut(false);
+    setRemainingMs(timeoutMs);
 
     (async () => {
       const s = await fetchStatus();
