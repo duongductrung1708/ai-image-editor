@@ -57,6 +57,7 @@ export function PaymentScreen({
   const [status, setStatus] = useState<OrderStatus>("PENDING");
   const [timedOut, setTimedOut] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [remainingMs, setRemainingMs] = useState<number>(timeoutMs);
   const startedAtRef = useRef<number>(Date.now());
 
   const effectiveRedirect = redirectTo ?? `/receipt/${orderId}`;
@@ -84,6 +85,7 @@ export function PaymentScreen({
 
     startedAtRef.current = Date.now();
     setTimedOut(false);
+    setRemainingMs(timeoutMs);
 
     (async () => {
       const s = await fetchStatus();
@@ -123,16 +125,21 @@ export function PaymentScreen({
     return () => window.clearInterval(iv);
   }, [status, timedOut, pollIntervalMs, fetchStatus]);
 
-  // Timeout — if still PENDING after timeoutMs, surface the retry UI.
+  // Timeout + countdown — if still PENDING after timeoutMs, surface retry UI.
   useEffect(() => {
-    if (status !== "PENDING") return;
-    const remaining = Math.max(
-      0,
-      timeoutMs - (Date.now() - startedAtRef.current),
-    );
-    const t = window.setTimeout(() => setTimedOut(true), remaining);
-    return () => window.clearTimeout(t);
-  }, [status, timeoutMs]);
+    if (status !== "PENDING" || timedOut) return;
+    const tick = () => {
+      const left = Math.max(
+        0,
+        timeoutMs - (Date.now() - startedAtRef.current),
+      );
+      setRemainingMs(left);
+      if (left <= 0) setTimedOut(true);
+    };
+    tick();
+    const iv = window.setInterval(tick, 1000);
+    return () => window.clearInterval(iv);
+  }, [status, timedOut, timeoutMs]);
 
   // Redirect on PAID.
   useEffect(() => {
@@ -278,7 +285,11 @@ export function PaymentScreen({
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Đang chờ thanh toán…</span>
+        <span>
+          Đang chờ thanh toán… hết hạn sau{" "}
+          {String(Math.floor(remainingMs / 60000)).padStart(2, "0")}:
+          {String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, "0")}
+        </span>
       </div>
 
       <div className="flex w-full flex-col gap-2">
