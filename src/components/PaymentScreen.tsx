@@ -57,6 +57,7 @@ export function PaymentScreen({
   const [status, setStatus] = useState<OrderStatus>("PENDING");
   const [timedOut, setTimedOut] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [remainingMs, setRemainingMs] = useState<number>(timeoutMs);
   const startedAtRef = useRef<number>(Date.now());
 
   const effectiveRedirect = redirectTo ?? `/receipt/${orderId}`;
