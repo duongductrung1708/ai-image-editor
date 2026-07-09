@@ -871,6 +871,14 @@ const ProfilePage = () => {
           </TabsContent>
         </Tabs>
       </div>
+      <PayosPaymentDialog
+        open={payosDialogOpen}
+        payment={payosPayment}
+        packId={payosPackId}
+        onOpenChange={setPayosDialogOpen}
+        onPaymentUpdated={setPayosPayment}
+        onPaid={() => refresh()}
+      />
     </div>
   );
 };
