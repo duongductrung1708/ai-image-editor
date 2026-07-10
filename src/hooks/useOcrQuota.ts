@@ -73,58 +73,29 @@ export function useOcrQuota() {
         ? balance + freeDailyRemaining
         : freeDailyRemaining;
 
-  /** Call after a successful OCR to deduct 1 daily use. Returns true if free use was deducted, false if credit should be used */
+  /**
+   * Refresh quota + credit state after a successful OCR.
+   * Billing (free-use deduction and credit charging) is performed server-side
+   * in the `ocr-vietnamese` edge function — this client-side call must never
+   * mutate quota or balance, otherwise users get double-billed.
+   */
   const deductCredit = useCallback(async () => {
     if (!user) return;
-
-    // Try to deduct from daily free uses
-    const { data: deducted, error } = await supabase.rpc("deduct_daily_use", {
-      p_user_id: user.id,
-    } as never);
-
-    if (error) {
-      console.error("[v0] Error deducting daily use:", error);
-      return;
-    }
-
-    // If deducted successfully (true), free use was consumed
-    if (deducted === true) {
-      // Refresh the quota display
-      fetchCount();
-      return;
-    }
-
-    // If deducted is false, free uses are exhausted, so deduct a credit instead
-    if (balance > 0) {
-      // deduct_credit (SECURITY DEFINER) atomically decrements balance AND logs
-      // the matching `credit_transactions` row server-side. Clients must not
-      // write to credit_transactions directly.
-      await supabase.rpc("deduct_credit" as never, { p_user_id: user.id } as never);
-      refreshCredits();
-    }
-  }, [user, balance, refreshCredits, fetchCount]);
+    await fetchCount();
+    refreshCredits();
+  }, [user, refreshCredits, fetchCount]);
 
   /**
-   * After batch OCR: consume up to `maxSlots` daily free uses (one RPC each) until the DB reports none left.
-   * Paid pages are billed on the server via `charge_credits`; do not call `deduct_credit` here.
+   * After batch OCR: refresh UI state only. The edge function decrements
+   * `daily_free_uses` and charges credits atomically server-side.
    */
   const deductDailyFreeUsesUpTo = useCallback(
-    async (maxSlots: number) => {
-      if (!user || maxSlots <= 0) return;
-      const cap = Math.min(Math.floor(maxSlots), 100);
-      for (let i = 0; i < cap; i += 1) {
-        const { data: deducted, error } = await supabase.rpc("deduct_daily_use", {
-          p_user_id: user.id,
-        } as never);
-        if (error) {
-          console.error("[v0] Error deducting daily use (batch):", error);
-          break;
-        }
-        if (deducted !== true) break;
-      }
+    async (_maxSlots: number) => {
+      if (!user) return;
       await fetchCount();
+      refreshCredits();
     },
-    [user, fetchCount],
+    [user, fetchCount, refreshCredits],
   );
 
   return {
