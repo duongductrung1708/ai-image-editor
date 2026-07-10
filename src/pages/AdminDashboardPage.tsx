@@ -60,7 +60,7 @@ const AdminDashboardPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, user_id, order_code, amount, credits, status, provider, created_at")
+        .select("id, user_id, order_code, amount, status, pack_id, created_at")
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw error;
@@ -200,8 +200,7 @@ const AdminDashboardPage = () => {
                         <TableHead>Order code</TableHead>
                         <TableHead>User</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="text-right">Credit</TableHead>
-                        <TableHead>Provider</TableHead>
+                        <TableHead>Gói</TableHead>
                         <TableHead>Trạng thái</TableHead>
                         <TableHead>Thời gian</TableHead>
                       </TableRow>
@@ -209,11 +208,10 @@ const AdminDashboardPage = () => {
                     <TableBody>
                       {orders.data?.map((o) => (
                         <TableRow key={o.id}>
-                          <TableCell className="font-mono text-xs">{o.order_code}</TableCell>
+                          <TableCell className="font-mono text-xs">{String(o.order_code)}</TableCell>
                           <TableCell className="font-mono text-xs">{o.user_id?.slice(0, 8)}…</TableCell>
                           <TableCell className="text-right">{fmtVnd(o.amount)}</TableCell>
-                          <TableCell className="text-right">{o.credits}</TableCell>
-                          <TableCell>{o.provider ?? "-"}</TableCell>
+                          <TableCell>{o.pack_id ?? "-"}</TableCell>
                           <TableCell>
                             <Badge variant={o.status === "PAID" ? "default" : "secondary"}>
                               {o.status}
