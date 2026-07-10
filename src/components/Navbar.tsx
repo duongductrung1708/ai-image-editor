@@ -246,6 +246,14 @@ const Navbar = () => {
                         Quản lý hồ sơ
                       </Link>
                     </SheetClose>
+                    {isAdmin && (
+                      <SheetClose asChild>
+                        <Link to="/admin" className={cn(mobileNavLinkClass, "text-primary")}>
+                          <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
+                          Admin Dashboard
+                        </Link>
+                      </SheetClose>
+                    )}
                     <Button
                       variant="ghost"
                       className="h-auto justify-start gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 hover:text-destructive"
