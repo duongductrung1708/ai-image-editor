@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
-import { Home, LogOut, Menu, Settings, Sparkles, Tag, User } from "lucide-react";
+import { Home, LogOut, Menu, Settings, ShieldCheck, Sparkles, Tag, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -19,6 +21,8 @@ const mobileNavLinkClass =
 
 const Navbar = () => {
   const { user, signOut } = useAuth();
+  const { isAdmin } = useIsAdmin();
+
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-sm">
