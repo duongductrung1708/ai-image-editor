@@ -103,6 +103,17 @@ const Navbar = () => {
                     Quản lý hồ sơ
                   </DropdownMenuItem>
                 </Link>
+                {isAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <Link to="/admin">
+                      <DropdownMenuItem className="text-primary">
+                        <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                        Admin Dashboard
+                      </DropdownMenuItem>
+                    </Link>
+                  </>
+                )}
                 <DropdownMenuItem
                   onClick={signOut}
                   className="text-destructive"
@@ -110,6 +121,7 @@ const Navbar = () => {
                   <LogOut className="mr-2 h-3.5 w-3.5" />
                   Đăng xuất
                 </DropdownMenuItem>
+
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
