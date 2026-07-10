@@ -1990,6 +1990,17 @@ serve(async (req) => {
       }
       throw err;
     }
+
+    // Server-side: if this request used a free slot (no credits charged),
+    // consume one daily free use. Never trust the client to decrement quota.
+    if (chargeAmount === 0) {
+      const { error: dduError } = await srvClient.rpc("deduct_daily_use", {
+        p_user_id: user.id,
+      });
+      if (dduError) {
+        console.error("[ocr] deduct_daily_use (single) failed:", dduError);
+      }
+    }
       console.log(`[ocr] provider ok ms=${Date.now() - t0}`);
     const normalized = normalizeImageAndMimeType(singleImage, body?.mimeType);
     const imageSize = getImageSizePx(normalized.image, normalized.mimeType);
