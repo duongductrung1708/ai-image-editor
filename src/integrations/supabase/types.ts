@@ -348,6 +348,29 @@ export type Database = {
         }
         Returns: number
       }
+      admin_adjust_credits: {
+        Args: { p_delta: number; p_reason?: string; p_target_user: string }
+        Returns: number
+      }
+      admin_daily_stats: {
+        Args: { p_days?: number }
+        Returns: {
+          day: string
+          new_users: number
+          ocr_count: number
+          paid_orders: number
+          revenue: number
+        }[]
+      }
+      admin_delete_ocr_history: { Args: { p_id: string }; Returns: undefined }
+      admin_set_user_role: {
+        Args: {
+          p_grant: boolean
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_target_user: string
+        }
+        Returns: undefined
+      }
       charge_credits: {
         Args: { p_amount: number; p_reason?: string; p_user_id: string }
         Returns: number

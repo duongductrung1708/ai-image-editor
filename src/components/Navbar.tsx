@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
-import { Home, LogOut, Menu, Settings, Sparkles, Tag, User } from "lucide-react";
+import { Home, LogOut, Menu, Settings, ShieldCheck, Sparkles, Tag, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -19,6 +21,8 @@ const mobileNavLinkClass =
 
 const Navbar = () => {
   const { user, signOut } = useAuth();
+  const { isAdmin } = useIsAdmin();
+
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-sm">
@@ -99,6 +103,17 @@ const Navbar = () => {
                     Quản lý hồ sơ
                   </DropdownMenuItem>
                 </Link>
+                {isAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <Link to="/admin">
+                      <DropdownMenuItem className="text-primary">
+                        <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                        Admin Dashboard
+                      </DropdownMenuItem>
+                    </Link>
+                  </>
+                )}
                 <DropdownMenuItem
                   onClick={signOut}
                   className="text-destructive"
@@ -106,6 +121,7 @@ const Navbar = () => {
                   <LogOut className="mr-2 h-3.5 w-3.5" />
                   Đăng xuất
                 </DropdownMenuItem>
+
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
@@ -230,6 +246,14 @@ const Navbar = () => {
                         Quản lý hồ sơ
                       </Link>
                     </SheetClose>
+                    {isAdmin && (
+                      <SheetClose asChild>
+                        <Link to="/admin" className={cn(mobileNavLinkClass, "text-primary")}>
+                          <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
+                          Admin Dashboard
+                        </Link>
+                      </SheetClose>
+                    )}
                     <Button
                       variant="ghost"
                       className="h-auto justify-start gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 hover:text-destructive"
