@@ -1815,6 +1815,20 @@ serve(async (req) => {
         console.log(`[ocr] batch using free uses only (remaining=${remainingFree}, images=${tasks.length}) ms=${Date.now() - t0}`);
       }
 
+      // Server-side: consume daily free uses for the free slots in this batch.
+      // Never trust the client to decrement quota.
+      for (let i = 0; i < freeSlotsForBatch; i += 1) {
+        const { data: deducted, error: dduError } = await srvClient.rpc(
+          "deduct_daily_use",
+          { p_user_id: user.id },
+        );
+        if (dduError) {
+          console.error("[ocr] deduct_daily_use (batch) failed:", dduError);
+          break;
+        }
+        if (deducted !== true) break;
+      }
+
       const pages = await runPool(tasks, concurrency, async (task) => {
         try {
           if (typeof task.image !== "string" || !task.image.trim()) {
