@@ -16,7 +16,13 @@ import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import SupportPage from "./pages/SupportPage";
 import ReceiptPage from "./pages/ReceiptPage";
-import AdminDashboardPage from "./pages/AdminDashboardPage";
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminOverviewPage from "./pages/admin/OverviewPage";
+import AdminUsersPage from "./pages/admin/UsersPage";
+import AdminOrdersPage from "./pages/admin/OrdersPage";
+import AdminTransactionsPage from "./pages/admin/TransactionsPage";
+import AdminOcrPage from "./pages/admin/OcrPage";
+import AdminRolesPage from "./pages/admin/RolesPage";
 
 const queryClient = new QueryClient();
 
@@ -76,10 +82,17 @@ const App = () => (
               path="/admin"
               element={
                 <ProtectedRoute>
-                  <AdminDashboardPage />
+                  <AdminLayout />
                 </ProtectedRoute>
               }
-            />
+            >
+              <Route index element={<AdminOverviewPage />} />
+              <Route path="users" element={<AdminUsersPage />} />
+              <Route path="orders" element={<AdminOrdersPage />} />
+              <Route path="transactions" element={<AdminTransactionsPage />} />
+              <Route path="ocr" element={<AdminOcrPage />} />
+              <Route path="roles" element={<AdminRolesPage />} />
+            </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
