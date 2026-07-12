@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+
 
 export const useAdminProfiles = (enabled: boolean) =>
   useQuery({
@@ -116,8 +118,36 @@ export const fmtDay = (d: string | Date) => {
   return `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}`;
 };
 
-export const downloadCsv = (filename: string, rows: Record<string, unknown>[]) => {
-  if (!rows.length) return;
+export const useAdminAuditLog = (enabled: boolean) =>
+  useQuery({
+    queryKey: ["admin", "audit_log"],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("admin_audit_log")
+        .select("id, actor_user_id, action, target_user_id, target_id, details, created_at")
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+export const downloadCsv = (
+  filename: string,
+  rows: Record<string, unknown>[],
+  opts?: { silent?: boolean; label?: string },
+) => {
+  if (!rows.length) {
+    if (!opts?.silent) {
+      toast({
+        title: "Không có dữ liệu",
+        description: "Bộ lọc hiện tại không có dòng nào để xuất.",
+        variant: "destructive",
+      });
+    }
+    return;
+  }
   const headers = Object.keys(rows[0]);
   const esc = (v: unknown) => {
     if (v === null || v === undefined) return "";
@@ -135,4 +165,11 @@ export const downloadCsv = (filename: string, rows: Record<string, unknown>[]) =
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+  if (!opts?.silent) {
+    toast({
+      title: "Đang tải CSV",
+      description: `${opts?.label ?? filename} • ${rows.length} dòng theo bộ lọc hiện tại.`,
+    });
+  }
 };
+
