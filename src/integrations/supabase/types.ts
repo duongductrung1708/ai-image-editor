@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_audit_log: {
+        Row: {
+          action: string
+          actor_user_id: string
+          created_at: string
+          details: Json
+          id: string
+          target_id: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_user_id: string
+          created_at?: string
+          details?: Json
+          id?: string
+          target_id?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_user_id?: string
+          created_at?: string
+          details?: Json
+          id?: string
+          target_id?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
       credit_transactions: {
         Row: {
           amount: number
@@ -351,6 +381,10 @@ export type Database = {
       admin_adjust_credits: {
         Args: { p_delta: number; p_reason?: string; p_target_user: string }
         Returns: number
+      }
+      admin_cancel_order: {
+        Args: { p_order_id: string; p_reason?: string }
+        Returns: undefined
       }
       admin_daily_stats: {
         Args: { p_days?: number }
