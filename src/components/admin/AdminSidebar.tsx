@@ -6,6 +6,7 @@ import {
   Coins,
   FileText,
   ShieldCheck,
+  ScrollText,
   ArrowLeft,
 } from "lucide-react";
 import {
@@ -29,7 +30,9 @@ const items = [
   { title: "Giao dịch credit", url: "/admin/transactions", icon: Coins },
   { title: "Lịch sử OCR", url: "/admin/ocr", icon: FileText },
   { title: "Phân quyền", url: "/admin/roles", icon: ShieldCheck },
+  { title: "Audit log", url: "/admin/audit", icon: ScrollText },
 ];
+
 
 export function AdminSidebar() {
   const { state } = useSidebar();

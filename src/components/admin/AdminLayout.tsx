@@ -15,7 +15,9 @@ const titleFor = (path: string) => {
   if (path.startsWith("/admin/transactions")) return "Giao dịch credit";
   if (path.startsWith("/admin/ocr")) return "Lịch sử OCR";
   if (path.startsWith("/admin/roles")) return "Phân quyền";
+  if (path.startsWith("/admin/audit")) return "Audit log";
   return "Admin";
+
 };
 
 export default function AdminLayout() {
