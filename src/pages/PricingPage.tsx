@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
-import { CREDIT_PACKS } from "@/lib/creditPacks";
+import { useCreditPacks } from "@/hooks/useCreditPacks";
 import { useCreatePayosPayment, type PayosPaymentLink } from "@/hooks/usePayos";
 import { PayosPaymentDialog } from "@/components/PayosPaymentDialog";
 
