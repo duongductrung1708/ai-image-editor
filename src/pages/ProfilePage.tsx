@@ -585,7 +585,7 @@ const ProfilePage = () => {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {CREDIT_PACKS.map((pack) => (
+                  {packs.map((pack) => (
                     <div key={pack.id} className="flex items-center justify-between rounded-lg border border-border p-4">
                       <div>
                         <p className="font-semibold text-foreground">{pack.label}</p>
