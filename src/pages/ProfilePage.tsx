@@ -105,6 +105,7 @@ const ProfilePage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { balance, loading: creditsLoading, refresh: refreshCredits } = useCredits();
+  const { packs } = useCreditPacks();
   const createPayosPayment = useCreatePayosPayment();
   const [payosDialogOpen, setPayosDialogOpen] = useState(false);
   const [payosPayment, setPayosPayment] = useState<PayosPaymentLink | null>(null);
