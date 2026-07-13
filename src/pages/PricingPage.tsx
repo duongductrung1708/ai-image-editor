@@ -98,7 +98,7 @@ const PricingPage = () => {
           </article>
 
           {/* Credit pack cards */}
-          {CREDIT_PACKS.map((pack, i) => (
+          {packs.map((pack, i) => (
             <article
               key={pack.id}
               className={`rounded-2xl border bg-card p-6 shadow-sm ${
