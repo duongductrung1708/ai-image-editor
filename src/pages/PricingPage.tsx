@@ -14,6 +14,7 @@ const PricingPage = () => {
   const navigate = useNavigate();
   const { user, session } = useAuth();
   const { balance, refresh: refreshCredits } = useCredits();
+  const { packs } = useCreditPacks();
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activePackId, setActivePackId] = useState<string | null>(null);
