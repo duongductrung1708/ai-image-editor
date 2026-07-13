@@ -114,13 +114,19 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const packId = String(body?.packId ?? "");
-    const pack = CREDIT_PACKS[packId];
-    if (!pack) {
+    const adminClient = createClient(supabaseUrl, serviceKey);
+    const { data: packRow, error: packErr } = await adminClient
+      .from("credit_packs")
+      .select("id,credits,price_vnd,active")
+      .eq("id", packId)
+      .maybeSingle();
+    if (packErr || !packRow || !packRow.active) {
       return new Response(JSON.stringify({ error: "Invalid packId" }), {
         status: 400,
         headers: { ...corsHeadersForRequest(req), "Content-Type": "application/json" },
       });
     }
+    const pack = { credits: packRow.credits as number, priceVnd: packRow.price_vnd as number };
 
     // orderCode: unique positive integer (<= 9007199254740991). Use timestamp+rand.
     const orderCode = Number(
