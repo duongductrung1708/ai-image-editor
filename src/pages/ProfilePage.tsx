@@ -5,7 +5,7 @@ import { useCredits } from "@/hooks/useCredits";
 import { useOcrHistory } from "@/hooks/useOcrHistory";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { CREDIT_PACKS } from "@/lib/creditPacks";
+import { useCreditPacks } from "@/hooks/useCreditPacks";
 import { useCreatePayosPayment, type PayosPaymentLink } from "@/hooks/usePayos";
 import { PayosPaymentDialog } from "@/components/PayosPaymentDialog";
 import Navbar from "@/components/Navbar";
