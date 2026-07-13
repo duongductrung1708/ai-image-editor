@@ -24,6 +24,7 @@ import AdminTransactionsPage from "./pages/admin/TransactionsPage";
 import AdminOcrPage from "./pages/admin/OcrPage";
 import AdminRolesPage from "./pages/admin/RolesPage";
 import AdminAuditLogPage from "./pages/admin/AuditLogPage";
+import AdminPacksPage from "./pages/admin/PacksPage";
 
 
 const queryClient = new QueryClient();
