@@ -28,10 +28,7 @@ function corsHeadersForRequest(req: Request): Record<string, string> {
   };
 }
 
-const CREDIT_PACKS: Record<string, { credits: number; priceVnd: number }> = {
-  pack_100: { credits: 100, priceVnd: 25_000 },
-  pack_1000: { credits: 1000, priceVnd: 250_000 },
-};
+// Credit packs are loaded from public.credit_packs at request time.
 
 const PAYOS_BASE = "https://api-merchant.payos.vn";
 
