@@ -24,6 +24,7 @@ import AdminTransactionsPage from "./pages/admin/TransactionsPage";
 import AdminOcrPage from "./pages/admin/OcrPage";
 import AdminRolesPage from "./pages/admin/RolesPage";
 import AdminAuditLogPage from "./pages/admin/AuditLogPage";
+import AdminPacksPage from "./pages/admin/PacksPage";
 
 
 const queryClient = new QueryClient();
@@ -93,6 +94,7 @@ const App = () => (
               <Route path="orders" element={<AdminOrdersPage />} />
               <Route path="transactions" element={<AdminTransactionsPage />} />
               <Route path="ocr" element={<AdminOcrPage />} />
+              <Route path="packs" element={<AdminPacksPage />} />
               <Route path="roles" element={<AdminRolesPage />} />
               <Route path="audit" element={<AdminAuditLogPage />} />
 

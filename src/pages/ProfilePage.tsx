@@ -5,7 +5,7 @@ import { useCredits } from "@/hooks/useCredits";
 import { useOcrHistory } from "@/hooks/useOcrHistory";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { CREDIT_PACKS } from "@/lib/creditPacks";
+import { useCreditPacks } from "@/hooks/useCreditPacks";
 import { useCreatePayosPayment, type PayosPaymentLink } from "@/hooks/usePayos";
 import { PayosPaymentDialog } from "@/components/PayosPaymentDialog";
 import Navbar from "@/components/Navbar";
@@ -105,6 +105,7 @@ const ProfilePage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { balance, loading: creditsLoading, refresh: refreshCredits } = useCredits();
+  const { packs } = useCreditPacks();
   const createPayosPayment = useCreatePayosPayment();
   const [payosDialogOpen, setPayosDialogOpen] = useState(false);
   const [payosPayment, setPayosPayment] = useState<PayosPaymentLink | null>(null);
@@ -584,7 +585,7 @@ const ProfilePage = () => {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {CREDIT_PACKS.map((pack) => (
+                  {packs.map((pack) => (
                     <div key={pack.id} className="flex items-center justify-between rounded-lg border border-border p-4">
                       <div>
                         <p className="font-semibold text-foreground">{pack.label}</p>

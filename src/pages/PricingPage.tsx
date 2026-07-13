@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
-import { CREDIT_PACKS } from "@/lib/creditPacks";
+import { useCreditPacks } from "@/hooks/useCreditPacks";
 import { useCreatePayosPayment, type PayosPaymentLink } from "@/hooks/usePayos";
 import { PayosPaymentDialog } from "@/components/PayosPaymentDialog";
 
@@ -14,6 +14,7 @@ const PricingPage = () => {
   const navigate = useNavigate();
   const { user, session } = useAuth();
   const { balance, refresh: refreshCredits } = useCredits();
+  const { packs } = useCreditPacks();
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activePackId, setActivePackId] = useState<string | null>(null);
@@ -97,7 +98,7 @@ const PricingPage = () => {
           </article>
 
           {/* Credit pack cards */}
-          {CREDIT_PACKS.map((pack, i) => (
+          {packs.map((pack, i) => (
             <article
               key={pack.id}
               className={`rounded-2xl border bg-card p-6 shadow-sm ${

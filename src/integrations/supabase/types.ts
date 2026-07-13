@@ -44,6 +44,42 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_packs: {
+        Row: {
+          active: boolean
+          created_at: string
+          credits: number
+          description: string | null
+          id: string
+          label: string
+          price_vnd: number
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          credits: number
+          description?: string | null
+          id: string
+          label: string
+          price_vnd: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          credits?: number
+          description?: string | null
+          id?: string
+          label?: string
+          price_vnd?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       credit_transactions: {
         Row: {
           amount: number
@@ -396,12 +432,25 @@ export type Database = {
           revenue: number
         }[]
       }
+      admin_delete_credit_pack: { Args: { p_id: string }; Returns: undefined }
       admin_delete_ocr_history: { Args: { p_id: string }; Returns: undefined }
       admin_set_user_role: {
         Args: {
           p_grant: boolean
           p_role: Database["public"]["Enums"]["app_role"]
           p_target_user: string
+        }
+        Returns: undefined
+      }
+      admin_upsert_credit_pack: {
+        Args: {
+          p_active: boolean
+          p_credits: number
+          p_description: string
+          p_id: string
+          p_label: string
+          p_price_vnd: number
+          p_sort_order: number
         }
         Returns: undefined
       }

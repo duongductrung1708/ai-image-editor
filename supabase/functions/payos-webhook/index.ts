@@ -156,12 +156,13 @@ Deno.serve(async (req) => {
         if (updErr) {
           console.error("order update error", updErr);
         } else if (order.user_id && order.pack_id) {
-          // Grant credits based on pack
-          const CREDIT_PACKS: Record<string, number> = {
-            pack_100: 100,
-            pack_1000: 1000,
-          };
-          const credits = CREDIT_PACKS[order.pack_id];
+          // Look up credits from credit_packs
+          const { data: packRow } = await admin
+            .from("credit_packs")
+            .select("credits")
+            .eq("id", order.pack_id)
+            .maybeSingle();
+          const credits = packRow?.credits as number | undefined;
           if (credits) {
             const { error: creditErr } = await admin.rpc("add_credits", {
               p_user_id: order.user_id,
