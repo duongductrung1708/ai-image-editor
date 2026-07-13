@@ -7,6 +7,7 @@ import {
   FileText,
   ShieldCheck,
   ScrollText,
+  Package,
   ArrowLeft,
 } from "lucide-react";
 import {
@@ -28,6 +29,7 @@ const items = [
   { title: "Người dùng", url: "/admin/users", icon: Users },
   { title: "Đơn hàng", url: "/admin/orders", icon: ShoppingBag },
   { title: "Giao dịch credit", url: "/admin/transactions", icon: Coins },
+  { title: "Gói credit", url: "/admin/packs", icon: Package },
   { title: "Lịch sử OCR", url: "/admin/ocr", icon: FileText },
   { title: "Phân quyền", url: "/admin/roles", icon: ShieldCheck },
   { title: "Audit log", url: "/admin/audit", icon: ScrollText },
