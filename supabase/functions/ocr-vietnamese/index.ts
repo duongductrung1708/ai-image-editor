@@ -1792,7 +1792,8 @@ serve(async (req) => {
         });
       }
 
-      const creditsPerImage = getCreditsPerImage();
+      const creditsPerImage = getCreditsPerImage(!textOnly);
+
       const remainingFree = Number(remainingFreeUses) || 0;
       // First N pages (by index) are covered by daily free quota on this request; the rest were charged credits.
       const freeSlotsForBatch = Math.min(tasks.length, remainingFree);
@@ -1957,7 +1958,7 @@ serve(async (req) => {
       });
     }
 
-    const creditsPerImage = getCreditsPerImage();
+    const creditsPerImage = getCreditsPerImage(!textOnly);
     const remainingFree = Number(remainingFreeUses) || 0;
     // Only charge credits if no free uses remaining
     const chargeAmount = remainingFree > 0 ? 0 : creditsPerImage;
