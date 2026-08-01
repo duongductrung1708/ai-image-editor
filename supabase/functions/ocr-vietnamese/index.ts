@@ -52,11 +52,19 @@ function getBearerToken(req: Request): string | null {
   return m?.[1] ? m[1].trim() : null;
 }
 
-function getCreditsPerImage(): number {
-  const raw = Deno.env.get("OCR_CREDITS_PER_IMAGE") || "1";
+function getCreditsPerImage(styled = false): number {
+  const key = styled ? "OCR_CREDITS_PER_IMAGE_STYLED" : "OCR_CREDITS_PER_IMAGE";
+  const fallback = styled ? 2 : 1;
+  const raw = Deno.env.get(key) || String(fallback);
   const n = Math.floor(Number(raw));
-  return Number.isFinite(n) && n > 0 ? n : 1;
+  const base = Number.isFinite(n) && n > 0 ? n : fallback;
+  // Styled (bbox + màu/định dạng) luôn tốn ít nhất bằng chế độ text thô
+  if (!styled) return base;
+  const rawPlain = Math.floor(Number(Deno.env.get("OCR_CREDITS_PER_IMAGE") || "1"));
+  const plain = Number.isFinite(rawPlain) && rawPlain > 0 ? rawPlain : 1;
+  return Math.max(base, plain);
 }
+
 
 function estimateBase64Bytes(b64: string): number {
   const s = (b64 || "").trim();
@@ -1784,7 +1792,8 @@ serve(async (req) => {
         });
       }
 
-      const creditsPerImage = getCreditsPerImage();
+      const creditsPerImage = getCreditsPerImage(!textOnly);
+
       const remainingFree = Number(remainingFreeUses) || 0;
       // First N pages (by index) are covered by daily free quota on this request; the rest were charged credits.
       const freeSlotsForBatch = Math.min(tasks.length, remainingFree);
@@ -1949,7 +1958,7 @@ serve(async (req) => {
       });
     }
 
-    const creditsPerImage = getCreditsPerImage();
+    const creditsPerImage = getCreditsPerImage(!textOnly);
     const remainingFree = Number(remainingFreeUses) || 0;
     // Only charge credits if no free uses remaining
     const chargeAmount = remainingFree > 0 ? 0 : creditsPerImage;

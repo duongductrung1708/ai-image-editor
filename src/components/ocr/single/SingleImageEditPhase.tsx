@@ -195,10 +195,13 @@ const SingleImageEditPhase = ({
                   >
                     <FileText className="h-3.5 w-3.5" />
                     Văn bản thô
+                    <span className="ml-1 rounded-sm bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                      1 credit
+                    </span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
-                  Chỉ trích xuất chữ — nhanh hơn, đơn giản hơn.
+                  Chỉ trích xuất chữ — nhanh hơn, rẻ hơn (1 credit/ảnh).
                 </TooltipContent>
               </Tooltip>
               <Tooltip>
@@ -213,14 +216,15 @@ const SingleImageEditPhase = ({
                     <Table className="h-3.5 w-3.5" />
                     Có bảng / màu
                     <span className="ml-1 rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:bg-amber-900/40 dark:text-amber-400">
-                      Beta
+                      2 credits
                     </span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
-                  Giữ định dạng bảng, in đậm, màu chữ (Đang phát triển).
+                  Giữ định dạng bảng, in đậm, màu chữ — tốn 2 credit/ảnh (lượt miễn phí hằng ngày vẫn dùng được).
                 </TooltipContent>
               </Tooltip>
+
             </div>
           </div>
 
