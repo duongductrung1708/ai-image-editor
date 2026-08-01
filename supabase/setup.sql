@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS public.credit_transactions (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id        uuid NOT NULL,
   amount         integer NOT NULL,
-  type           text NOT NULL CHECK (type IN ('topup','usage','bonus')),
+  type           text NOT NULL CHECK (type IN ('topup','usage','bonus','charge','refund','admin_topup','admin_debit')),
   description    text DEFAULT '',
   vnpay_txn_ref  text,
   created_at     timestamptz NOT NULL DEFAULT now()
